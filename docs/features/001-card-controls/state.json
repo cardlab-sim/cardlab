@@ -1,0 +1,14 @@
+{
+  "feature": "001-card-controls",
+  "title": "Card controls: freeze/unfreeze and per-category spend limits",
+  "lane": "L",
+  "phase": "requirements",
+  "base_branch": "main",
+  "feature_branch": "feat/001-card-controls",
+  "gates": { "requirements": null, "design": null, "plan": null },
+  "discovery": [],
+  "prs": [],
+  "bugs_open": [],
+  "resume": null,
+  "history": [ { "at": "2026-11-04T21:35Z", "event": "feature created" }, { "at": "2026-11-04T21:36Z", "event": "lane L chosen by human" } ]
+}
