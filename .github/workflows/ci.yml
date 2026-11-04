@@ -1,0 +1,98 @@
+# CI (design §14, DEC-5, DEC-18, DEC-21). Skeleton from PR-00: ticket-key, backend and web are complete;
+# the e2e job (published host + mssql + Playwright + ZAP baseline) is completed by PR-10, which owns this file.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'feat/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ticket-key:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the ticket key in the PR title and body
+        env:
+          PATTERN: ${{ vars.TICKET_KEY_PATTERN || 'CL-\d+' }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          status=0
+          if ! printf '%s' "$TITLE" | grep -Pq -- "$PATTERN"; then
+            echo "::error::PR title does not contain a ticket key matching $PATTERN"; status=1
+          fi
+          if ! printf '%s' "$BODY" | grep -Pq -- "$PATTERN"; then
+            echo "::error::PR body does not contain a ticket key matching $PATTERN"; status=1
+          fi
+          exit $status
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          # Ephemeral per-run password for a throwaway container; not a stored credential (design §11).
+          MSSQL_SA_PASSWORD: Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!' -Q 'SELECT 1' -b"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+    env:
+      DOTNET_NOLOGO: 'true'
+      CARDLAB_TEST_CONNECTION: Server=localhost,1433;User Id=sa;Password=Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!;TrustServerCertificate=True
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore CardLab.sln
+      - name: Format
+        run: dotnet format CardLab.sln --verify-no-changes --no-restore
+      - name: Build
+        run: dotnet build CardLab.sln -warnaserror --no-restore
+      - name: Unit tests
+        run: dotnet test tests/CardLab.Domain.Tests --no-build
+      - name: Integration tests
+        run: dotnet test tests/CardLab.Integration.Tests --no-build
+      - name: Bicep build
+        run: |
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          if [ -f infra/demo.bicepparam ]; then az bicep build-params --file infra/demo.bicepparam --stdout > /dev/null; fi
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            tests/e2e/package-lock.json
+      - run: npm ci --prefix web
+      - run: npm run lint --prefix web
+      - run: npm run typecheck --prefix web
+      - run: npm test --prefix web -- --run
+      - run: npm run build --prefix web
+      - run: npm ci --prefix tests/e2e
+      - run: npm run lint --prefix tests/e2e
+      - run: npm run typecheck --prefix tests/e2e
+
+  e2e:
+    needs: [backend, web]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Placeholder until PR-10
+        run: echo "E2E + ZAP baseline are added by PR-10 (DEC-18)."

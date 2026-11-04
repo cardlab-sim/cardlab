@@ -1,0 +1,1 @@
+# ZAP baseline rule overrides (DEC-18): <rule id>	<IGNORE|WARN|FAIL>	<reason>. Owned by PR-10; every entry needs a one-line reason.
