@@ -1,0 +1,4 @@
+/* Design tokens (§4.1, DEC-17): the only place raw colour values may appear. Implemented in PR-02:
+   palette, status colours, type scale (14/16/20/24/32), spacing (4/8/12/16/24/32/48), radius 4px, focus ring. */
+:root {
+}

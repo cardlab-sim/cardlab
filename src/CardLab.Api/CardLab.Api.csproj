@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\CardLab.Infrastructure\CardLab.Infrastructure.csproj" />
+  </ItemGroup>
+  <!-- SPA (DEC-3): the web build writes web/dist; dotnet publish copies it into wwwroot. -->
+  <ItemGroup Condition="Exists('..\..\web\dist\index.html')">
+    <Content Include="..\..\web\dist\**\*" LinkBase="wwwroot" CopyToPublishDirectory="PreserveNewest" CopyToOutputDirectory="Never" />
+  </ItemGroup>
+</Project>
