@@ -2,13 +2,37 @@
   "feature": "001-card-controls",
   "title": "Card controls: freeze/unfreeze and per-category spend limits",
   "lane": "L",
-  "phase": "requirements",
+  "phase": "design",
   "base_branch": "main",
   "feature_branch": "feat/001-card-controls",
-  "gates": { "requirements": null, "design": null, "plan": null },
+  "gates": {
+    "requirements": {
+      "approved_at": "2026-11-04T21:56Z",
+      "note": "Approve"
+    },
+    "design": null,
+    "plan": null
+  },
   "discovery": [],
   "prs": [],
   "bugs_open": [],
   "resume": null,
-  "history": [ { "at": "2026-11-04T21:35Z", "event": "feature created" }, { "at": "2026-11-04T21:36Z", "event": "lane L chosen by human" } ]
+  "history": [
+    {
+      "at": "2026-11-04T21:35Z",
+      "event": "feature created"
+    },
+    {
+      "at": "2026-11-04T21:36Z",
+      "event": "lane L chosen by human"
+    },
+    {
+      "at": "2026-11-04T21:50Z",
+      "event": "autopilot started — standing instruction: 'make all decisions in requirements and tech design including as recommended'"
+    },
+    {
+      "at": "2026-11-04T21:56Z",
+      "event": "gate requirements approved"
+    }
+  ]
 }
