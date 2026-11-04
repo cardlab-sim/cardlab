@@ -2,7 +2,7 @@
   "feature": "001-card-controls",
   "title": "Card controls: freeze/unfreeze and per-category spend limits",
   "lane": "L",
-  "phase": "plan",
+  "phase": "build",
   "base_branch": "main",
   "feature_branch": "feat/001-card-controls",
   "gates": {
@@ -14,10 +14,149 @@
       "approved_at": "2026-11-04T22:19Z",
       "note": "Approve"
     },
-    "plan": null
+    "plan": {
+      "approved_at": "2026-11-04T23:20Z",
+      "note": "Approve"
+    }
   },
   "discovery": [],
-  "prs": [],
+  "prs": [
+    {
+      "id": "PR-00",
+      "title": "Skeleton & harness scaffolding",
+      "wave": 0,
+      "depends_on": [],
+      "status": "merged",
+      "branch": "pr/001-card-controls/00-skeleton",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/2"
+    },
+    {
+      "id": "PR-01",
+      "title": "Test harness and domain vocabulary (Money, wire names)",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/01-harness",
+      "url": ""
+    },
+    {
+      "id": "PR-02",
+      "title": "Web foundation: tokens, primitives, formatters, API clients, card list",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/02-web-foundation",
+      "url": ""
+    },
+    {
+      "id": "PR-03",
+      "title": "Azure infrastructure and deploy workflow (OIDC, Bicep, smoke)",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/03-deploy",
+      "url": ""
+    },
+    {
+      "id": "PR-04",
+      "title": "Domain decision core: periods, validation, decider, properties",
+      "wave": 2,
+      "depends_on": [
+        "PR-01"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/04-decision-core",
+      "url": ""
+    },
+    {
+      "id": "PR-05",
+      "title": "Card controls: freeze, unfreeze and limit changes with audit",
+      "wave": 2,
+      "depends_on": [
+        "PR-01"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/05-card-controls",
+      "url": ""
+    },
+    {
+      "id": "PR-06",
+      "title": "SQL store, schema, seed and integration harness",
+      "wave": 2,
+      "depends_on": [
+        "PR-01"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/06-sql-store",
+      "url": ""
+    },
+    {
+      "id": "PR-07",
+      "title": "Card detail page: status, limits, audit, simulate, transactions",
+      "wave": 2,
+      "depends_on": [
+        "PR-02"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/07-card-detail",
+      "url": ""
+    },
+    {
+      "id": "PR-08",
+      "title": "Authorisation service and endpoints (processor and simulate)",
+      "wave": 3,
+      "depends_on": [
+        "PR-04",
+        "PR-06"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/08-authorisation",
+      "url": ""
+    },
+    {
+      "id": "PR-09",
+      "title": "Admin API: card endpoints, health, test reset, security headers",
+      "wave": 3,
+      "depends_on": [
+        "PR-05",
+        "PR-06"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/09-admin-api",
+      "url": ""
+    },
+    {
+      "id": "PR-10",
+      "title": "End-to-end journeys, accessibility checks and CI e2e + ZAP",
+      "wave": 4,
+      "depends_on": [
+        "PR-07",
+        "PR-08",
+        "PR-09"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/10-e2e",
+      "url": ""
+    },
+    {
+      "id": "PR-11",
+      "title": "Cross-path integration checks: limit changes, privacy, log events",
+      "wave": 4,
+      "depends_on": [
+        "PR-08",
+        "PR-09"
+      ],
+      "status": "planned",
+      "branch": "pr/001-card-controls/11-cross-path",
+      "url": ""
+    }
+  ],
   "bugs_open": [],
   "resume": null,
   "history": [
@@ -31,7 +170,7 @@
     },
     {
       "at": "2026-11-04T21:50Z",
-      "event": "autopilot started — standing instruction: 'make all decisions in requirements and tech design including as recommended'"
+      "event": "autopilot started \u00e2\u20ac\u201d standing instruction: 'make all decisions in requirements and tech design including as recommended'"
     },
     {
       "at": "2026-11-04T21:56Z",
@@ -40,7 +179,15 @@
     {
       "at": "2026-11-04T22:19Z",
       "event": "gate design approved"
+    },
+    {
+      "at": "2026-11-04T23:20Z",
+      "event": "gate plan approved; issue CL-1 created; PR-00 merged (#2)"
     }
   ],
-  "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof"
+  "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
+  "ticket": {
+    "key": "CL-1",
+    "url": "https://github.com/cardlab-sim/cardlab/issues/1"
+  }
 }
