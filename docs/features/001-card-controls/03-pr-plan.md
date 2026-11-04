@@ -15,6 +15,7 @@ Every PR title is `CL-<n> PR-NN: <title>` and every PR body starts with `Ticket:
 `.github/pull_request_template.md`; enforced by `ci / ticket-key`, pattern `vars.TICKET_KEY_PATTERN`, default `CL-\d+`).
 The briefs write the key as the literal placeholder `CL-<n>`; the orchestrator substitutes the real number when it
 dispatches each coder and opens each PR.
+**Ticket created 2026-11-04: GitHub Issue #1, key `CL-1`** (substituted in every brief's ticket-key line).
 
 ## Waves
 <!-- Wave N may start when every PR in its Depends-on is merged. PRs in the same wave run in
