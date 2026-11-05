@@ -103,7 +103,7 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "review",
+      "status": "changes",
       "branch": "pr/001-card-controls/06-sql-store",
       "url": "https://github.com/cardlab-sim/cardlab/pull/10"
     },
@@ -241,6 +241,10 @@
     {
       "at": "2026-11-05T13:45Z",
       "event": "PR-04 review APPROVE WITH FIXES; BUG-004 (timestamp validation, design erratum) decided option A by orchestrator under standing instruction"
+    },
+    {
+      "at": "2026-11-05T14:00Z",
+      "event": "PR-06 review APPROVE WITH FIXES; CardStoreContractTests.cs released to PR-06 for one contract case (M-2)"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
