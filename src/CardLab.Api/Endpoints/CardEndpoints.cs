@@ -1,5 +1,7 @@
-using CardLab.Api.Contracts;
+﻿using CardLab.Api.Contracts;
 using CardLab.Domain.Application;
+using CardLab.Domain.Common;
+using CardLab.Domain.Limits;
 using CardLab.Domain.Ports;
 
 namespace CardLab.Api.Endpoints;
@@ -30,10 +32,24 @@ public static class CardEndpoints
     }
 
     /// <summary><c>GET /api/cards</c> → 200 <see cref="CardSummaryDto"/>[].</summary>
-    internal static Task<IResult> ListCards(ICardStore store, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> ListCards(ICardStore store, CancellationToken ct)
+    {
+        var cards = await store.ListCardsAsync(ct);
+        return TypedResults.Ok(cards.Select(c => new CardSummaryDto(c.Id.Value, c.Name, c.CardholderName, c.LastFour, WireNames.ToWire(c.Status))).ToList());
+    }
 
     /// <summary><c>GET /api/cards/{id}</c> → 200 <see cref="CardDetailDto"/> | 404.</summary>
-    internal static Task<IResult> GetCard(Guid id, ICardStore store, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> GetCard(Guid id, ICardStore store, CancellationToken ct)
+    {
+        var card = await store.GetCardAsync(new CardId(id), ct);
+        if (card is null)
+        {
+            return CardNotFound();
+        }
+
+        var limits = card.Limits.Select(ToDto).ToList();
+        return TypedResults.Ok(new CardDetailDto(card.Id.Value, card.Name, card.CardholderName, card.LastFour, WireNames.ToWire(card.Status), limits));
+    }
 
     /// <summary><c>POST /api/cards/{id}/freeze</c> → 200 <see cref="StatusDto"/> (<c>frozen</c>, also for a no-op) | 404.</summary>
     internal static Task<IResult> Freeze(Guid id, CardControlsService controls, CancellationToken ct) => throw new NotImplementedException("PR-09");
@@ -48,8 +64,45 @@ public static class CardEndpoints
     internal static Task<IResult> RemoveLimit(Guid id, string category, string period, CardControlsService controls, CancellationToken ct) => throw new NotImplementedException("PR-09");
 
     /// <summary><c>GET /api/cards/{id}/transactions</c> → 200 <see cref="TransactionDto"/>[] newest first | 404.</summary>
-    internal static Task<IResult> ListTransactions(Guid id, ICardStore store, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> ListTransactions(Guid id, ICardStore store, CancellationToken ct)
+    {
+        var cardId = new CardId(id);
+        if (await store.GetCardAsync(cardId, ct) is null)
+        {
+            return CardNotFound();
+        }
+
+        var transactions = await store.ListTransactionsAsync(cardId, ct);
+        return TypedResults.Ok(transactions.Select(t => new TransactionDto(
+            t.Id.Value,
+            t.OccurredAt,
+            t.Amount.ToString(),
+            WireNames.ToWire(t.Category),
+            t.Merchant,
+            WireNames.ToWire(t.Outcome),
+            WireNames.ToWire(t.Reason))).ToList());
+    }
 
     /// <summary><c>GET /api/cards/{id}/audit</c> → 200 <see cref="AuditDto"/>[] newest first | 404.</summary>
-    internal static Task<IResult> ListAudit(Guid id, ICardStore store, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> ListAudit(Guid id, ICardStore store, CancellationToken ct)
+    {
+        var cardId = new CardId(id);
+        if (await store.GetCardAsync(cardId, ct) is null)
+        {
+            return CardNotFound();
+        }
+
+        var events = await store.ListAuditAsync(cardId, ct);
+        return TypedResults.Ok(events.Select(a => new AuditDto(
+            a.Id.Value,
+            a.Event.AtUtc,
+            a.Event.Actor.Name,
+            WireNames.ToWire(a.Event.Action),
+            a.Event.OldValue,
+            a.Event.NewValue)).ToList());
+    }
+
+    private static IResult CardNotFound() => TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "Card not found");
+
+    private static LimitDto ToDto(SpendLimit limit) => new(WireNames.ToWire(limit.Category), WireNames.ToWire(limit.Period), limit.Amount.ToString());
 }
