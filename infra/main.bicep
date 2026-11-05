@@ -14,7 +14,7 @@ param webAppName string
 @description('Globally unique Azure SQL logical server name.')
 param sqlServerName string
 
-@description('Login name (UPN or group name) of the Entra identity that administers the SQL server.')
+@description('UPN of the Entra user who administers the SQL server (design DEC-10: the human's identity).')
 param sqlAdminLogin string
 
 @description('Object id of the Entra identity that administers the SQL server.')
@@ -50,9 +50,9 @@ resource site 'Microsoft.Web/sites@2023-12-01' = {
     serverFarmId: plan.id
     httpsOnly: true
     siteConfig: {
-      // A stack must be named on Linux; the self-contained publish does not use the stack's runtime.
-      linuxFxVersion: 'DOTNETCORE|8.0'
-      appCommandLine: './CardLab.Api'
+      // Matches the app's .NET 10; the self-contained publish does not depend on it.
+      linuxFxVersion: 'DOTNETCORE|10.0'
+      appCommandLine: '/home/site/wwwroot/CardLab.Api'
       alwaysOn: false
       minTlsVersion: '1.2'
       ftpsState: 'Disabled'
