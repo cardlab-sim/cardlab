@@ -37,9 +37,9 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "coding",
+      "status": "changes",
       "branch": "pr/001-card-controls/01-harness",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/6"
     },
     {
       "id": "PR-02",
@@ -48,9 +48,9 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "coding",
+      "status": "changes",
       "branch": "pr/001-card-controls/02-web-foundation",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/5"
     },
     {
       "id": "PR-03",
@@ -59,9 +59,9 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "coding",
+      "status": "merged",
       "branch": "pr/001-card-controls/03-deploy",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/4"
     },
     {
       "id": "PR-04",
@@ -157,7 +157,9 @@
       "url": ""
     }
   ],
-  "bugs_open": [],
+  "bugs_open": [
+    "BUG-001"
+  ],
   "resume": null,
   "history": [
     {
@@ -187,6 +189,22 @@
     {
       "at": "2026-11-05T00:05Z",
       "event": "human allowed draft integration PR #3 and automatic merges into feat/001-card-controls; wave 1 dispatched"
+    },
+    {
+      "at": "2026-11-05T09:50Z",
+      "event": "PR-03 review CHANGES; BUG-001 (design, S3) decided option A by orchestrator under standing instruction"
+    },
+    {
+      "at": "2026-11-05T10:10Z",
+      "event": "PR-03 fixes verified by orchestrator, merged (#4); BUG-001 fixed"
+    },
+    {
+      "at": "2026-11-05T10:30Z",
+      "event": "PR-02 review APPROVE WITH FIXES; doc-only plan amend (owned files +2, PR-10 names); coder fix round"
+    },
+    {
+      "at": "2026-11-05T10:45Z",
+      "event": "PR-01 review CHANGES (contract suite seams); doc-only amends to PR-06/PR-08 briefs; coder fix round"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
