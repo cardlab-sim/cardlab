@@ -20,5 +20,25 @@ public static class AuthorisationDecider
     /// approved spend in the period containing the transaction timestamp.</param>
     /// <param name="amount">Validated transaction amount.</param>
     /// <returns>The decision; <c>Limits</c> has one entry per input limit, in input order.</returns>
-    public static Decision Decide(CardStatus status, IReadOnlyList<LimitWithSpend> limitsInCategory, Money amount) => throw new NotImplementedException("PR-04");
+    public static Decision Decide(CardStatus status, IReadOnlyList<LimitWithSpend> limitsInCategory, Money amount)
+    {
+        var frozen = status == CardStatus.Frozen;
+        var exceeded = limitsInCategory.Any(l => l.ApprovedSpendInPeriod + amount > l.Limit.Amount);
+
+        var (outcome, reason) = frozen
+            ? (Outcome.Declined, Reason.CardFrozen)
+            : exceeded
+                ? (Outcome.Declined, Reason.LimitExceeded)
+                : (Outcome.Approved, Reason.Approved);
+
+        var limits = limitsInCategory
+            .Select(l => new LimitRemaining(
+                l.Limit.Category,
+                l.Limit.Period,
+                l.Limit.Amount,
+                l.Limit.Amount - (outcome == Outcome.Approved ? l.ApprovedSpendInPeriod + amount : l.ApprovedSpendInPeriod)))
+            .ToList();
+
+        return new Decision(outcome, reason, limits);
+    }
 }

@@ -15,7 +15,8 @@ public sealed record ValidatedAuthorisation(string CardNumberDigits, Money Amoun
 
     /// <summary>Text form with the card number masked to its last four digits (NFR-1).</summary>
     /// <returns>Never contains 16 consecutive digits.</returns>
-    public override string ToString() => throw new NotImplementedException("PR-04");
+    public override string ToString() =>
+        $"ValidatedAuthorisation {{ CardNumber = {TransactionRules.MaskCardNumber(CardNumberDigits)}, Amount = {Amount}, Category = {Category}, Merchant = {Merchant}, OccurredAt = {OccurredAt:O} }}";
 }
 
 /// <summary>A validated purchase (amount, category, merchant, timestamp) for a card resolved by number or id.</summary>

@@ -14,7 +14,8 @@ public sealed record AuthorisationRequest(string? CardNumber, string? Amount, st
 {
     /// <summary>Text form with the card number masked to its last four digits (NFR-1, design §10).</summary>
     /// <returns>e.g. <c>AuthorisationRequest { CardNumber = ************0001, Amount = 20.00, ... }</c>; never 16 consecutive digits.</returns>
-    public override string ToString() => throw new NotImplementedException("PR-04");
+    public override string ToString() =>
+        $"AuthorisationRequest {{ CardNumber = {TransactionRules.MaskCardNumber(CardNumber)}, Amount = {Amount}, Category = {Category}, Merchant = {Merchant}, Timestamp = {Timestamp} }}";
 }
 
 /// <summary>
