@@ -18,6 +18,8 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 30
     environment: demo
     env:
       DOTNET_NOLOGO: 'true'
@@ -58,7 +60,15 @@ jobs:
           --template-file infra/main.bicep
           --parameters infra/demo.bicepparam
 
+      - name: Deploy the package
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: publish
+
       # Merge semantics: only these keys are touched, so CardLab__LookupKey (set once by the human) survives.
+      # CardLab__Commit is deliberately never set: health reports the commit stamped into the build by
+      # SourceRevisionId, so it identifies the deployed binaries. Runs after the package so the restart loads the new files.
       - name: Set non-secret app settings
         run: >
           az webapp config appsettings set
@@ -66,22 +76,18 @@ jobs:
           --name "$AZURE_WEBAPP_NAME"
           --settings
           "ConnectionStrings__CardLab=Server=tcp:${AZURE_SQL_SERVER_NAME}.database.windows.net;Database=cardlab;Authentication=Active Directory Default;Encrypt=True"
-          "CardLab__Commit=${{ github.sha }}"
           "ASPNETCORE_ENVIRONMENT=Production"
           --output none
-
-      - name: Deploy the package
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
-          package: publish
 
       - name: Wait for the new build to report healthy
         env:
           DEMO_URL: ${{ vars.DEMO_URL }}
           EXPECTED_COMMIT: ${{ github.sha }}
         run: |
-          for attempt in $(seq 1 30); do
+          deadline=$((SECONDS+300))
+          attempt=0
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            attempt=$((attempt+1))
             body=$(curl -sS --max-time 60 "${DEMO_URL%/}/api/health" || true)
             echo "attempt $attempt: $body"
             commit=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
