@@ -126,9 +126,9 @@
         "PR-04",
         "PR-06"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/001-card-controls/08-authorisation",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/12"
     },
     {
       "id": "PR-09",
@@ -138,9 +138,9 @@
         "PR-05",
         "PR-06"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/001-card-controls/09-admin-api",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/13"
     },
     {
       "id": "PR-10",
@@ -252,6 +252,10 @@
     {
       "at": "2026-11-05T15:00Z",
       "event": "PR-06 fixes verified (truncation mutation; integration 18 passed with web/dist built), merged (#10); wave 2 complete; integrated branch: build 0/0, domain 128 passed, integration 18 passed, web 56 passed; earlier feature CI red was the pre-PR-06 NotImplemented stub; PR-08, PR-09 dispatched"
+    },
+    {
+      "at": "2026-11-05T15:40Z",
+      "event": "PR-08 verified (lock-removal mutation fails T-I-6), PR-09 verified (nosniff mutation); both in review; feature CI green on 907593d"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
