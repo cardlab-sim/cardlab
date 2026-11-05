@@ -187,14 +187,15 @@
         "PR-10",
         "PR-11"
       ],
-      "status": "review",
+      "status": "changes",
       "branch": "pr/001-card-controls/13-fix-feature-e2e",
       "url": "https://github.com/cardlab-sim/cardlab/pull/16"
     }
   ],
   "bugs_open": [
     "BUG-001",
-    "BUG-009"
+    "BUG-009",
+    "BUG-010"
   ],
   "resume": null,
   "history": [
@@ -337,6 +338,10 @@
     {
       "at": "2026-11-05T23:50Z",
       "event": "PR-12 fixes verified (log-deletion mutation), merged (#17); BUG-008 fixed (live warm-up after idle still to be measured on demo)"
+    },
+    {
+      "at": "2026-11-06T00:10Z",
+      "event": "PR-13 pr-light APPROVE WITH FIXES; BUG-010 (focus lost after actions) decided by orchestrator under standing instruction, folded into PR-13"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

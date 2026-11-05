@@ -12,7 +12,7 @@
     "lint": "dotnet format CardLab.sln --verify-no-changes && npm run lint --prefix web && npm run lint --prefix tests/e2e",
     "typecheck": "npm run typecheck --prefix web && npm run typecheck --prefix tests/e2e",
     "build": "dotnet build CardLab.sln -warnaserror && npm run build --prefix web",
-    "dev": "dotnet run --project src/CardLab.Api"
+    "dev": "dotnet run --project src/CardLab.Api -- --webroot ../../web/dist"
   },
   "gate_on_coder_stop": [
     "build",

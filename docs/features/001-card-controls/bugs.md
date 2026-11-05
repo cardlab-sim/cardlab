@@ -13,6 +13,7 @@
 | BUG-007 | coder (PR-10, axe) | S2 | AC-37, NFR-6 | Scrollable table container is not keyboard-focusable (axe scrollable-region-focusable, serious) | code | fix-now (PR-10, released DataTable files) | fixed | build (PR-10) | | 2026-11-05 |
 | BUG-008 | reviewer (feature F-1) | S2 | NFR-5, AC-34, AC-36 | Host crash-loops when the free database resumes from idle auto-pause | design | fix-now (PR-12) | fixed | build (PR-12) | | 2026-11-05 |
 | BUG-009 | reviewer (feature F-7) | S3 | NFR-6 | Only Chrome is exercised; Edge and Firefox support is untraced | design | fix-now (PR-13: add Firefox project; Edge via shared Chromium engine) | approved | build (PR-13) | | 2026-11-05 |
+| BUG-010 | reviewer (PR-13) | S3 | AC-37, NFR-6 | Keyboard focus falls to the page body after every pending action | design | fix-now (PR-13 fix round) | approved | build (PR-13) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -117,3 +118,14 @@ Option 1: add a `local-firefox` project (Desktop Firefox, smoke excluded) to CI 
 Option 1, because option 2 would leave an approved NFR clause unverified; Edge recorded as covered by the shared Chromium engine (design erratum). Orchestrator under the human's standing instruction.
 ### Resolution
 PR-13.
+
+## BUG-010
+**Repro:** on `/cards/:id`, Tab to Freeze and press Enter: while the action is pending `Button.tsx` sets native `disabled` on the focused button, so focus drops to `<body>` in Chrome and Firefox; the same after Save, Remove and Submit. The keyboard test hid it with a `restartFromTop` helper.
+**Expected / actual:** keyboard users keep their place after an action / they lose it every time (journeys still complete via Shift+Tab, so AC-37's wording passes).
+**Evidence:** reviews/PR-13.review.md M-1 (probe test in a scratch clone).
+### Triage (reviewer)
+Design §4.1 has no focus rule. Fix: while pending, Button uses `aria-disabled="true"` plus a click/submit guard instead of native `disabled`, so focus stays; Remove (whose button disappears) moves focus to its success notice. T-E-5 replaces each `restartFromTop` with a `toBeFocused()` check.
+### Decision (orchestrator, 2026-11-05)
+Fix now, as the reviewer recommends, inside PR-13's fix round (`web/src/components/Button.tsx`, `web/src/components/components.test.tsx`, `web/src/pages/cardDetail/sections.tsx` released to PR-13; PR-02 and PR-07 are merged). Design §4.1 erratum: "focus stays on the control that started an action; when that control disappears, focus moves to the resulting notice". Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
+### Resolution
+PR-13 fix round.
