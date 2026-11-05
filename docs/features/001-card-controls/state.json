@@ -163,7 +163,7 @@
         "PR-08",
         "PR-09"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/11-cross-path-checks",
       "url": "https://github.com/cardlab-sim/cardlab/pull/14"
     }
@@ -276,6 +276,10 @@
     {
       "at": "2026-11-05T18:20Z",
       "event": "PR-11 pr-light review APPROVE WITH FIXES; InMemoryLogExporter.cs released to PR-11 (m-4)"
+    },
+    {
+      "at": "2026-11-05T18:50Z",
+      "event": "PR-11 fixes verified (suppressed-log mutation fails T-I-7), merged (#14)"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
