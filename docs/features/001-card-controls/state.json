@@ -37,7 +37,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/001-card-controls/01-harness",
       "url": ""
     },
@@ -48,7 +48,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/001-card-controls/02-web-foundation",
       "url": ""
     },
@@ -59,7 +59,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/001-card-controls/03-deploy",
       "url": ""
     },
@@ -183,6 +183,10 @@
     {
       "at": "2026-11-04T23:20Z",
       "event": "gate plan approved; issue CL-1 created; PR-00 merged (#2)"
+    },
+    {
+      "at": "2026-11-05T00:05Z",
+      "event": "human allowed draft integration PR #3 and automatic merges into feat/001-card-controls; wave 1 dispatched"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

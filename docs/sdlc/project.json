@@ -36,5 +36,5 @@
     "CARDLAB_TEST_CONNECTION": "SQL Server connection string for integration/E2E (default: LocalDB)"
   },
   "max_parallel_coders": 4,
-  "auto_merge_feature_prs": null
+  "auto_merge_feature_prs": true
 }
