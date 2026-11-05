@@ -8,6 +8,8 @@
 | BUG-002 | coder (PR-06), reproduced by orchestrator | S2 | AC-34, R-9 | Host tests throw DirectoryNotFoundException for wwwroot after a web build | plan (skeleton PR-00) | fix-now (skeleton delta PR-00b) | fixed | build (PR-00b before wave 3) | | 2026-11-05 |
 | BUG-003 | reviewer (PR-07) | S3 | AC-23 | FakeApiClient writes audit values in a format the API never returns | test-harness | fix-now (fold into PR-07 fix round) | fixed | build (PR-07 fix round) | | 2026-11-05 |
 | BUG-004 | reviewer (PR-04) | S3 | AC-20 | Timestamps outside the calendar range or in non-ISO text pass validation | design | fix-now (PR-04 fix round) | fixed | build (PR-04 fix round) | | 2026-11-05 |
+| BUG-005 | reviewer (PR-08) | S2 | NFR-1, AC-24 | A 16-digit merchant name is stored and returned in history | design | fix-now (option A, PR-08 fix round) | approved | build (PR-08 fix round) | | 2026-11-05 |
+| BUG-006 | reviewer (PR-08) | S3 | AC-20 | Non-binding JSON body gives 500 (Development) / empty 400 instead of ProblemDetails | plan | fix-now (PR-09 fix round) | approved | build (PR-09 fix round) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -59,3 +61,25 @@ Design §9 lists "bad timestamp" without defining it. Option A: timestamps must 
 Option A (the reviewer's recommendation), recorded as a design erratum for §9; no Gate 2 reopen. Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
 ### Resolution
 PR-04 fix round (#9): strict ISO-8601 shape + [2000, 2100) window in Validate and ValidatePurchase, with rejection and boundary cases; checks in reviews/PR-04.review.md *Fixes verified*.
+
+## BUG-005
+**Repro:** `POST /api/authorisations` with a valid request whose `merchant` is `"9999000100000001"` → stored, and `GET /api/cards/{id}/transactions` returns it.
+**Expected / actual:** no 16-digit run is ever stored, logged or displayed (NFR-1, AC-24) / it is stored and displayed.
+**Evidence:** reviews/PR-08.review.md m-3 (`upstream:design`); PR-11's T-I-7 would fail on it.
+### Triage (reviewer)
+Option A: `TransactionRules` rejects a merchant containing a run of 13 or more consecutive digits (any PAN-like run, with or without spaces/dashes between groups) as a `merchant` problem → `invalid_request`, nothing stored. Option B: accept the risk in design §10 and narrow T-I-7.
+### Decision (orchestrator, 2026-11-05)
+Option A, because option B would break the approved NFR-1 ("no card numbers anywhere"); A is the smallest change that keeps it. Design erratum for §9/§10; no Gate 2 reopen. `TransactionRules.cs` and `TransactionRulesTests.cs` (PR-04, merged) released to PR-08's fix round. Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
+### Resolution
+PR-08 fix round.
+
+## BUG-006
+**Repro:** `POST /api/authorisations` with `{"cardNumber": 9999000100000001, ...}` (number, not string) → 500 on the Development host, empty-body 400 in Production; the admin limit PUT has the same gap.
+**Expected / actual:** 400 `application/problem+json` without echoing input / 500 or empty 400.
+**Evidence:** reviews/PR-08.review.md M-1 (`upstream:plan`): PR-08's planner decision assumed framework ProblemDetails for binding failures.
+### Triage (reviewer)
+Fix: `ThrowOnBadRequest = true` (route handler options) in `Program.cs` and map `BadHttpRequestException` to its status code as ProblemDetails in `CardLabExceptionHandler`, never copying the exception message.
+### Decision (orchestrator, 2026-11-05)
+Fix in PR-09's fix round (PR-09 owns `CardLabExceptionHandler`; `src/CardLab.Api/Program.cs`, owned by merged PR-00b, released to PR-09). Orchestrator under the human's standing instruction.
+### Resolution
+PR-09 fix round.

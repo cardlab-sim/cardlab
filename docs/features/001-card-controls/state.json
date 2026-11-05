@@ -126,7 +126,7 @@
         "PR-04",
         "PR-06"
       ],
-      "status": "review",
+      "status": "changes",
       "branch": "pr/001-card-controls/08-authorisation",
       "url": "https://github.com/cardlab-sim/cardlab/pull/12"
     },
@@ -169,7 +169,9 @@
     }
   ],
   "bugs_open": [
-    "BUG-001"
+    "BUG-001",
+    "BUG-005",
+    "BUG-006"
   ],
   "resume": null,
   "history": [
@@ -256,6 +258,10 @@
     {
       "at": "2026-11-05T15:40Z",
       "event": "PR-08 verified (lock-removal mutation fails T-I-6), PR-09 verified (nosniff mutation); both in review; feature CI green on 907593d"
+    },
+    {
+      "at": "2026-11-05T16:10Z",
+      "event": "PR-08 review APPROVE WITH FIXES; BUG-005 (merchant PAN, option A) and BUG-006 (binding errors \u2192 PR-09) decided by orchestrator under standing instruction"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
