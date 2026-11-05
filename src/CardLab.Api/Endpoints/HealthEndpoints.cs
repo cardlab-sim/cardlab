@@ -1,5 +1,6 @@
 using System.Reflection;
 using CardLab.Api.Contracts;
+using CardLab.Infrastructure;
 using CardLab.Infrastructure.Options;
 using CardLab.Infrastructure.Sql;
 using Microsoft.Extensions.Options;
@@ -19,26 +20,6 @@ public static class HealthEndpoints
         return app;
     }
 
-    /// <summary>Health commit: <c>CardLab:Commit</c>; else the source-revision part (after the last '+') of the informational version; else "unknown".</summary>
-    /// <param name="configured">The configured commit, possibly empty.</param>
-    /// <param name="informationalVersion">The entry assembly's informational version, e.g. <c>1.0.0+&lt;sha&gt;</c>.</param>
-    /// <returns>The commit to report.</returns>
-    public static string ResolveCommit(string? configured, string? informationalVersion)
-    {
-        if (!string.IsNullOrWhiteSpace(configured))
-        {
-            return configured;
-        }
-
-        if (string.IsNullOrWhiteSpace(informationalVersion))
-        {
-            return "unknown";
-        }
-
-        var plus = informationalVersion.LastIndexOf('+');
-        return plus >= 0 && plus < informationalVersion.Length - 1 ? informationalVersion[(plus + 1)..] : informationalVersion;
-    }
-
     /// <summary>
     /// 200 <see cref="HealthDto"/> <c>{commit, database:"ok"}</c> when <see cref="DatabaseProbe.CanConnectAsync"/> succeeds,
     /// else 503 <c>{commit, database:"unreachable"}</c>. Commit = <c>CardLab:Commit</c>, falling back to the source
@@ -46,7 +27,7 @@ public static class HealthEndpoints
     /// </summary>
     internal static async Task<IResult> Health(DatabaseProbe probe, IOptions<CardLabOptions> options, CancellationToken ct)
     {
-        var commit = ResolveCommit(
+        var commit = BuildInfo.Resolve(
             options.Value.Commit,
             Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
         return await probe.CanConnectAsync(ct)

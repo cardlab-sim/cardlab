@@ -1,9 +1,13 @@
+using System.Diagnostics;
 using CardLab.Domain.Controls;
 using CardLab.Domain.Ports;
 using CardLab.Infrastructure.Model;
 using CardLab.Infrastructure.Options;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 
 namespace CardLab.Infrastructure.Sql;
@@ -11,15 +15,44 @@ namespace CardLab.Infrastructure.Sql;
 /// <summary>Startup schema migration and seeding (DEC-9).</summary>
 public static class DatabaseSetup
 {
+    private static readonly TimeSpan RetryWindow = TimeSpan.FromSeconds(120);
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(5);
+
+    private static readonly Action<ILogger, Exception?> LogAttemptFailed = LoggerMessage.Define(
+        LogLevel.Warning,
+        new EventId(1, "DatabaseNotReady"),
+        "Database not ready during startup; retrying.");
+
     /// <summary>
     /// Applies pending EF Core migrations (<c>MigrateAsync</c>, forward-only) and then
     /// <see cref="Seeder.EnsureSeedAsync"/> with the bound <see cref="SeedOptions"/>. Called once by the host before it
-    /// starts serving; a failure stops the host (design §9).
+    /// starts serving. A <see cref="SqlException"/> (for example a serverless database resuming from idle auto-pause,
+    /// BUG-008) is retried every 5 s for up to 120 s, logging one fixed message per attempt without connection details;
+    /// after the deadline the last exception is rethrown and stops the host (design §9).
     /// </summary>
     /// <param name="services">Root service provider (a scope is created inside).</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns>A task that completes when the database is ready.</returns>
     public static async Task InitialiseDatabaseAsync(this IServiceProvider services, CancellationToken ct = default)
+    {
+        var logger = services.GetService<ILoggerFactory>()?.CreateLogger(typeof(DatabaseSetup).FullName!) ?? NullLogger.Instance;
+        var clock = Stopwatch.StartNew();
+        while (true)
+        {
+            try
+            {
+                await MigrateAndSeedAsync(services, ct);
+                return;
+            }
+            catch (SqlException) when (clock.Elapsed + RetryDelay < RetryWindow)
+            {
+                LogAttemptFailed(logger, null);
+                await Task.Delay(RetryDelay, ct);
+            }
+        }
+    }
+
+    private static async Task MigrateAndSeedAsync(IServiceProvider services, CancellationToken ct)
     {
         await using var scope = services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<CardLabDbContext>();

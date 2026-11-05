@@ -11,17 +11,17 @@ public static class Telemetry
 {
     /// <summary>
     /// Adds OpenTelemetry logging with scopes and formatted messages, resource <c>service.name=cardlab</c>,
-    /// <c>service.version=&lt;CardLab:Commit&gt;</c>, a console exporter, and an OTLP exporter only when
+    /// <c>service.version=&lt;BuildInfo.Commit&gt;</c>, a console exporter, and an OTLP exporter only when
     /// <c>OTEL_EXPORTER_OTLP_ENDPOINT</c> is configured. Tests add their own exporter on top (InMemoryLogExporter).
     /// </summary>
     /// <param name="builder">The host builder.</param>
     /// <returns>The same builder.</returns>
     public static IHostApplicationBuilder AddCardLabTelemetry(this IHostApplicationBuilder builder)
     {
-        var commit = builder.Configuration["CardLab:Commit"];
+        var commit = BuildInfo.Commit(builder.Configuration);
         var otlp = builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"];
         builder.Services.AddOpenTelemetry()
-            .ConfigureResource(r => r.AddService("cardlab", serviceVersion: string.IsNullOrEmpty(commit) ? "unknown" : commit))
+            .ConfigureResource(r => r.AddService("cardlab", serviceVersion: commit))
             .WithLogging(
                 logging =>
                 {

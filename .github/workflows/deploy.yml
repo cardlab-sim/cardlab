@@ -75,8 +75,9 @@ jobs:
           --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
           --name "$AZURE_WEBAPP_NAME"
           --settings
-          "ConnectionStrings__CardLab=Server=tcp:${AZURE_SQL_SERVER_NAME}.database.windows.net;Database=cardlab;Authentication=Active Directory Default;Encrypt=True"
+          "ConnectionStrings__CardLab=Server=tcp:${AZURE_SQL_SERVER_NAME}.database.windows.net;Database=cardlab;Authentication=Active Directory Default;Encrypt=True;Connect Timeout=60;Connect Retry Count=3;Connect Retry Interval=10"
           "ASPNETCORE_ENVIRONMENT=Production"
+          "ASPNETCORE_FORWARDEDHEADERS_ENABLED=true"
           --output none
 
       - name: Wait for the new build to report healthy
