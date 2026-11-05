@@ -9,7 +9,7 @@
 | BUG-003 | reviewer (PR-07) | S3 | AC-23 | FakeApiClient writes audit values in a format the API never returns | test-harness | fix-now (fold into PR-07 fix round) | fixed | build (PR-07 fix round) | | 2026-11-05 |
 | BUG-004 | reviewer (PR-04) | S3 | AC-20 | Timestamps outside the calendar range or in non-ISO text pass validation | design | fix-now (PR-04 fix round) | fixed | build (PR-04 fix round) | | 2026-11-05 |
 | BUG-005 | reviewer (PR-08) | S2 | NFR-1, AC-24 | A 16-digit merchant name is stored and returned in history | design | fix-now (option A, PR-08 fix round) | fixed | build (PR-08 fix round) | | 2026-11-05 |
-| BUG-006 | reviewer (PR-08) | S3 | AC-20 | Non-binding JSON body gives 500 (Development) / empty 400 instead of ProblemDetails | plan | fix-now (PR-09 fix round) | approved | build (PR-09 fix round) | | 2026-11-05 |
+| BUG-006 | reviewer (PR-08) | S3 | AC-20 | Non-binding JSON body gives 500 (Development) / empty 400 instead of ProblemDetails | plan | fix-now (PR-09 fix round) | fixed | build (PR-09 fix round) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -27,7 +27,7 @@ Option A, because it uses the fallback the design already specifies, changes onl
 ### Resolution
 PR-03 fix round: deploy.yml stops setting `CardLab__Commit`; settings step after the package step; azure-setup.md says `CardLab__Commit` must stay unset on demo. Verification: see reviews/PR-03.review.md *Fixes verified*.
 
-Fixed in PR-03 (#4, squash 114bc15); checks in reviews/PR-03.review.md *Fixes verified*. Verified status waits for the validator's deploy evidence (T-C-2). PR-09 review B-1 (2026-11-05): health must strip the informational version to the part after '+', or the deploy wait never matches; fixed in PR-09's fix round.
+Fixed in PR-03 (#4, squash 114bc15); checks in reviews/PR-03.review.md *Fixes verified*. Verified status waits for the validator's deploy evidence (T-C-2). PR-09 review B-1 (2026-11-05): health must strip the informational version to the part after '+', or the deploy wait never matches; fixed in PR-09 (#13, `ResolveCommit`).
 
 ## BUG-002
 **Repro:** in any worktree, `npm run build --prefix web` (part of the `build` gate), then `dotnet test tests/CardLab.Integration.Tests` → every `WebApplicationFactory` test (e.g. SeederTests) fails with `System.IO.DirectoryNotFoundException: ...\src\CardLab.Api\wwwroot\`. Deleting `web/dist` and `src/CardLab.Api/obj|bin` makes them pass (orchestrator: 2 failed → 14 passed).
@@ -82,4 +82,4 @@ Fix: `ThrowOnBadRequest = true` (route handler options) in `Program.cs` and map 
 ### Decision (orchestrator, 2026-11-05)
 Fix in PR-09's fix round (PR-09 owns `CardLabExceptionHandler`; `src/CardLab.Api/Program.cs`, owned by merged PR-00b, released to PR-09). Orchestrator under the human's standing instruction.
 ### Resolution
-PR-09 fix round.
+PR-09 fix round (#13): `ThrowOnBadRequest = true` + `BadHttpRequestException` → ProblemDetails 400 without the message; tests on both endpoints; checks in reviews/PR-09.review.md.

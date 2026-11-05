@@ -138,7 +138,7 @@
         "PR-05",
         "PR-06"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/09-admin-api",
       "url": "https://github.com/cardlab-sim/cardlab/pull/13"
     },
@@ -151,7 +151,7 @@
         "PR-08",
         "PR-09"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/001-card-controls/10-e2e",
       "url": ""
     },
@@ -163,14 +163,13 @@
         "PR-08",
         "PR-09"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/001-card-controls/11-cross-path-checks",
       "url": ""
     }
   ],
   "bugs_open": [
-    "BUG-001",
-    "BUG-006"
+    "BUG-001"
   ],
   "resume": null,
   "history": [
@@ -269,6 +268,10 @@
     {
       "at": "2026-11-05T17:00Z",
       "event": "PR-08 fixes verified (merchant-rule mutation fails 6), merged (#12); BUG-005 fixed"
+    },
+    {
+      "at": "2026-11-05T17:40Z",
+      "event": "PR-09 fixes verified (ThrowOnBadRequest mutation), merged (#13); BUG-006 fixed; wave 3 complete; PR-10, PR-11 dispatched"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
