@@ -20,7 +20,7 @@ export async function expectNoSeriousViolations(page: Page): Promise<void> {
 
 /**
  * Presses Tab until the focused element has the given accessible name (max 50 presses), failing otherwise; used to
- * drive journeys keyboard-only (AC-37). Also asserts the focused control shows a visible focus ring.
+ * drive journeys keyboard-only (AC-37). Also asserts the focused control shows a visible focus outline of at least 2 px (§4.1).
  */
 export async function tabTo(page: Page, name: string | RegExp): Promise<void> {
   for (let presses = 0; presses < 50; presses++) {
@@ -39,9 +39,7 @@ export async function tabTo(page: Page, name: string | RegExp): Promise<void> {
         .map((l) => l.textContent ?? '')
         .join(' ');
       const style = getComputedStyle(el);
-      const ring =
-        (style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) > 0) ||
-        style.boxShadow !== 'none';
+      const ring = style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2;
       return {
         name: (labelled ?? (byIds.trim() || labels.trim() || el.textContent)).trim(),
         ring,
