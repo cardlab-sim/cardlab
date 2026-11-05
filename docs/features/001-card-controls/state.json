@@ -81,7 +81,7 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/04-decision-core",
       "url": "https://github.com/cardlab-sim/cardlab/pull/9"
     },
@@ -169,8 +169,7 @@
     }
   ],
   "bugs_open": [
-    "BUG-001",
-    "BUG-004"
+    "BUG-001"
   ],
   "resume": null,
   "history": [
@@ -245,6 +244,10 @@
     {
       "at": "2026-11-05T14:00Z",
       "event": "PR-06 review APPROVE WITH FIXES; CardStoreContractTests.cs released to PR-06 for one contract case (M-2)"
+    },
+    {
+      "at": "2026-11-05T14:30Z",
+      "event": "PR-04 fixes verified (timestamp bound mutation), merged (#9); BUG-004 fixed"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

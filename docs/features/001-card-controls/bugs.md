@@ -7,7 +7,7 @@
 | BUG-001 | reviewer (PR-03) | S3 | AC-27, AC-34 | Deploy health wait trusts a configured commit, not the deployed build | design | fix-now (option A) | fixed | build (PR-03 fix round) | | 2026-11-05 |
 | BUG-002 | coder (PR-06), reproduced by orchestrator | S2 | AC-34, R-9 | Host tests throw DirectoryNotFoundException for wwwroot after a web build | plan (skeleton PR-00) | fix-now (skeleton delta PR-00b) | fixed | build (PR-00b before wave 3) | | 2026-11-05 |
 | BUG-003 | reviewer (PR-07) | S3 | AC-23 | FakeApiClient writes audit values in a format the API never returns | test-harness | fix-now (fold into PR-07 fix round) | fixed | build (PR-07 fix round) | | 2026-11-05 |
-| BUG-004 | reviewer (PR-04) | S3 | AC-20 | Timestamps outside the calendar range or in non-ISO text pass validation | design | fix-now (PR-04 fix round) | approved | build (PR-04 fix round) | | 2026-11-05 |
+| BUG-004 | reviewer (PR-04) | S3 | AC-20 | Timestamps outside the calendar range or in non-ISO text pass validation | design | fix-now (PR-04 fix round) | fixed | build (PR-04 fix round) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -58,4 +58,4 @@ Design §9 lists "bad timestamp" without defining it. Option A: timestamps must 
 ### Decision (orchestrator, 2026-11-05)
 Option A (the reviewer's recommendation), recorded as a design erratum for §9; no Gate 2 reopen. Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
 ### Resolution
-PR-04 fix round.
+PR-04 fix round (#9): strict ISO-8601 shape + [2000, 2100) window in Validate and ValidatePurchase, with rejection and boundary cases; checks in reviews/PR-04.review.md *Fixes verified*.
