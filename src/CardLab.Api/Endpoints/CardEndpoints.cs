@@ -1,4 +1,4 @@
-﻿using CardLab.Api.Contracts;
+using CardLab.Api.Contracts;
 using CardLab.Domain.Application;
 using CardLab.Domain.Common;
 using CardLab.Domain.Controls;

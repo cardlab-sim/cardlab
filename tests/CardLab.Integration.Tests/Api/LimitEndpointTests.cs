@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Text;
 using CardLab.Integration.Tests.Harness;
 using CardLab.TestKit;

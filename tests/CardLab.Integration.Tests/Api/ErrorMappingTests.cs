@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using System.Text;
 using CardLab.Api.Middleware;
 using CardLab.Domain.Ports;

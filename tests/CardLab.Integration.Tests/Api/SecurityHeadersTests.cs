@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using CardLab.Integration.Tests.Harness;
 
 namespace CardLab.Integration.Tests.Api;

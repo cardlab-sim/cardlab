@@ -1,4 +1,4 @@
-﻿using CardLab.Api.Endpoints;
+using CardLab.Api.Endpoints;
 using CardLab.Api.Middleware;
 using CardLab.Infrastructure;
 using CardLab.Infrastructure.Logging;

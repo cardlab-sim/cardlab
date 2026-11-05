@@ -1,4 +1,4 @@
-﻿using CardLab.Domain.Ports;
+using CardLab.Domain.Ports;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;

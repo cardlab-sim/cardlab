@@ -1,4 +1,4 @@
-﻿using System.Reflection;
+using System.Reflection;
 using CardLab.Api.Contracts;
 using CardLab.Infrastructure.Options;
 using CardLab.Infrastructure.Sql;
