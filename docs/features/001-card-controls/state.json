@@ -175,9 +175,9 @@
         "PR-10",
         "PR-11"
       ],
-      "status": "coding",
+      "status": "changes",
       "branch": "pr/001-card-controls/12-fix-feature-backend",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/17"
     },
     {
       "id": "PR-13",
@@ -326,6 +326,10 @@
     {
       "at": "2026-11-05T22:00Z",
       "event": "feature review CHANGES (2 major, 11 minor); BUG-008 (DB resume) and BUG-009 (browsers) decided by orchestrator under standing instruction; fix PRs PR-12, PR-13 dispatched; F-8/F-9 doc sync by orchestrator; F-11 tooling references kept (no confidential names)"
+    },
+    {
+      "at": "2026-11-05T22:50Z",
+      "event": "PR-12 pr-light APPROVE WITH FIXES (give-up path test); reviewer confirmed F-1 through real Program.cs, HSTS with forwarded proto, service.version = sha"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
