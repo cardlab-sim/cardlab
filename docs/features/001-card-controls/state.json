@@ -151,7 +151,7 @@
         "PR-08",
         "PR-09"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/10-e2e",
       "url": "https://github.com/cardlab-sim/cardlab/pull/15"
     },
@@ -169,8 +169,7 @@
     }
   ],
   "bugs_open": [
-    "BUG-001",
-    "BUG-007"
+    "BUG-001"
   ],
   "resume": null,
   "history": [
@@ -293,6 +292,10 @@
     {
       "at": "2026-11-05T20:40Z",
       "event": "PR-10 review APPROVE WITH FIXES (focus-ring check, axe on every spec, stale PR body)"
+    },
+    {
+      "at": "2026-11-05T21:20Z",
+      "event": "PR-10 fixes verified (focus-ring E2E mutation), merged (#15); BUG-007 fixed; all PRs merged"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

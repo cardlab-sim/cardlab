@@ -10,7 +10,7 @@
 | BUG-004 | reviewer (PR-04) | S3 | AC-20 | Timestamps outside the calendar range or in non-ISO text pass validation | design | fix-now (PR-04 fix round) | fixed | build (PR-04 fix round) | | 2026-11-05 |
 | BUG-005 | reviewer (PR-08) | S2 | NFR-1, AC-24 | A 16-digit merchant name is stored and returned in history | design | fix-now (option A, PR-08 fix round) | fixed | build (PR-08 fix round) | | 2026-11-05 |
 | BUG-006 | reviewer (PR-08) | S3 | AC-20 | Non-binding JSON body gives 500 (Development) / empty 400 instead of ProblemDetails | plan | fix-now (PR-09 fix round) | fixed | build (PR-09 fix round) | | 2026-11-05 |
-| BUG-007 | coder (PR-10, axe) | S2 | AC-37, NFR-6 | Scrollable table container is not keyboard-focusable (axe scrollable-region-focusable, serious) | code | fix-now (PR-10, released DataTable files) | approved | build (PR-10) | | 2026-11-05 |
+| BUG-007 | coder (PR-10, axe) | S2 | AC-37, NFR-6 | Scrollable table container is not keyboard-focusable (axe scrollable-region-focusable, serious) | code | fix-now (PR-10, released DataTable files) | fixed | build (PR-10) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -94,4 +94,4 @@ Root cause visible in code (PR-02 primitive). Fix: the scroll container gets `ta
 ### Decision (orchestrator, 2026-11-05)
 Fix now in PR-10: `web/src/components/DataTable.tsx` and `web/src/components/components.test.tsx` (PR-02, merged) released to PR-10 so its CI goes green in one PR; `tests/e2e/src/notImplemented.ts` (skeleton, unused) also released and deleted. Orchestrator under the human's standing instruction (autopilot: fix in code).
 ### Resolution
-PR-10.
+PR-10 (#15): focusable named region on the DataTable scroll container + component test (attribute removal fails it); local E2E 7 passed incl. axe at 1024/1280 px; PR CI e2e green.
