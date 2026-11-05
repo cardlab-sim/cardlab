@@ -110,7 +110,10 @@ Settings, Branches, add a rule for `main` requiring pull requests and these stat
 deploys) is the one CI tested.
 
 ## 10. Secret scanning
-Settings, Code security: keep secret scanning (and push protection) enabled. The repository must report no secrets,
+Settings, Code security: **turn on** secret scanning and push protection (they are off by default on this repository).
+Check: `gh api repos/<owner>/<repo> --jq .security_and_analysis` shows `secret_scanning` and
+`secret_scanning_push_protection` as `enabled`, and `gh api repos/<owner>/<repo>/secret-scanning/alerts --jq length` prints `0`.
+The repository must report no secrets,
 and `deploy.yml` must contain no stored cloud credentials (OIDC only).
 
 ## Rollback

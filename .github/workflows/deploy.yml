@@ -1,5 +1,5 @@
 # Deploy to the free Azure `demo` environment (design §14, DEC-3, DEC-10). OIDC only: no stored cloud credentials.
-# Rollback = re-run workflow_dispatch on the previous green commit (schema is forward-only).
+# Rollback = Actions → deploy → the last green run → "Re-run all jobs" (within 30 days; otherwise revert on main). Schema is forward-only.
 name: deploy
 
 on:
