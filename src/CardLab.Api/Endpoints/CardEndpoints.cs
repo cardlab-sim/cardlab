@@ -1,6 +1,7 @@
 ﻿using CardLab.Api.Contracts;
 using CardLab.Domain.Application;
 using CardLab.Domain.Common;
+using CardLab.Domain.Controls;
 using CardLab.Domain.Limits;
 using CardLab.Domain.Ports;
 
@@ -52,16 +53,73 @@ public static class CardEndpoints
     }
 
     /// <summary><c>POST /api/cards/{id}/freeze</c> → 200 <see cref="StatusDto"/> (<c>frozen</c>, also for a no-op) | 404.</summary>
-    internal static Task<IResult> Freeze(Guid id, CardControlsService controls, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> Freeze(Guid id, CardControlsService controls, CancellationToken ct) =>
+        ToStatusResult(await controls.FreezeAsync(new CardId(id), ct));
 
     /// <summary><c>POST /api/cards/{id}/unfreeze</c> → 200 <see cref="StatusDto"/> (<c>active</c>, also for a no-op) | 404.</summary>
-    internal static Task<IResult> Unfreeze(Guid id, CardControlsService controls, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> Unfreeze(Guid id, CardControlsService controls, CancellationToken ct) =>
+        ToStatusResult(await controls.UnfreezeAsync(new CardId(id), ct));
 
     /// <summary><c>PUT /api/cards/{id}/limits/{category}/{period}</c> body <see cref="SetLimitRequest"/> → 200 <see cref="LimitDto"/> | 400 | 404.</summary>
-    internal static Task<IResult> SetLimit(Guid id, string category, string period, SetLimitRequest body, CardControlsService controls, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> SetLimit(Guid id, string category, string period, SetLimitRequest body, CardControlsService controls, CancellationToken ct)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var categoryOk = WireNames.TryParseCategory(category, out var parsedCategory);
+        var periodOk = WireNames.TryParsePeriod(period, out var parsedPeriod);
+        var amountOk = WireNames.TryParseAmount(body?.Amount, out var amount);
+        if (!categoryOk)
+        {
+            errors["category"] = ["Unknown category."];
+        }
+
+        if (!periodOk)
+        {
+            errors["period"] = ["Unknown period. Use day, week or month."];
+        }
+
+        if (!amountOk)
+        {
+            errors["amount"] = ["Amount must be a number such as 50.00."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var result = await controls.SetLimitAsync(new CardId(id), parsedCategory, parsedPeriod, amount, ct);
+        if (result.IsOk)
+        {
+            return TypedResults.Ok(ToDto(result.Value));
+        }
+
+        return result.Error == DomainError.InvalidAmount
+            ? TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["amount"] = ["Amount must be between 0.00 and 999,999.99 with at most two decimal places."] })
+            : CardNotFound();
+    }
 
     /// <summary><c>DELETE /api/cards/{id}/limits/{category}/{period}</c> → 204 (also for a no-op) | 400 (unknown category/period) | 404.</summary>
-    internal static Task<IResult> RemoveLimit(Guid id, string category, string period, CardControlsService controls, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> RemoveLimit(Guid id, string category, string period, CardControlsService controls, CancellationToken ct)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (!WireNames.TryParseCategory(category, out var parsedCategory))
+        {
+            errors["category"] = ["Unknown category."];
+        }
+
+        if (!WireNames.TryParsePeriod(period, out var parsedPeriod))
+        {
+            errors["period"] = ["Unknown period. Use day, week or month."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var result = await controls.RemoveLimitAsync(new CardId(id), parsedCategory, parsedPeriod, ct);
+        return result.IsOk ? TypedResults.NoContent() : CardNotFound();
+    }
 
     /// <summary><c>GET /api/cards/{id}/transactions</c> → 200 <see cref="TransactionDto"/>[] newest first | 404.</summary>
     internal static async Task<IResult> ListTransactions(Guid id, ICardStore store, CancellationToken ct)
@@ -101,6 +159,9 @@ public static class CardEndpoints
             a.Event.OldValue,
             a.Event.NewValue)).ToList());
     }
+
+    private static IResult ToStatusResult(Result<CardStatus, DomainError> result) =>
+        result.IsOk ? TypedResults.Ok(new StatusDto(WireNames.ToWire(result.Value))) : CardNotFound();
 
     private static IResult CardNotFound() => TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "Card not found");
 
