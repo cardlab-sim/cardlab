@@ -88,6 +88,39 @@ public sealed class TransactionRulesTests
         Assert.Equal("merchant", Assert.Single(tooLong.Error).Field);
     }
 
+    // BUG-005 (NFR-1): a card-number-like run of 13+ digits (optionally spaced or dashed) in the merchant is rejected.
+    [Theory]
+    [InlineData("9999000100000001")]
+    [InlineData("9999 0001 0000 0001")]
+    [InlineData("9999-0001-0000-0001")]
+    [InlineData("Shell 9999000100000001 Ltd")]
+    [InlineData("1234567890123")]
+    [InlineData("1234 5678 9012 3")]
+    public void Merchant_containing_a_card_number_like_run_is_rejected_on_both_paths(string merchant)
+    {
+        var processor = TransactionRules.Validate(Valid().WithMerchant(merchant).Build());
+        var purchase = TransactionRules.ValidatePurchase(Valid().WithMerchant(merchant).BuildPurchase(), DateTimeOffset.UnixEpoch);
+
+        Assert.False(processor.IsOk);
+        var processorProblem = Assert.Single(processor.Error);
+        Assert.Equal("merchant", processorProblem.Field);
+        Assert.DoesNotContain("9999", processorProblem.Message);
+        Assert.False(purchase.IsOk);
+        Assert.Equal("merchant", Assert.Single(purchase.Error).Field);
+    }
+
+    // BUG-005: ordinary digits in a merchant name stay valid (12 digits is below the 13-digit threshold).
+    [Theory]
+    [InlineData("Northway Fuel 24")]
+    [InlineData("Unit 12345")]
+    [InlineData("123456789012")]
+    [InlineData("Depot 1234 Store 5678 Bay 9012 Gate 3")]
+    public void Merchant_with_ordinary_digits_is_accepted(string merchant)
+    {
+        Assert.True(TransactionRules.Validate(Valid().WithMerchant(merchant).Build()).IsOk);
+        Assert.True(TransactionRules.ValidatePurchase(Valid().WithMerchant(merchant).BuildPurchase(), DateTimeOffset.UnixEpoch).IsOk);
+    }
+
     // Added to T-U-17: every problem is reported, one per field, in one result.
     [Fact]
     public void All_problems_are_reported_together()
