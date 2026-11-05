@@ -69,7 +69,8 @@ steps 7 and 8, then re-run the workflow.
 ## 7. SQL user for the web app (managed identity)
 The Bicep only allows Azure services through the SQL firewall, so first allow your own address:
 ```bash
-az sql server firewall-rule create -g <resource-group> -s <sql-server-name> -n setup-client \n  --start-ip-address <your-ip> --end-ip-address <your-ip>
+az sql server firewall-rule create -g <resource-group> -s <sql-server-name> -n setup-client \
+  --start-ip-address <your-ip> --end-ip-address <your-ip>
 ```
 Connect to the `cardlab` database as the SQL Entra admin (for example with the Azure portal query editor or
 `sqlcmd -G`) and run, replacing `<webapp-name>` with `AZURE_WEBAPP_NAME`:
