@@ -151,7 +151,7 @@
         "PR-08",
         "PR-09"
       ],
-      "status": "review",
+      "status": "changes",
       "branch": "pr/001-card-controls/10-e2e",
       "url": "https://github.com/cardlab-sim/cardlab/pull/15"
     },
@@ -289,6 +289,10 @@
     {
       "at": "2026-11-05T20:10Z",
       "event": "PR-10 verified (BUG-007 attribute-removal mutation; PR CI all green incl. e2e 7 passed and ZAP FAIL 0/WARN 0); in review"
+    },
+    {
+      "at": "2026-11-05T20:40Z",
+      "event": "PR-10 review APPROVE WITH FIXES (focus-ring check, axe on every spec, stale PR body)"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

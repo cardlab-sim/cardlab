@@ -92,6 +92,6 @@ PR-09 fix round (#13): `ThrowOnBadRequest = true` + `BadHttpRequestException` â†
 ### Triage (orchestrator assessment pass)
 Root cause visible in code (PR-02 primitive). Fix: the scroll container gets `tabIndex={0}`, `role="region"` and `aria-label` = the table caption; a component test asserts it. Effort tiny; fix-worth high (blocks CI e2e and AC-37).
 ### Decision (orchestrator, 2026-11-05)
-Fix now in PR-10: `web/src/components/DataTable.tsx` and `web/src/components/components.test.tsx` (PR-02, merged) released to PR-10 so its CI goes green in one PR. Orchestrator under the human's standing instruction (autopilot: fix in code).
+Fix now in PR-10: `web/src/components/DataTable.tsx` and `web/src/components/components.test.tsx` (PR-02, merged) released to PR-10 so its CI goes green in one PR; `tests/e2e/src/notImplemented.ts` (skeleton, unused) also released and deleted. Orchestrator under the human's standing instruction (autopilot: fix in code).
 ### Resolution
 PR-10.
