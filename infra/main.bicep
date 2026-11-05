@@ -14,7 +14,7 @@ param webAppName string
 @description('Globally unique Azure SQL logical server name.')
 param sqlServerName string
 
-@description('UPN of the Entra user who administers the SQL server (design DEC-10: the human's identity).')
+@description('UPN of the Entra user who administers the SQL server (design DEC-10: the human\'s identity).')
 param sqlAdminLogin string
 
 @description('Object id of the Entra identity that administers the SQL server.')
