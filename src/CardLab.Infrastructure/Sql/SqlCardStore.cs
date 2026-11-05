@@ -48,7 +48,7 @@ public sealed class SqlCardStore : ICardStore
         }
 
         var limits = await _db.SpendLimits.AsNoTracking().Where(l => l.CardId == id.Value).ToListAsync(ct);
-        return new CardDetail(id, card.Name, card.CardholderName, card.LastFour, Enum.Parse<CardStatus>(card.Status), limits.Select(RowMapper.ToLimit).ToList());
+        return new CardDetail(id, card.Name, card.CardholderName, card.LastFour, Enum.Parse<CardStatus>(card.Status), limits.Select(RowMapper.ToLimit).OrderBy(l => l.Category).ThenBy(l => l.Period).ToList());
     }
 
     /// <inheritdoc />
