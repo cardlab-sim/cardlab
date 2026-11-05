@@ -46,6 +46,24 @@ describe('CardDetailPage', () => {
     expect(rows[1]).toHaveTextContent('£50.00');
   });
 
+  // T-W-3 · PR-07 · web unit (added: client-side rejection of empty/non-numeric amounts per the brief's Behaviour)
+  // Given the limit form, When Save with an empty or non-numeric amount, Then an inline error and no setLimit call
+  // Catches: junk amounts sent to the API
+  test.each(['', 'abc'])('T-W-3 limit form rejects amount "%s" client-side', async (typed) => {
+    const user = userEvent.setup();
+    const fake = new FakeApiClient({ cards: [opsVan] });
+    renderDetail(fake);
+
+    const limits = await limitsRegion();
+    if (typed !== '') {
+      await user.type(limits.getByLabelText('Amount'), typed);
+    }
+    await user.click(limits.getByRole('button', { name: 'Save' }));
+
+    expect(await limits.findByRole('alert')).toHaveTextContent('Enter the limit as a number');
+    expect(fake.calls).not.toContain('setLimit');
+  });
+
   // T-W-3 · PR-07 · web unit
   // Given the simulate form and fake.hold(), When Submit, Then the button shows its pending label and is disabled; after release a Notice shows outcome "Declined", the code limit_exceeded and remaining £0.00, and the new transaction is the first table row
   // Catches: no pending state, result not shown, history not refreshed (AC-22, §4.1)
