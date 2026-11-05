@@ -181,8 +181,9 @@ forward. **Revisit if:** a second instance appears (then a migration lock or a d
 
 ### DEC-10 Infrastructure as code: Bicep
 **Chosen:** `infra/main.bicep` (+ `infra/demo.bicepparam`): App Service plan F1 Linux, web app
-(system-assigned identity, HTTPS only, app settings for environment and lookup-key reference by
-name only), Azure SQL logical server (Entra-only authentication, the human's identity as admin),
+(system-assigned identity, HTTPS only; Bicep sets no app settings, because `deploy.yml` sets them
+with `az webapp config appsettings set` (merge), so the lookup key and every other setting survive a
+deploy), Azure SQL logical server (Entra-only authentication, the human's identity as admin),
 database on the free offer (`useFreeLimit: true`, `freeLimitExhaustionBehavior: AutoPause`),
 firewall rule allowing Azure services. Deployed idempotently by `deploy.yml` via `az deployment
 group create` after `azure/login` with OIDC. Rejected: portal clicks (undocumented drift),
@@ -203,7 +204,7 @@ step by hand. **Revisit if:** never.
 **Chosen:** `builder.Logging.AddOpenTelemetry(o => { o.IncludeScopes = true;
 o.IncludeFormattedMessage = true; o.AddConsoleExporter(); if OTLP endpoint configured:
 o.AddOtlpExporter(); })`; resource attributes `service.name=cardlab`, `service.version=<commit>`.
-Events are `LoggerMessage`-generated methods in `CardLab.Infrastructure/Logging/CardLabEvents.cs`
+Events are `LoggerMessage`-generated methods in `CardLab.Domain/Application/CardLabEvents.cs` (planner decision)
 with fixed names and fields: `AuthorisationDecided(cardId, lastFour, category, amount, outcome,
 reason, durationMs)` and `ControlChanged(actorId, actorName, cardId, lastFour, action)` (NFR-7).
 Integration tests add an in-memory `BaseExporter<LogRecord>` to assert fields and the absence of
@@ -430,7 +431,7 @@ outlines; mono fonts for amounts.
 | `CardLab.Domain.Application` | orchestration | `AuthorisationService.AuthoriseAsync(AuthorisationRequest, ct) → AuthorisationResult` (`record AuthorisationResult(Decision, TransactionId?)`), `AuthorisationService.AuthoriseByCardIdAsync(CardId, SimulatedPurchase, ct)` (same path after card resolution; DEC-14); `CardControlsService.FreezeAsync(CardId, ct)`, `UnfreezeAsync`, `SetLimitAsync(CardId, Category, Period, decimal amount, ct)`, `RemoveLimitAsync(CardId, Category, Period, ct)`; all return `Result<T, DomainError>` with `DomainError { CardNotFound, InvalidAmount }` | `ICardStore`, `IClock`, `ICardNumberLookup`, `ICurrentActor`, `ILogger` |
 | `CardLab.Infrastructure.Sql` | real store | `SqlCardStore : ICardStore` (EF Core, `sp_getapplock` in `WithCardLockAsync`), `CardLabDbContext`, `Seeder.EnsureSeedAsync(IServiceProvider, SeedOptions)` | SQL Server |
 | `CardLab.Infrastructure.Lookup` | one-way lookup | `HmacCardNumberLookup : ICardNumberLookup` (key from `IOptions<LookupOptions>`) | — |
-| `CardLab.Infrastructure.Logging` | events + wiring | `static partial class CardLabEvents` (LoggerMessage), `AddCardLabTelemetry(this IHostApplicationBuilder)` | OpenTelemetry |
+| `CardLab.Infrastructure.Logging` | wiring (`CardLabEvents` lives in `CardLab.Domain/Application/CardLabEvents.cs`) | `static partial class CardLabEvents` (LoggerMessage), `AddCardLabTelemetry(this IHostApplicationBuilder)` | OpenTelemetry |
 | `CardLab.Api` | HTTP (§7), health, static SPA | `MapCardEndpoints`, `MapAuthorisationEndpoints`, `MapHealthEndpoint`, `MapTestEndpoints` (conditional) | Application |
 | `web/src/api` | SPA port | `interface ApiClient` (one method per endpoint in §7) with `HttpApiClient` and `FakeApiClient` | HTTP |
 | `web/src/format` | presentation rules | `formatMoney(amount: string): string`, `formatLondonTime(iso: string): string` | none |
@@ -553,13 +554,14 @@ a limit change and an authorisation on the same card never interleave (R-12, R-1
 ## 9. Errors & failure modes
 | Failure | Detection | Behaviour | User sees |
 |---------|-----------|-----------|-----------|
-| Malformed authorisation request (missing amount, £0.00, > 2 dp, unknown category, bad timestamp, card number not 16 digits) | `TransactionRules.Validate` | no DB access, nothing stored, `invalid_request` | decision body with reason `invalid_request` and a `problems` list (simulate form shows them inline) |
+| Malformed authorisation request (missing amount, £0.00, > 2 dp, unknown category, bad timestamp, card number not 16 digits, merchant containing 13 or more digits) | `TransactionRules.Validate` | no DB access, nothing stored, `invalid_request` | decision body with reason `invalid_request` and a `problems` list (simulate form shows them inline). Rules (BUG-004, BUG-005): "bad timestamp" = not strict ISO-8601 with an explicit offset (`yyyy-MM-ddTHH:mm:ss[.fff](Z\|±hh:mm)`) or outside [2000-01-01T00:00Z, 2100-01-01T00:00Z), reported as a `timestamp` problem; a merchant with a run of 13+ digits (optionally separated by spaces or dashes) is a `merchant` problem, so no card number can be stored or displayed via the merchant (NFR-1) |
 | Unknown card number | `FindByLookupAsync` returns null | nothing stored, `card_not_found` | decision body |
 | Limit amount outside R-11 or unknown category/period on the admin API | endpoint binding + `MoneyBounds` | `400` ProblemDetails, nothing stored, no audit | inline field error (AC-9) |
 | Unknown card id on the admin API | store returns null | `404` ProblemDetails | "Card not found" page notice |
 | App-lock timeout (5 s) under extreme contention | `sp_getapplock` returns < 0 | transaction rolled back, `503` ProblemDetails, nothing stored | "Try again" notice |
 | Database unreachable | SqlClient exception | request fails `503`; `/api/health` reports `database:"unreachable"` | "Service unavailable" notice |
 | Migration fails at startup | host exits non-zero | App Service shows the previous process stopped; deploy workflow's health wait fails the run | deploy workflow red; fix forward |
+| Serverless database resuming after idle auto-pause (60 min) | connection failures during resume | startup retries migrate + seed for up to 120 s; the demo connection string uses `Connect Timeout=60`, `Connect Retry Count=3`, `Connect Retry Interval=10`; requests during resume → `503` | "Service unavailable" notice |
 | Free-offer database auto-paused (quota exhausted) | connection failures | as "database unreachable" | same |
 | F1 CPU quota exhausted | App Service returns 403 | nothing to do; resets at 00:00 UTC | 403 page |
 | SPA route reload (`/cards/{id}`) | static file miss | `MapFallbackToFile("index.html")` | the page |
@@ -588,15 +590,15 @@ a limit change and an authorisation on the same card never interleave (R-12, R-1
   never sets it (DEC-16).
 
 ## 11. Configuration & secrets
-| Key | Local (`appsettings.Development.json`) | CI | Azure `demo` (App Service settings via Bicep unless noted) | Secret? |
+| Key | Local (`appsettings.Development.json`) | CI | Azure `demo` (App Service settings set by `deploy.yml` with `az webapp config appsettings set` (merge); Bicep sets none) | Secret? |
 |---|---|---|---|---|
 | `ConnectionStrings:CardLab` | `Server=(localdb)\MSSQLLocalDB;Database=CardLab;Trusted_Connection=True;TrustServerCertificate=True` | `Server=localhost,1433;Database=CardLab;User Id=sa;Password=<job-generated>;TrustServerCertificate=True` (password generated per job, not stored) | `Server=tcp:<server>.database.windows.net;Database=cardlab;Authentication=Active Directory Default;Encrypt=True` | no (no password) |
-| `CardLab:LookupKey` | fixed dev key (committed, documented non-secret) | same dev key | random 32-byte base64 set by the human once in the portal/CLI; Bicep declares the setting name only (`existing` value preserved) | yes (outside GitHub) |
+| `CardLab:LookupKey` | fixed dev key (committed, documented non-secret) | same dev key | random 32-byte base64 set by the human once in the portal/CLI; not touched by Bicep or by the deploy (merge preserves it) | yes (outside GitHub) |
 | `CardLab:TestEndpoints` | `true` | `true` for the E2E job | unset (false) | no |
-| `CardLab:Commit` | `local` | `${GITHUB_SHA}` | set by the deploy workflow as an app setting (`-p:SourceRevisionId` also stamps the assembly) | no |
+| `CardLab:Commit` | `local` | `${GITHUB_SHA}` | unset; health reports the source revision after the last '+' of the informational version stamped by `-p:SourceRevisionId` | no |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset | unset | unset (a later feature sets it) | no |
 | `CardLab:Seed:*` | in `appsettings.json` | same | same | no (fictional) |
-| Repo variables (`vars.*`) | — | `TICKET_KEY_PATTERN` (default `CL-\d+`), `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AZURE_WEBAPP_NAME`, `DEMO_URL` | — | no (identifiers, not credentials) |
+| Repo variables (`vars.*`) | — | `TICKET_KEY_PATTERN` (default `CL-\d+`), `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `AZURE_RESOURCE_GROUP`, `AZURE_WEBAPP_NAME`, `AZURE_SQL_SERVER_NAME`, `AZURE_SQL_ADMIN_LOGIN`, `AZURE_SQL_ADMIN_OBJECT_ID`, `DEMO_URL` | — | no (identifiers, not credentials) |
 
 Human one-off setup (documented in `docs/ops/azure-setup.md`, written in the deploy PR): resource
 group; Entra app registration or user-assigned identity with a federated credential for the repo's
@@ -611,7 +613,7 @@ above; after the first Bicep run: the SQL user for the web app's identity (DEC-1
   (not the endpoints), so the simulate path and the processor path log identically. Request logging
   stays at the default ASP.NET Core level (no body logging, so no PAN).
 - **Health (R-14):** `GET /api/health` runs `SELECT 1` with a 5 s timeout; returns the commit
-  from `CardLab:Commit` (fallback: assembly informational version). Used by the deploy workflow to
+  from `CardLab:Commit` when set (local, CI); on `demo` it is unset and health reports the source revision after the last '+' of the informational version stamped by `-p:SourceRevisionId`. Used by the deploy workflow to
   confirm the new build (AC-27, AC-34).
 - **Not in this feature:** metrics, traces, dashboards (the OTel SDK is present; adding
   `WithTracing/WithMetrics` later is configuration-only).
@@ -625,7 +627,8 @@ above; after the first Bicep run: the SQL user for the web app's identity (DEC-1
   offer latency in-region is low; AC-36 measured by the smoke run (T-E-7).
 - **NFR-5 warm-up ≤ 60 s:** self-contained publish, startup does migrate + seed (two short queries
   when nothing changes); deploy workflow polls health for up to 5 min to absorb the free-offer
-  database's own resume time, but asserts the app answers within 60 s once the database is up.
+  database's own resume time; the deploy does not assert 60 s, the validator measures warm-up after
+  idle (T-C-2). Startup also retries migrate + seed for up to 120 s while the database resumes (§9).
 - **SPA:** Vite production build, single bundle under ~200 kB gzipped (no component library),
   fonts self-hosted.
 
@@ -646,7 +649,7 @@ above; after the first Bicep run: the SQL user for the web app's identity (DEC-1
   "Ops van" (freeze → simulate purchase declined `card_frozen` → unfreeze → simulate approved,
   leaving the card active) plus the simulate timing assertion (AC-36). One smoke run costs seconds
   of the daily F1 quota; the full suite never runs against `demo`.
-- **Rollback:** re-run `deploy.yml` (`workflow_dispatch`) on the previous green commit; schema is
+- **Rollback:** re-run the last green `deploy` run (Actions → Re-run all jobs); past 30 days, revert on `main`; schema is
   forward-only, migrations are additive in this feature.
 - **Feature flag:** none (first feature).
 - **Ticket:** one GitHub Issue; key `CL-<n>` in every PR title and body.
@@ -656,7 +659,7 @@ above; after the first Bicep run: the SQL user for the web app's identity (DEC-1
 | Layer | Scope | Real | Replaced by | Speed | Location | Command |
 |-------|-------|------|-------------|-------|----------|---------|
 | Unit (domain) | one domain module via its public API; property tests over money/periods/decision | domain code | nothing needed (pure) | < 20 ms each; properties ≤ 1 s | `tests/CardLab.Domain.Tests/` | `dotnet test tests/CardLab.Domain.Tests` |
-| Unit (application) | `AuthorisationService`, `CardControlsService` through their public methods | services | `InMemoryCardStore`, `FakeClock`, `FakeCardNumberLookup`, `FakeActor`, `FakeLogger` | < 50 ms | `tests/CardLab.Domain.Tests/Application/` | same |
+| Unit (application) | `AuthorisationService`, `CardControlsService` through their public methods | services | `InMemoryCardStore`, `FakeClock`, `FakeCardNumberLookup`, `FakeActor`, `CapturingLogger<T>` | < 50 ms | `tests/CardLab.Domain.Tests/Application/` | same |
 | Unit (web) | formatters, `ApiClient` consumers, forms | components | `FakeApiClient` | < 100 ms | `web/src/**/*.test.tsx` | `npm test --prefix web` |
 | Integration | `SqlCardStore` contract + concurrency; API endpoints through `WebApplicationFactory`; logging; performance | SQL Server, EF Core, Kestrel in-process, OTel in-memory exporter | nothing (no third parties) | < 2 s each; perf test ~10 s | `tests/CardLab.Integration.Tests/` | `dotnet test tests/CardLab.Integration.Tests` |
 | E2E | user journeys in a browser against a running host + DB; axe; keyboard; smoke against `demo` | whole system | nothing | seconds each | `tests/e2e/` | `npm run e2e --prefix tests/e2e` (`-- --project smoke` for the deploy smoke) |
@@ -665,6 +668,8 @@ Rules the coder and reviewer enforce: unit tests never touch disk, network, the 
 (inject `IClock`, ids, FsCheck seeds are logged on failure); integration tests own a fresh database
 per test class; E2E tests reset state through `/api/test/reset` before each journey except in the
 `smoke` project, which restores what it changed.
+
+**NFR-6 browser coverage:** the Desktop Chrome and Desktop Firefox Playwright projects run the local suite in CI; Edge is covered by the shared Chromium engine of the Chrome project.
 
 ### 15.2 Harness components
 | Component | Purpose | File/module | Used by layer |
@@ -715,7 +720,7 @@ integration, `T-E-n` E2E, `T-C-n` CI/deploy evidence checked by the validator.
 | AC-23 | e2e | T-E-2 `limits.spec.ts` | three events newest first |
 | AC-24 | integration + e2e | T-I-7 `Privacy/NoPanTests.cs` (logs, responses, table dumps); T-E-4 `privacy.spec.ts` (page text) | `PanScanner` |
 | AC-25 | property | T-P-1..T-P-5 `Properties/LimitProperties.cs`, `Properties/PeriodProperties.cs` | never exceed; declines don't change spend; remaining = limit − spend; every instant in exactly one day/week/month incl. DST; `Money` round-trips |
-| AC-26 | CI evidence | T-C-1 | validator inspects a PR's checks list and a ticket-key-less PR's failure |
+| AC-26 | CI evidence | T-C-1 | validator inspects a PR's checks list and a ticket-key-less PR's failure. AC-26 mapping: build + unit + integration = `backend`; E2E + ZAP = `e2e` (steps 'Playwright (project local)' and 'ZAP baseline'); CodeQL = `analyze (csharp)`, `analyze (javascript-typescript)`; ticket key = `ticket-key` |
 | AC-27 | deploy evidence | T-C-2 | `deploy.yml` health wait on commit |
 | AC-28 | review evidence | T-C-3 | validator lists resources (`az resource list`), all F1/free |
 | AC-29 | review evidence | T-C-4 | secret scanning page + workflow grep for credentials |
@@ -804,6 +809,7 @@ with jobs in parallel; ZAP baseline adds ~2 min.
 | .NET 10 runtime not offered on App Service Linux F1 at deploy time. | medium | deploy wave blocked | self-contained `linux-x64` publish (DEC-3) |
 | `TimeZoneInfo` Europe/London rules differ between Windows (local) and Linux (CI/Azure). | low | wrong period near DST | .NET uses ICU/IANA on both since .NET 6; property tests run in both CI (Linux) and locally (Windows) |
 | ZAP baseline flags headers or cookies on the SPA. | medium | red PR | security headers middleware (§10) and a reviewed `.zap/rules.tsv` |
+| Serverless database resumes from idle auto-pause (60 min) slower than the host starts. | medium | host crash-loop, demo down (BUG-008) | startup retries migrate + seed for up to 120 s; `Connect Timeout=60`, `Connect Retry Count=3`, `Connect Retry Interval=10`; 503 "Service unavailable" meanwhile (§9) |
 | FsCheck.Xunit.v3 and xunit v3 version skew. | low | property tests fail to discover | pin both in PR-00 and run them in the skeleton |
 
 ## 18. Open questions
@@ -820,3 +826,6 @@ with jobs in parallel; ZAP baseline adds ~2 min.
 | 2026-11-05 | Erratum (BUG-004, PR-04 review F-1/F-5): §9 "bad timestamp" means anything that is not strict ISO-8601 with an explicit offset (`yyyy-MM-ddTHH:mm:ss[.fff](Z\|±hh:mm)`) or lies outside [2000-01-01T00:00Z, 2100-01-01T00:00Z); such requests decline `invalid_request` with a `timestamp` problem. Orchestrator under the human's standing instruction; no Gate 2 reopen. | BUG-004 |
 | 2026-11-05 | Erratum (BUG-005, PR-08 review m-3): §9/§10: a merchant containing a run of 13 or more digits (optionally separated by spaces or dashes) is a `merchant` problem → `invalid_request`, nothing stored, so no card number can be stored or displayed via the merchant field (NFR-1). Orchestrator under the human's standing instruction; no Gate 2 reopen. | BUG-005 |
 | 2026-11-05 | Erratum (BUG-001 wording, PR-09 review B-1): on `demo` health reports the **source revision after the last '+'** of the assembly informational version (`1.0.0+<sha>` → `<sha>`), which is what `deploy.yml` compares with `github.sha`. Orchestrator under the human's standing instruction. | BUG-001 |
+| 2026-11-05 | Erratum (BUG-008, feature review F-1): §9 gets the row for a serverless database resuming after idle auto-pause (60 min): startup retries migrate + seed for up to 120 s; the demo connection string uses `Connect Timeout=60`, `Connect Retry Count=3`, `Connect Retry Interval=10`; requests during resume → 503 'Service unavailable'; §17 gets the matching risk row. Fixed in PR-12. Orchestrator under the human's standing instruction; no Gate 2 reopen. | BUG-008 |
+| 2026-11-05 | Erratum (BUG-009, feature review F-7): §15 states NFR-6 browser coverage: Desktop Chrome and Desktop Firefox Playwright projects run the local suite in CI; Edge is covered by the shared Chromium engine of the Chrome project. Fixed in PR-13. Orchestrator under the human's standing instruction; no Gate 2 reopen. | BUG-009 |
+| 2026-11-05 | Doc-only edits (feature review F-8, F-9): AC-26 check mapping added to T-C-1; DEC-10, DEC-12, §5, §9, §11, §12, §13, §14, §15.1 brought in line with the BUG-001/004/005 errata and the code (CardLabEvents location, AZURE_SQL_* repo variables, rollback by re-running the last green run, warm-up measured not asserted, `CapturingLogger<T>`). Orchestrator under the human's standing instruction; no Gate 2 reopen. | F-8, F-9 |

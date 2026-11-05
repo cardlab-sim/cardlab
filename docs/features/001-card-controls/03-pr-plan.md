@@ -1,7 +1,7 @@
 ---
 feature: 001-card-controls
 design: ./02-tech-design.md
-status: draft
+status: approved
 ---
 
 # PR plan: Card controls: freeze/unfreeze and per-category spend limits
