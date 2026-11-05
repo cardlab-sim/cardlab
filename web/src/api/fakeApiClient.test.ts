@@ -56,9 +56,16 @@ describe('FakeApiClient', () => {
     ]);
     const audit = await fake.listAudit('c1');
     expect(audit.map((a) => [a.action, a.oldValue, a.newValue])).toEqual([
-      ['limit_changed', '0', '1000000.00'],
-      ['limit_set', null, '0'],
+      ['limit_changed', 'Fuel/Day/0', 'Fuel/Day/1000000.00'],
+      ['limit_set', null, 'Fuel/Day/0'],
     ]);
+  });
+
+  test('audit limit values use PascalCase category names', async () => {
+    const fake = new FakeApiClient({ cards: [card()] });
+    await fake.setLimit('c1', 'meals_and_entertainment', 'week', '10.00');
+    const audit = await fake.listAudit('c1');
+    expect(audit[0]?.newValue).toBe('MealsAndEntertainment/Week/10.00');
   });
 
   test('removeLimit removes and audits only when a limit existed', async () => {
@@ -69,8 +76,8 @@ describe('FakeApiClient', () => {
     expect((await fake.getCard('c1')).limits).toEqual([]);
     const audit = await fake.listAudit('c1');
     expect(audit.map((a) => [a.action, a.oldValue, a.newValue])).toEqual([
-      ['limit_removed', '5.00', null],
-      ['limit_set', null, '5.00'],
+      ['limit_removed', 'Fuel/Day/5.00', null],
+      ['limit_set', null, 'Fuel/Day/5.00'],
     ]);
   });
 
@@ -86,8 +93,8 @@ describe('FakeApiClient', () => {
     expect(audit[0]).toMatchObject({
       action: 'freeze',
       actorName: 'Sam Ellis',
-      oldValue: 'active',
-      newValue: 'frozen',
+      oldValue: 'Active',
+      newValue: 'Frozen',
     });
     expect((await fake.listCards())[0]?.status).toBe('frozen');
   });

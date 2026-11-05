@@ -2,8 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { FakeApiClient } from '../api/fakeApiClient';
-
-import type { CardDetail } from '../api/types';
+import type { AuditEntry, CardDetail } from '../api/types';
 import { renderWithApi } from '../test/render';
 import { CardDetailPage } from './CardDetailPage';
 
@@ -156,7 +155,7 @@ describe('CardDetailPage', () => {
       expect(items[0]).toHaveTextContent('Card frozen');
       expect(items[0]).toHaveTextContent('Sam Ellis');
       expect(items[0]).toHaveTextContent('1 Jul 2026 13:00');
-      expect(items[0]).toHaveTextContent('active → frozen');
+      expect(items[0]).toHaveTextContent('Active → Frozen');
     } finally {
       vi.useRealTimers();
     }
@@ -241,4 +240,201 @@ describe('CardDetailPage', () => {
       '/',
     );
   });
+
+  // T-W-3 · PR-07 · web unit (added in the fix round: B1)
+  // Given audit entries in the API's format (design §6), When rendered, Then the list is newest first with formatted values
+  // Catches: crash on "Fuel/Day/50.00" values; list order changed; raw wire values shown (AC-23)
+  test('T-W-3 audit list shows API-format values newest first (AC-23)', async () => {
+    const entry = (
+      n: number,
+      action: AuditEntry['action'],
+      oldValue: string | null,
+      newValue: string | null,
+    ): AuditEntry => ({
+      id: `a${n}`,
+      atUtc: `2026-07-01T12:0${n}:00Z`,
+      actorName: 'Sam Ellis',
+      action,
+      oldValue,
+      newValue,
+    });
+    renderDetail(
+      new FakeApiClient({
+        cards: [opsVan],
+        audit: {
+          c1: [
+            entry(3, 'limit_removed', 'Fuel/Day/80.00', null),
+            entry(2, 'limit_changed', 'Fuel/Day/50.00', 'Fuel/Day/80.00'),
+            entry(1, 'limit_set', null, 'MealsAndEntertainment/Week/10.00'),
+          ],
+        },
+      }),
+    );
+
+    const audit = within(await screen.findByRole('region', { name: 'Audit' }));
+    const items = audit.getAllByRole('listitem');
+    expect(items).toHaveLength(3);
+    expect(items[0]).toHaveTextContent('Limit removed');
+    expect(items[0]).toHaveTextContent('Sam Ellis');
+    expect(items[0]).toHaveTextContent('1 Jul 2026 13:03');
+    expect(items[0]).toHaveTextContent('Fuel day £80.00 → —');
+    expect(items[1]).toHaveTextContent('Limit changed');
+    expect(items[1]).toHaveTextContent('Fuel day £50.00 → Fuel day £80.00');
+    expect(items[2]).toHaveTextContent('Limit set');
+    expect(items[2]).toHaveTextContent('— → Meals & Entertainment week £10.00');
+  });
+
+  // T-W-9 · PR-07 · web unit (added in the fix round: M1, M2)
+  // Given the limit form, When Save a new value for Fuel/Day then a new pair, Then the table shows the replaced and the new row, the input is cleared and a success notice is shown
+  // Catches: no refetch after Save (AC-6, AC-7); no confirmation (§4.1)
+  test('T-W-9 saving a limit adds then replaces the row', async () => {
+    const user = userEvent.setup();
+    const fake = new FakeApiClient({ cards: [opsVan] });
+    renderDetail(fake);
+
+    const limits = await limitsRegion();
+    await user.selectOptions(limits.getByLabelText('Category'), 'fuel');
+    await user.selectOptions(limits.getByLabelText('Period'), 'day');
+    await user.type(limits.getByLabelText('Amount'), '80.00');
+    await user.click(limits.getByRole('button', { name: 'Save' }));
+
+    expect(await limits.findByText('£80.00')).toBeInTheDocument();
+    expect(limits.queryByText('£50.00')).toBeNull();
+    expect(limits.getByRole('status')).toHaveTextContent('Limit saved: Fuel day £80.00');
+    expect(limits.getByLabelText('Amount')).toHaveValue('');
+
+    await user.selectOptions(limits.getByLabelText('Category'), 'travel');
+    await user.selectOptions(limits.getByLabelText('Period'), 'month');
+    await user.type(limits.getByLabelText('Amount'), '500');
+    await user.click(limits.getByRole('button', { name: 'Save' }));
+
+    expect(await limits.findByText('£500.00')).toBeInTheDocument();
+    expect(limits.getAllByRole('row')).toHaveLength(3);
+    expect(limits.getByText('£80.00')).toBeInTheDocument();
+    expect(limits.getByLabelText('Amount')).toHaveValue('');
+    expect(fake.calls.filter((call) => call === 'setLimit')).toHaveLength(2);
+  });
+
+  // T-W-9 · PR-07 · web unit (added in the fix round: M2)
+  // Given fake.hold(), When Remove is pressed, Then the button shows "Removing…" and is disabled; after release a success notice is shown
+  // Catches: no pending state or confirmation on Remove (§4.1)
+  test('T-W-9 remove shows a pending state then a confirmation', async () => {
+    const user = userEvent.setup();
+    const fake = new FakeApiClient({ cards: [opsVan] });
+    renderDetail(fake);
+    const limits = await limitsRegion();
+    await limits.findByText('£50.00');
+
+    const release = fake.hold();
+    await user.click(limits.getByRole('button', { name: 'Remove Fuel day limit' }));
+    expect(limits.getByRole('button', { name: 'Removing…' })).toBeDisabled();
+
+    release();
+    expect(await limits.findByRole('status')).toHaveTextContent('Limit removed: Fuel day');
+    await waitFor(() => {
+      expect(limits.queryByText('£50.00')).toBeNull();
+    });
+  });
+
+  // T-W-8 · PR-07 · web unit (added in the fix round: M2)
+  // Given an active card, When Freeze is pressed, Then a success notice says the card was frozen
+  // Catches: no confirmation after Freeze (§4.1)
+  test('T-W-8 freeze confirms with a notice', async () => {
+    const user = userEvent.setup();
+    renderDetail(new FakeApiClient({ cards: [opsVan] }));
+
+    await user.click(await screen.findByRole('button', { name: 'Freeze' }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Card frozen');
+  });
+
+  // T-W-8 · PR-07 · web unit (added in the fix round: m3)
+  // Given a slow refetch after Freeze, When Freeze is pressed, Then the button stays "Freezing…" and disabled until the new status is shown
+  // Catches: a stale, enabled "Freeze" button while the refetch is in flight
+  test('T-W-8 freeze stays pending until the refetch lands', async () => {
+    const user = userEvent.setup();
+    const gated = new GatedCardClient({ cards: [opsVan] }, 2);
+    renderDetail(gated);
+
+    await user.click(await screen.findByRole('button', { name: 'Freeze' }));
+
+    await screen.findByRole('button', { name: 'Freezing…' });
+    expect(screen.getByRole('button', { name: 'Freezing…' })).toBeDisabled();
+    gated.release();
+    expect(await screen.findByRole('button', { name: 'Unfreeze' })).toBeEnabled();
+  });
+
+  // T-W-8 · PR-07 · web unit (added in the fix round: m1)
+  // Given a slow refetch after Save and a fast one after Freeze, When both complete, Then the newest data (Frozen) wins
+  // Catches: an older response overwriting a newer one
+  test('T-W-8 an older refetch does not overwrite a newer one', async () => {
+    const user = userEvent.setup();
+    const gated = new GatedCardClient({ cards: [opsVan] }, 2);
+    renderDetail(gated);
+    const limits = await limitsRegion();
+
+    await user.type(limits.getByLabelText('Amount'), '80.00');
+    await user.click(limits.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(gated.getCardCalls).toBe(2);
+    });
+    await user.click(screen.getByRole('button', { name: 'Freeze' }));
+    expect(await screen.findByText('Frozen')).toBeInTheDocument();
+
+    gated.release();
+    await waitFor(() => {
+      expect(limits.getByRole('button', { name: 'Save' })).toBeEnabled();
+    });
+    expect(screen.getByText('Frozen')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Unfreeze' })).toBeInTheDocument();
+  });
+
+  // T-W-8 · PR-07 · web unit (added in the fix round: m2)
+  // Given a refetch that fails after a successful Freeze, When Freeze is pressed, Then the page keeps its data and shows an alert
+  // Catches: the whole page replaced by a load error after a successful action
+  test('T-W-8 a failed refetch keeps the page and shows an alert', async () => {
+    class AuditFailsAfterFirst extends FakeApiClient {
+      private auditCalls = 0;
+      override listAudit(id: string): Promise<AuditEntry[]> {
+        this.auditCalls += 1;
+        return this.auditCalls > 1 ? Promise.reject(new Error('boom')) : super.listAudit(id);
+      }
+    }
+    const user = userEvent.setup();
+    renderDetail(new AuditFailsAfterFirst({ cards: [opsVan] }));
+
+    await user.click(await screen.findByRole('button', { name: 'Freeze' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not refresh the card');
+    expect(screen.getByRole('heading', { name: 'Ops van' })).toBeInTheDocument();
+  });
 });
+
+/** FakeApiClient whose `gatedCall`-th getCard returns the state at call time but only after `release()`. */
+class GatedCardClient extends FakeApiClient {
+  getCardCalls = 0;
+  private open: () => void = () => {};
+  private readonly latch = new Promise<void>((resolve) => {
+    this.open = resolve;
+  });
+
+  constructor(
+    seed: ConstructorParameters<typeof FakeApiClient>[0],
+    private readonly gatedCall: number,
+  ) {
+    super(seed);
+  }
+
+  release(): void {
+    this.open();
+  }
+
+  override async getCard(id: string): Promise<CardDetail> {
+    this.getCardCalls += 1;
+    const snapshot = await super.getCard(id);
+    if (this.getCardCalls === this.gatedCall) {
+      await this.latch;
+    }
+    return snapshot;
+  }
+}

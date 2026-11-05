@@ -23,24 +23,37 @@ import {
   outcomeLabel,
   periodLabel,
   reasonLabel,
+  statusLabel,
 } from '../../format/labels';
 import { formatMoney } from '../../format/money';
 import { formatLondonTime } from '../../format/time';
 import styles from '../CardDetailPage.module.css';
 
-/** Freeze/Unfreeze button (label by status) with pending state and an inline Notice on error. */
-export function StatusSection({ card, onChanged }: { card: CardDetail; onChanged: () => void }) {
+/**
+ * Freeze/Unfreeze button (label by status). Pending covers the action and the parent's refetch (`onChanged`);
+ * then a success Notice, or an error Notice on failure.
+ */
+export function StatusSection({
+  card,
+  onChanged,
+}: {
+  card: CardDetail;
+  onChanged: () => Promise<void>;
+}) {
   const api = useApi();
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [done, setDone] = useState<string | null>(null);
   const frozen = card.status === 'frozen';
 
   const toggle = async (): Promise<void> => {
     setFailed(false);
+    setDone(null);
     setPending(true);
     try {
       await (frozen ? api.unfreeze(card.id) : api.freeze(card.id));
-      onChanged();
+      await onChanged();
+      setDone(frozen ? 'Card unfrozen' : 'Card frozen');
     } catch {
       setFailed(true);
     } finally {
@@ -60,6 +73,7 @@ export function StatusSection({ card, onChanged }: { card: CardDetail; onChanged
       >
         {frozen ? 'Unfreeze' : 'Freeze'}
       </Button>
+      {done !== null && <Notice tone="success">{done}</Notice>}
       {failed && (
         <Notice tone="error" title="Could not change the card status">
           Something went wrong. Please try again.
@@ -67,6 +81,11 @@ export function StatusSection({ card, onChanged }: { card: CardDetail; onChanged
       )}
     </div>
   );
+}
+
+/** "Fuel day" (display text for a category/period pair). */
+function limitText(category: Category, period: Period): string {
+  return `${categoryLabel(category)} ${periodLabel(period).toLowerCase()}`;
 }
 
 const NUMERIC_AMOUNT = /^\d+(\.\d+)?$/;
@@ -91,7 +110,7 @@ export function LimitsSection({
 }: {
   cardId: string;
   limits: Limit[];
-  onChanged: () => void;
+  onChanged: () => Promise<void>;
 }) {
   const api = useApi();
   const [category, setCategory] = useState<Category>('travel');
@@ -100,6 +119,8 @@ export function LimitsSection({
   const [amountError, setAmountError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
   const [removeFailed, setRemoveFailed] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
 
   const save = async (): Promise<void> => {
     const trimmed = amount.trim();
@@ -108,15 +129,32 @@ export function LimitsSection({
       return;
     }
     setAmountError(undefined);
+    setDone(null);
     setSaving(true);
     try {
       await api.setLimit(cardId, category, period, trimmed);
       setAmount('');
-      onChanged();
+      await onChanged();
+      setDone(`Limit saved: ${limitText(category, period)} ${formatMoney(trimmed)}`);
     } catch (error) {
       setAmountError(amountErrorFrom(error));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const remove = async (limit: Limit): Promise<void> => {
+    setRemoveFailed(false);
+    setDone(null);
+    setRemoving(`${limit.category}/${limit.period}`);
+    try {
+      await api.removeLimit(cardId, limit.category, limit.period);
+      await onChanged();
+      setDone(`Limit removed: ${limitText(limit.category, limit.period)}`);
+    } catch {
+      setRemoveFailed(true);
+    } finally {
+      setRemoving(null);
     }
   };
 
@@ -129,15 +167,13 @@ export function LimitsSection({
       cell: (limit) => (
         <Button
           variant="secondary"
+          pending={removing === `${limit.category}/${limit.period}`}
+          pendingLabel="Removing…"
           onClick={() => {
-            setRemoveFailed(false);
-            api.removeLimit(cardId, limit.category, limit.period).then(onChanged, () => {
-              setRemoveFailed(true);
-            });
+            void remove(limit);
           }}
         >
-          Remove {`${categoryLabel(limit.category)} ${periodLabel(limit.period).toLowerCase()}`}{' '}
-          limit
+          Remove {limitText(limit.category, limit.period)} limit
         </Button>
       ),
     },
@@ -146,6 +182,7 @@ export function LimitsSection({
   return (
     <section aria-labelledby="limits-heading" className={styles['section']}>
       <h2 id="limits-heading">Spend limits</h2>
+      {done !== null && <Notice tone="success">{done}</Notice>}
       {removeFailed && (
         <Notice tone="error" title="Could not remove the limit">
           Something went wrong. Please try again.
@@ -204,14 +241,35 @@ export function LimitsSection({
   );
 }
 
-function auditValue(entry: AuditEntry, value: string | null): string {
+const LIMIT_VALUE = /^([A-Za-z]+)\/([A-Za-z]+)\/(\d+(?:\.\d{1,2})?)$/;
+const PLAIN_AMOUNT = /^\d+(?:\.\d{1,2})?$/;
+
+/**
+ * Display text of an audit value; never throws. API format `Fuel/Day/50.00` → "Fuel day £50.00",
+ * `Active`/`Frozen` → "Active"/"Frozen", a plain amount → money, null → "—", anything else verbatim.
+ */
+function auditValue(value: string | null): string {
   if (value === null) {
     return '—';
   }
-  return entry.action.startsWith('limit_') ? formatMoney(value) : value;
+  const lower = value.toLowerCase();
+  if (lower === 'active' || lower === 'frozen') {
+    return statusLabel(lower);
+  }
+  const limit = LIMIT_VALUE.exec(value);
+  if (limit) {
+    const [, cat = '', per = '', amt = ''] = limit;
+    const wire = cat.replace(/(?<!^)([A-Z])/g, '_$1').toLowerCase() as Category;
+    return `${categoryLabel(wire)} ${per.toLowerCase()} ${formatMoney(amt)}`;
+  }
+  return PLAIN_AMOUNT.test(value) ? formatMoney(value) : value;
 }
 
-/** "Audit": ordered list newest first: action label, actor, London time, old → new value (limit amounts as money). */
+/**
+ * "Audit": ordered list in the API's order (newest first): action label, actor, London time, old → new rendered as
+ * "Fuel day £50.00" / "Active" (API format `Category/Period/Amount`, statuses `Active`/`Frozen`); unknown shapes
+ * are shown verbatim.
+ */
 export function AuditSection({ entries }: { entries: AuditEntry[] }) {
   return (
     <section aria-labelledby="audit-heading" className={styles['section']}>
@@ -227,7 +285,7 @@ export function AuditSection({ entries }: { entries: AuditEntry[] }) {
                 {entry.actorName} · {formatLondonTime(entry.atUtc)}
               </span>
               <span>
-                {auditValue(entry, entry.oldValue)} → {auditValue(entry, entry.newValue)}
+                {auditValue(entry.oldValue)} → {auditValue(entry.newValue)}
               </span>
             </li>
           ))}
@@ -247,15 +305,15 @@ const FIELD_PROBLEMS = ['amount', 'category', 'merchant'];
 /**
  * "Simulate purchase": amount, category select, merchant (all labelled), Submit with pending state; result Notice shows
  * outcome badge, the reason code (e.g. `limit_exceeded`) and remaining per limit; `problems` shown inline per field
- * (a problem for any other field is listed in an error Notice). `onDecided` is called for every decision except
- * invalid_request, so the caller can refetch.
+ * (a problem for any other field is listed in an error Notice). `onDecided` is called for every decision whose
+ * `problems` list is empty, so the caller can refetch; the button stays pending until it settles.
  */
 export function SimulateSection({
   cardId,
   onDecided,
 }: {
   cardId: string;
-  onDecided: (decision: Decision) => void;
+  onDecided: (decision: Decision) => Promise<void>;
 }) {
   const api = useApi();
   const [amount, setAmount] = useState('');
@@ -277,7 +335,7 @@ export function SimulateSection({
         setResult({ kind: 'problems', problems: decision.problems });
       } else {
         setResult({ kind: 'decision', decision });
-        onDecided(decision);
+        await onDecided(decision);
       }
     } catch {
       setResult({ kind: 'failed' });
