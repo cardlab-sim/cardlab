@@ -59,7 +59,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/03-deploy",
       "url": "https://github.com/cardlab-sim/cardlab/pull/4"
     },
@@ -193,6 +193,10 @@
     {
       "at": "2026-11-05T09:50Z",
       "event": "PR-03 review CHANGES; BUG-001 (design, S3) decided option A by orchestrator under standing instruction"
+    },
+    {
+      "at": "2026-11-05T10:10Z",
+      "event": "PR-03 fixes verified by orchestrator, merged (#4); BUG-001 fixed"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

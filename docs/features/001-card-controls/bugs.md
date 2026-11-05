@@ -4,7 +4,7 @@
 
 | BUG | Found by | Severity | AC/R | Title | Root-cause layer | Decision | Status | Resume at | Issue | Updated |
 |-----|----------|----------|------|-------|------------------|----------|--------|-----------|-------|---------|
-| BUG-001 | reviewer (PR-03) | S3 | AC-27, AC-34 | Deploy health wait trusts a configured commit, not the deployed build | design | fix-now (option A) | approved | build (PR-03 fix round) | | 2026-11-05 |
+| BUG-001 | reviewer (PR-03) | S3 | AC-27, AC-34 | Deploy health wait trusts a configured commit, not the deployed build | design | fix-now (option A) | fixed | build (PR-03 fix round) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -21,3 +21,5 @@ Root cause in design §11: the commit identity on `demo` comes from configuratio
 Option A, because it uses the fallback the design already specifies, changes only deploy.yml and the §11 wording, and makes the health wait prove the build. Taken by the orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended". Recorded as a design erratum (no Gate 2 reopen).
 ### Resolution
 PR-03 fix round: deploy.yml stops setting `CardLab__Commit`; settings step after the package step; azure-setup.md says `CardLab__Commit` must stay unset on demo. Verification: see reviews/PR-03.review.md *Fixes verified*.
+
+Fixed in PR-03 (#4, squash 114bc15); checks in reviews/PR-03.review.md *Fixes verified*. Verified status waits for the validator's deploy evidence (T-C-2).
