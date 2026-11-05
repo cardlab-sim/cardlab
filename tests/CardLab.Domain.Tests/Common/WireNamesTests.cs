@@ -77,6 +77,8 @@ public sealed class WireNamesTests
     [InlineData("20", true, "20")]
     [InlineData("-1.00", true, "-1.00")]
     [InlineData("10.005", true, "10.005")]
+    [InlineData("10.000000000000000000000000000001", false, null)]
+    [InlineData("10.500", true, "10.5")]
     [InlineData("1e3", false, null)]
     [InlineData("1,000.00", false, null)]
     [InlineData(" 5", false, null)]

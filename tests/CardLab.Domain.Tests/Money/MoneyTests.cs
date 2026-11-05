@@ -9,6 +9,7 @@ public sealed class MoneyTests
     [Theory]
     [InlineData("10.00", true)]
     [InlineData("10.5", true)]
+    [InlineData("10.500", true)]
     [InlineData("0", true)]
     [InlineData("0.01", true)]
     [InlineData("10.005", false)]

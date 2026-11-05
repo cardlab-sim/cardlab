@@ -40,7 +40,7 @@ public sealed class HarnessTests
         Assert.Empty(PanScanner.FindPans(null));
         Assert.Empty(PanScanner.FindPans("٩٩٩٩٩٩٩٩٩٩٩٩٩٩٩٩"));
 
-        var failure = Assert.ThrowsAny<Exception>(() => PanScanner.AssertNoPan("x 9999000100000001 y", "audit rows"));
+        var failure = Assert.Throws<Xunit.Sdk.XunitException>(() => PanScanner.AssertNoPan("x 9999000100000001 y", "audit rows"));
         Assert.Contains("audit rows", failure.Message);
         Assert.Contains("0001", failure.Message);
         Assert.DoesNotContain("9999000100000001", failure.Message);

@@ -9,4 +9,6 @@ public sealed class InMemoryCardStoreContractTests : CardStoreContractTests
 {
     protected override Task<ICardStore> CreateStoreAsync(IReadOnlyList<StoreSeedCard> cards) =>
         Task.FromResult<ICardStore>(new InMemoryCardStore(cards));
+
+    protected override Task<ICardStore> OpenStoreAsync(ICardStore seeded) => Task.FromResult(seeded);
 }

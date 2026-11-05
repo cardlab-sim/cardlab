@@ -5,7 +5,7 @@ namespace CardLab.Domain.Ports;
 /// value equality (usable as a dictionary key) and maps to <c>binary(32)</c> through
 /// <see cref="FromBytes"/>/<see cref="ToBytes"/>.
 /// </summary>
-/// <param name="Hex">64 lower-case hex characters.</param>
+/// <param name="Hex">64 lower-case hex characters. The public constructor does not validate; prefer <see cref="FromBytes"/>.</param>
 public readonly record struct LookupHash(string Hex)
 {
     /// <summary>Creates a hash from raw bytes.</summary>

@@ -18,7 +18,8 @@ namespace CardLab.TestKit.Fakes;
 /// </summary>
 /// <remarks>
 /// Ids assigned by <see cref="ICardWriter.AppendTransaction"/> and <see cref="ICardWriter.AppendAudit"/> come from a
-/// counter (deterministic, never random). The lock wait is capped at 5 s like the SQL adapter and then throws
+/// counter (deterministic, never random). Sums see committed rows; do not rely on sums including rows appended in
+/// the same unit of work (SQL does not). The lock wait is capped at 5 s like the SQL adapter and then throws
 /// <see cref="CardLockTimeoutException"/>.
 /// </remarks>
 public sealed class InMemoryCardStore : ICardStore

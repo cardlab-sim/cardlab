@@ -35,8 +35,9 @@ public readonly record struct Money : IComparable<Money>
             return false;
         }
 
-        // Adding 0.00m normalises the scale to 2, so 50.0 and 50.00 are stored identically.
-        money = new Money(value + 0.00m);
+        // Rounding drops trailing zeros past 2 dp (the guard above ensures nothing else is lost) and adding 0.00m
+        // pads to scale 2, so 50.0, 50.00 and 50.000 are all stored as 50.00.
+        money = new Money(decimal.Round(value, 2) + 0.00m);
         return true;
     }
 

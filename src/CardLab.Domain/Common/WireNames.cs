@@ -141,7 +141,22 @@ public static class WireNames
     /// <c>MoneyBounds</c> do that.</remarks>
     /// <param name="text">Candidate amount text.</param>
     /// <param name="value">The parsed decimal when the method returns true.</param>
-    /// <returns>True when the text is a plain decimal number.</returns>
-    public static bool TryParseAmount(string? text, out decimal value) =>
-        decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value);
+    /// <returns>True when the text is a plain decimal number. Fails when the text has more digits than a decimal holds.</returns>
+    public static bool TryParseAmount(string? text, out decimal value)
+    {
+        if (!decimal.TryParse(text, NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value))
+        {
+            return false;
+        }
+
+        // decimal.TryParse silently rounds text with more digits than a decimal holds; reject that instead.
+        var dot = text!.IndexOf('.');
+        if (dot >= 0 && text.AsSpan(dot + 1).TrimEnd('0').Length > value.Scale)
+        {
+            value = default;
+            return false;
+        }
+
+        return true;
+    }
 }

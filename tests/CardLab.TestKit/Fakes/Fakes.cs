@@ -33,7 +33,7 @@ public sealed class FakeCardNumberLookup : ICardNumberLookup
 {
     private int calls;
 
-    /// <summary>Shared instance.</summary>
+    /// <summary>Shared instance. Shared across parallel tests; never assert <see cref="Calls"/> on it: create <c>new FakeCardNumberLookup()</c> per test to count calls.</summary>
     public static FakeCardNumberLookup Instance { get; } = new();
 
     /// <summary>Number of <see cref="Compute"/> calls (lets tests assert "no lookup for invalid requests").</summary>

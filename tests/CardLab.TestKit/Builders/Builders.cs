@@ -28,7 +28,7 @@ public static class TestMoney
 /// <summary>
 /// Builds <see cref="StoreSeedCard"/>s with valid defaults (a fresh id, "Test card", "Test Holder", a unique
 /// fictional number <c>99990002xxxxxxxx</c>, its last four, lookup hash computed like <see cref="Fakes.FakeCardNumberLookup"/> (on a private instance, so the shared instance's call count is not disturbed), Active).
-/// Implemented in PR-01.
+/// Explicit test numbers must not start with <c>99990002</c> (reserved for defaults). Implemented in PR-01.
 /// </summary>
 public sealed class CardBuilder
 {

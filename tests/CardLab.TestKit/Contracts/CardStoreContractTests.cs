@@ -35,14 +35,19 @@ public abstract class CardStoreContractTests
     /// <returns>The store.</returns>
     protected abstract Task<ICardStore> CreateStoreAsync(IReadOnlyList<StoreSeedCard> cards);
 
+    /// <summary>Opens another handle on the same data, as a separate request would get (in-memory: the same instance; SQL: a new SqlCardStore on a new DbContext over the class database).</summary>
+    /// <param name="seeded">A store returned by <see cref="CreateStoreAsync"/>.</param>
+    /// <returns>A store over the same data that may be used concurrently with <paramref name="seeded"/>.</returns>
+    protected abstract Task<ICardStore> OpenStoreAsync(ICardStore seeded);
+
     // T-U-21 / T-I-12 · PR-01 (written) · contract
     // Given two seeded cards, When ListCardsAsync, Then both are returned ordered by name with name, cardholder, last four and status
     // Catches: wrong ordering or a dropped/misnamed column in the adapter
     [Fact]
     public async Task Lists_seeded_cards_by_name()
     {
-        var zulu = new CardBuilder().WithName("Zulu card").WithCardholder("Zed Holder").WithCardNumber("9999000200000017").Frozen().Build();
-        var alpha = new CardBuilder().WithName("Alpha card").WithCardholder("Ann Holder").WithCardNumber("9999000200000025").Build();
+        var zulu = new CardBuilder().WithName("Zulu card").WithCardholder("Zed Holder").WithCardNumber("9999000900000017").Frozen().Build();
+        var alpha = new CardBuilder().WithName("Alpha card").WithCardholder("Ann Holder").WithCardNumber("9999000900000025").Build();
         var store = await CreateStoreAsync([zulu, alpha]);
 
         var listed = (await store.ListCardsAsync()).Where(c => c.Id == zulu.Id || c.Id == alpha.Id).ToList();
@@ -61,7 +66,7 @@ public abstract class CardStoreContractTests
     [Fact]
     public async Task Gets_card_detail_or_null()
     {
-        var card = new CardBuilder().WithName("Detail card").WithCardholder("Dee Holder").WithCardNumber("9999000200000033").Build();
+        var card = new CardBuilder().WithName("Detail card").WithCardholder("Dee Holder").WithCardNumber("9999000900000033").Build();
         var store = await CreateStoreAsync([card]);
         var fuel = new LimitBuilder().For(Category.Fuel).Per(Period.Day).Of("50.00").Build();
         await store.WithCardLockAsync(card.Id, w =>
@@ -89,10 +94,10 @@ public abstract class CardStoreContractTests
     [Fact]
     public async Task Finds_card_by_lookup_hash()
     {
-        var card = new CardBuilder().WithCardNumber("9999000200000041").Build();
+        var card = new CardBuilder().WithCardNumber("9999000900000041").Build();
         var store = await CreateStoreAsync([card]);
         var sameHashRebuilt = LookupHash.FromBytes(card.Lookup.ToBytes());
-        var otherHash = new FakeCardNumberLookup().Compute("9999000200000058");
+        var otherHash = new FakeCardNumberLookup().Compute("9999000900000058");
 
         Assert.Equal(card.Id, await store.FindByLookupAsync(sameHashRebuilt));
         Assert.Null(await store.FindByLookupAsync(otherHash));
@@ -198,19 +203,18 @@ public abstract class CardStoreContractTests
             new TransactionBuilder().Amount("256.00").In(Category.Travel).At(start.AddMinutes(10)).Build(),                // other category: excluded
         };
 
-        var sum = await store.WithCardLockAsync(card.Id, async w =>
+        await store.WithCardLockAsync(card.Id, w =>
         {
             foreach (var row in rows)
             {
                 w.AppendTransaction(row);
             }
 
-            return await w.SumApprovedSpendAsync(Category.Fuel, range);
+            return Task.FromResult(0);
         });
-        var sumAfterCommit = await store.WithCardLockAsync(card.Id, w => w.SumApprovedSpendAsync(Category.Fuel, range));
+        var sum = await store.WithCardLockAsync(card.Id, w => w.SumApprovedSpendAsync(Category.Fuel, range));
 
         Assert.Equal("23.00", sum.ToString());
-        Assert.Equal("23.00", sumAfterCommit.ToString());
     }
 
     // T-U-21 / T-I-12 · PR-01 · contract
@@ -244,7 +248,7 @@ public abstract class CardStoreContractTests
     [Fact]
     public async Task Lists_history_newest_first()
     {
-        var card = new CardBuilder().WithCardNumber("9999000200000066").Build();
+        var card = new CardBuilder().WithCardNumber("9999000900000066").Build();
         var store = await CreateStoreAsync([card]);
         var cardRef = new CardRef(card.Id, card.LastFour);
 
@@ -284,7 +288,9 @@ public abstract class CardStoreContractTests
         var store = await CreateStoreAsync([card]);
         var wholeDay = new PeriodRange(T0.AddDays(-1), T0.AddDays(1), new DateOnly(2026, 11, 4));
 
-        var seen = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => store.WithCardLockAsync(card.Id, async w =>
+        var stores = await Task.WhenAll(Enumerable.Range(0, 10).Select(_ => OpenStoreAsync(store)));
+
+        var seen = await Task.WhenAll(stores.Select(s => s.WithCardLockAsync(card.Id, async w =>
         {
             // Every transaction is GBP 1.00, so the approved sum is the transaction count.
             var count = (int)(await w.SumApprovedSpendAsync(Category.Fuel, wholeDay)).Amount;
