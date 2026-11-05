@@ -20,15 +20,15 @@ public sealed class SqlCardStoreContractTests : CardStoreContractTests, IClassFi
     {
         await using (var db = _database.CreateDbContext())
         {
-            var accountId = db.BusinessAccounts.Select(a => a.Id).First();
-            var taken = db.Cards.Select(c => c.Name).ToHashSet();
+            // Card names are unique per account and every default-built card is "Test card", so each call gets a fresh
+            // account and the cards keep exactly the names they were seeded with.
+            var account = new BusinessAccountRow { Id = Guid.NewGuid(), Name = $"Contract {Guid.NewGuid():N}", TimeZoneId = "Europe/London" };
+            db.BusinessAccounts.Add(account);
             db.Cards.AddRange(cards.Select(c => new CardRow
             {
                 Id = c.Id.Value,
-                AccountId = accountId,
-
-                // Names are unique per account; every default-built card is "Test card", so repeats get their id appended.
-                Name = taken.Add(c.Name) ? c.Name : $"{c.Name} {c.Id.Value:N}",
+                AccountId = account.Id,
+                Name = c.Name,
                 CardholderName = c.CardholderName,
                 LastFour = c.LastFour,
                 LookupHash = c.Lookup.ToBytes(),

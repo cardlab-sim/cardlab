@@ -94,7 +94,11 @@ public sealed class SqlTestDatabase : IAsyncLifetime
     {
         await using var db = CreateDbContext();
         var statusName = status.ToString();
-        await db.Cards.Where(c => c.Name == cardName).ExecuteUpdateAsync(s => s.SetProperty(c => c.Status, statusName));
+        var updated = await db.Cards.Where(c => c.Name == cardName).ExecuteUpdateAsync(s => s.SetProperty(c => c.Status, statusName));
+        if (updated != 1)
+        {
+            throw new InvalidOperationException($"Expected one card named '{cardName}', updated {updated}.");
+        }
     }
 
     /// <summary>Inserts or replaces a limit directly (arrange only).</summary>

@@ -19,7 +19,7 @@ namespace CardLab.Infrastructure.Sql;
 /// <c>WithCardLockAsync</c> (DEC-4): begin a transaction; <c>EXEC @r = sp_getapplock @Resource = 'card:{id}',
 /// @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000</c> with the resource passed as a
 /// parameter; <c>@r &lt; 0</c> → roll back and throw <see cref="CardLockTimeoutException"/>; run the work through a
-/// <see cref="SqlCardWriter"/>; <c>SaveChanges</c> + commit (releases the lock); roll back if the work throws.
+/// <see cref="SqlCardWriter"/>; <c>SaveChanges</c> + commit (releases the lock); an uncommitted transaction is rolled back on dispose.
 /// Spend = <c>SUM(Amount)</c> of approved rows with <c>OccurredAt</c> in the range. Enum columns hold enum names.
 /// One instance serves one unit of work at a time (it shares its scoped DbContext).
 /// </remarks>
@@ -62,6 +62,8 @@ public sealed class SqlCardStore : ICardStore
     /// <inheritdoc />
     public async Task<T> WithCardLockAsync<T>(CardId id, Func<ICardWriter, Task<T>> work, CancellationToken ct = default)
     {
+        // No catch: an uncommitted transaction is rolled back on dispose, so a dead connection's SqlException
+        // reaches the caller instead of a masked InvalidOperationException from a rollback attempt.
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         try
         {
@@ -81,11 +83,6 @@ public sealed class SqlCardStore : ICardStore
             await writer.FlushAsync(ct);
             await tx.CommitAsync(ct);
             return value;
-        }
-        catch
-        {
-            await tx.RollbackAsync(CancellationToken.None);
-            throw;
         }
         finally
         {
@@ -124,7 +121,7 @@ public sealed class SqlCardStore : ICardStore
 
     private static TransactionRecord ToRecord(TransactionRow t)
     {
-        Money.TryFromDecimal(t.Amount, out var amount);
+        var amount = RowMapper.ToMoney(t.Amount);
         return new TransactionRecord(
             new TransactionId(t.Id),
             new CardId(t.CardId),

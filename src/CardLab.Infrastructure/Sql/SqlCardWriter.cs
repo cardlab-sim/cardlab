@@ -18,6 +18,7 @@ namespace CardLab.Infrastructure.Sql;
 /// <remarks>
 /// Status and limit changes are queued and applied (in call order) the next time the writer reads or the unit of work
 /// commits, because they need a query to find the existing row. Appends are tracked immediately and saved with them.
+/// <c>OccurredAt</c> is stored to whole seconds, truncated (never rounded into the next period), matching <c>TransactionRules</c>.
 /// </remarks>
 internal sealed class SqlCardWriter : ICardWriter
 {
@@ -64,8 +65,7 @@ internal sealed class SqlCardWriter : ICardWriter
                 && t.OccurredAt >= range.StartUtc
                 && t.OccurredAt < range.EndUtcExclusive)
             .SumAsync(t => (decimal?)t.Amount, ct) ?? 0m;
-        Money.TryFromDecimal(sum, out var money);
-        return money;
+        return RowMapper.ToMoney(sum);
     }
 
     /// <inheritdoc />
@@ -92,12 +92,13 @@ internal sealed class SqlCardWriter : ICardWriter
 
     /// <inheritdoc />
     public void SetStatus(CardStatus status) =>
-        _pending.Add(_ =>
+        _pending.Add(async ct =>
         {
-            var stub = new CardRow { Id = _cardId.Value, Status = status.ToString() };
-            var entry = _db.Cards.Attach(stub);
-            entry.Property(c => c.Status).IsModified = true;
-            return Task.CompletedTask;
+            var card = await _db.Cards.SingleOrDefaultAsync(c => c.Id == _cardId.Value, ct);
+            if (card is not null)
+            {
+                card.Status = status.ToString();
+            }
         });
 
     /// <inheritdoc />
@@ -172,7 +173,7 @@ internal static class RowMapper
         Amount = t.Amount.Amount,
         Category = t.Category.ToString(),
         Merchant = t.Merchant,
-        OccurredAt = t.OccurredAt,
+        OccurredAt = t.OccurredAt.AddTicks(-(t.OccurredAt.Ticks % TimeSpan.TicksPerSecond)),
         DecidedAtUtc = t.DecidedAtUtc.UtcDateTime,
         Outcome = t.Outcome.ToString(),
         Reason = t.Reason.ToString(),
@@ -183,9 +184,15 @@ internal static class RowMapper
     /// <returns>The limit.</returns>
     public static SpendLimit ToLimit(SpendLimitRow row)
     {
-        Money.TryFromDecimal(row.Amount, out var amount);
-        return new SpendLimit(Enum.Parse<Category>(row.Category), Enum.Parse<Period>(row.Period), amount);
+        return new SpendLimit(Enum.Parse<Category>(row.Category), Enum.Parse<Period>(row.Period), ToMoney(row.Amount));
     }
+
+    /// <summary>Converts a stored <c>decimal(12,2)</c> to money.</summary>
+    /// <param name="value">The stored amount.</param>
+    /// <returns>The money value.</returns>
+    /// <exception cref="InvalidOperationException">The stored value is not a valid amount (the column definition changed).</exception>
+    public static Money ToMoney(decimal value) =>
+        Money.TryFromDecimal(value, out var money) ? money : throw new InvalidOperationException("A stored amount is not a valid money value.");
 
     /// <summary>Interprets a stored <c>datetime2</c> (always UTC) as an instant.</summary>
     /// <param name="utc">The stored value.</param>

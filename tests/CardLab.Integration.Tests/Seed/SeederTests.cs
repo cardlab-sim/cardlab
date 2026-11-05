@@ -51,7 +51,8 @@ public sealed class SeederTests : IClassFixture<ApiFactory>
         foreach (var seeded in TestSeed.Cards)
         {
             var found = await store.FindByLookupAsync(lookup.Compute(seeded.CardNumber), ct);
-            Assert.Equal(cards.Single(c => c.Name == seeded.Name).Id, found!.Value.Value);
+            Assert.NotNull(found);
+            Assert.Equal(cards.Single(c => c.Name == seeded.Name).Id, found.Value.Value);
         }
     }
 
