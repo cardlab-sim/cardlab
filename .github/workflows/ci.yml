@@ -147,7 +147,6 @@ jobs:
       - run: npm ci --prefix tests/e2e
       - run: npx --prefix tests/e2e playwright install --with-deps chromium
       - name: Playwright (project local)
-        continue-on-error: true # TEMP-DIAGNOSTIC
         run: npm run e2e --prefix tests/e2e -- --project local
       - name: Upload the Playwright report
         if: failure()
