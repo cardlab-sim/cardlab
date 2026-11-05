@@ -64,7 +64,7 @@ export class HttpApiClient implements ApiClient {
     if (response.status === 200 || response.status === 400 || response.status === 404) {
       return (await response.json()) as Decision;
     }
-    return this.throwIfFailed(response);
+    throw await this.toError(response);
   }
 
   private cardPath(id: string): string {
@@ -91,16 +91,19 @@ export class HttpApiClient implements ApiClient {
     return (await response.json()) as T;
   }
 
-  private async throwIfFailed(response: Response): Promise<never | void> {
-    if (response.ok) {
-      return;
+  private async throwIfFailed(response: Response): Promise<void> {
+    if (!response.ok) {
+      throw await this.toError(response);
     }
+  }
+
+  private async toError(response: Response): Promise<ApiError> {
     let problem: ProblemDetails | null = null;
     try {
       problem = (await response.json()) as ProblemDetails;
     } catch {
       problem = null;
     }
-    throw new ApiError(response.status, problem);
+    return new ApiError(response.status, problem);
   }
 }

@@ -1,0 +1,41 @@
+.scroll {
+  overflow-x: auto;
+  background: var(--color-card);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.caption {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  text-align: left;
+}
+
+.table th,
+.table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  border-top: var(--border-width) solid var(--color-border);
+}
+
+.table th {
+  font-size: var(--font-size-sm);
+  color: var(--color-muted-foreground);
+  white-space: nowrap;
+}
+
+.table .numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  color: var(--color-muted-foreground);
+  text-align: center !important;
+}

@@ -1,2 +1,65 @@
-/* Global base styles (§4.1). Implemented in PR-02: Inter, base 16px / 1.5, background/foreground tokens,
-   :focus-visible 2px ring with 2px offset, prefers-reduced-motion disables transitions, .visually-hidden. */
+/* Global base styles (§4.1). */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: var(--font-size-base);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height);
+  color: var(--color-foreground);
+  background: var(--color-background);
+}
+
+h1 {
+  margin: 0 0 var(--space-6);
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+}
+
+h2 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+}
+
+a {
+  color: var(--color-secondary);
+}
+
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -1,7 +1,8 @@
-import type { RenderResult } from '@testing-library/react';
+import { render, type RenderResult } from '@testing-library/react';
 import type { ReactElement } from 'react';
+import { MemoryRouter, Route, Routes } from 'react-router';
+import { ApiProvider } from '../api/ApiContext';
 import type { ApiClient } from '../api/apiClient';
-import { notImplemented } from '../notImplemented';
 
 /** Options for renderWithApi. */
 export interface RenderWithApiOptions {
@@ -14,12 +15,24 @@ export interface RenderWithApiOptions {
 /**
  * Renders `ui` inside an ApiProvider with `client` and a MemoryRouter (design §15.4 "New web unit test").
  * @returns Testing Library's render result.
- * Implemented in PR-02.
  */
 export function renderWithApi(
   ui: ReactElement,
   client: ApiClient,
-  options?: RenderWithApiOptions,
+  options: RenderWithApiOptions = {},
 ): RenderResult {
-  return notImplemented('PR-02', ui, client, options);
+  const { route = '/', path } = options;
+  return render(
+    <ApiProvider client={client}>
+      <MemoryRouter initialEntries={[route]}>
+        {path === undefined ? (
+          ui
+        ) : (
+          <Routes>
+            <Route path={path} element={ui} />
+          </Routes>
+        )}
+      </MemoryRouter>
+    </ApiProvider>,
+  );
 }

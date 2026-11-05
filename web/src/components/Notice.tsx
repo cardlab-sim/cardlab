@@ -1,14 +1,23 @@
 import type { ReactNode } from 'react';
-import { notImplemented } from '../notImplemented';
+import styles from './Notice.module.css';
 
-/**
- * Inline notice (no toasts, no modals): tone success/info → role="status", error → role="alert"; optional title.
- * Implemented in PR-02 (with Notice.module.css).
- */
-export function Notice(props: {
+/** Inline notice (no toasts, no modals): tone success/info → role="status", error → role="alert"; optional title. */
+export function Notice({
+  tone,
+  title,
+  children,
+}: {
   tone: 'success' | 'error' | 'info';
   title?: string;
   children: ReactNode;
 }) {
-  return notImplemented('PR-02', props);
+  return (
+    <div
+      role={tone === 'error' ? 'alert' : 'status'}
+      className={`${styles['notice']} ${styles[tone]}`}
+    >
+      {title ? <strong className={styles['title']}>{title}</strong> : null}
+      <div>{children}</div>
+    </div>
+  );
 }

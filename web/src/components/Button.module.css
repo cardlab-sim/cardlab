@@ -1,0 +1,35 @@
+.button {
+  min-height: 44px;
+  min-width: 44px;
+  margin: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  font: inherit;
+  font-weight: 600;
+  border: var(--border-width) solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition:
+    background-color var(--transition),
+    border-color var(--transition);
+}
+
+.primary {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
+}
+
+.secondary {
+  color: var(--color-primary);
+  background: var(--color-card);
+  border-color: var(--color-primary);
+}
+
+.destructive {
+  color: var(--color-on-destructive);
+  background: var(--color-destructive);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}

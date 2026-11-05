@@ -1,0 +1,26 @@
+.notice {
+  margin: var(--space-4) 0;
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-width) solid currentcolor;
+  border-radius: var(--radius);
+}
+
+.title {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.success {
+  color: var(--color-status-approved);
+  background: var(--color-status-approved-bg);
+}
+
+.error {
+  color: var(--color-status-declined);
+  background: var(--color-status-declined-bg);
+}
+
+.info {
+  color: var(--color-status-frozen);
+  background: var(--color-status-frozen-bg);
+}
