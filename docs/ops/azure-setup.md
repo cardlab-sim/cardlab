@@ -31,8 +31,8 @@ az ad app federated-credential create --id <app-object-id> --parameters '{
   "audiences": ["api://AzureADTokenExchange"]
 }'
 ```
-The job runs in environment `demo`, so GitHub presents the environment subject; the `main` credential covers manual
-runs outside the environment.
+The job runs in environment `demo`, so GitHub presents the environment subject; the `main` credential is kept per
+design section 10.
 
 ## 3. Contributor on the resource group only
 ```bash
@@ -59,7 +59,7 @@ repository secrets.
 | `TICKET_KEY_PATTERN` | ticket key regex, e.g. `CL-\d+` |
 
 ## 5. Environment `demo`
-Settings, Environments, New environment, name it exactly `demo`. Optionally restrict it to the `main` branch.
+Settings, Environments, New environment, name it exactly `demo`. Under *Deployment branches and tags* choose *Selected branches and tags* and add `main` only (required: the OIDC credential trusts this environment, so any other branch must not be able to use it).
 
 ## 6. First deploy
 Actions, `deploy`, Run workflow on `main`. The Bicep step creates the plan, web app, SQL server and database. The
@@ -67,6 +67,10 @@ run will fail at the health wait (the database user and lookup key do not exist 
 steps 7 and 8, then re-run the workflow.
 
 ## 7. SQL user for the web app (managed identity)
+The Bicep only allows Azure services through the SQL firewall, so first allow your own address:
+```bash
+az sql server firewall-rule create -g <resource-group> -s <sql-server-name> -n setup-client \n  --start-ip-address <your-ip> --end-ip-address <your-ip>
+```
 Connect to the `cardlab` database as the SQL Entra admin (for example with the Azure portal query editor or
 `sqlcmd -G`) and run, replacing `<webapp-name>` with `AZURE_WEBAPP_NAME`:
 ```sql
@@ -74,6 +78,10 @@ CREATE USER [<webapp-name>] FROM EXTERNAL PROVIDER;
 ALTER ROLE db_ddladmin ADD MEMBER [<webapp-name>];
 ALTER ROLE db_datareader ADD MEMBER [<webapp-name>];
 ALTER ROLE db_datawriter ADD MEMBER [<webapp-name>];
+```
+Then remove the temporary rule (incremental Bicep deploys do not remove it):
+```bash
+az sql server firewall-rule delete -g <resource-group> -s <sql-server-name> -n setup-client
 ```
 `db_ddladmin` is needed because migrations run at startup. No password exists anywhere; the app connects with its
 managed identity.
@@ -90,17 +98,20 @@ the second deploy, confirm it is still present:
 ```bash
 az webapp config appsettings list -g <resource-group> -n <webapp-name> --query "[?name=='CardLab__LookupKey'].name" -o tsv
 ```
-It must print `CardLab__LookupKey`. Never set `CardLab__TestEndpoints` on demo.
+It must print `CardLab__LookupKey`. Never set `CardLab__TestEndpoints` on demo, and leave `CardLab__Commit` unset: the health endpoint then reports the
+commit stamped into the deployed build (`SourceRevisionId`), which is what the deploy's health wait compares.
 
 Re-run the `deploy` workflow now; the health wait and the smoke project should pass.
 
 ## 9. Branch protection (DEC-21)
 Settings, Branches, add a rule for `main` requiring pull requests and these status checks: `ci / backend`,
-`ci / web`, `ci / e2e`, `ci / ticket-key`, and CodeQL.
+`ci / web`, `ci / e2e`, `ci / ticket-key`, and CodeQL. Enable *Require branches to be up to date before merging* so the commit that lands on `main` (and
+deploys) is the one CI tested.
 
 ## 10. Secret scanning
 Settings, Code security: keep secret scanning (and push protection) enabled. The repository must report no secrets,
 and `deploy.yml` must contain no stored cloud credentials (OIDC only).
 
 ## Rollback
-Re-run `workflow_dispatch` on the previous green commit. The database schema is forward-only.
+Open the last green `deploy` run in Actions and choose *Re-run all jobs*. A re-run uses that run's commit, and GitHub
+allows re-runs for 30 days. Past that window, revert the bad commit on `main`. The database schema is forward-only.
