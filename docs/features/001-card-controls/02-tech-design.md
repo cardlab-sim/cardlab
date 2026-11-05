@@ -731,7 +731,7 @@ integration, `T-E-n` E2E, `T-C-n` CI/deploy evidence checked by the validator.
 | AC-34 | integration + deploy | T-I-10 `Api/HealthTests.cs`; T-C-2 | |
 | AC-35 | integration | T-I-14 `Performance/DecisionLatencyTests.cs` | 1,000 rows, 200 requests, p95 ≤ 300 ms |
 | AC-36 | e2e (smoke) | T-E-7 `smoke/j1.spec.ts` | simulate round trip ≤ 2 s |
-| AC-37 | e2e | T-E-5 `a11y.spec.ts` | axe on both pages; keyboard-only J-1 and J-2 |
+| AC-37 | e2e | T-E-5 `a11y.spec.ts` | axe on both pages; keyboard-only J-1, J-2 and J-3 (simulate), on Chrome and Firefox projects (feature review F-2, BUG-009) |
 | AC-38 | web unit + e2e | T-W-1 `format/money.test.ts`, T-W-2 `format/time.test.ts`; T-E-6 `formatting.spec.ts` | |
 | AC-39 | integration | T-I-11 `Logging/EventTests.cs` | exactly one event per action, fields, no PAN |
 | AC-40 | unit | T-U-20 `Controls/FreezeTests.cs` | unfreeze active no-op |
@@ -829,3 +829,4 @@ with jobs in parallel; ZAP baseline adds ~2 min.
 | 2026-11-05 | Erratum (BUG-008, feature review F-1): §9 gets the row for a serverless database resuming after idle auto-pause (60 min): startup retries migrate + seed for up to 120 s; the demo connection string uses `Connect Timeout=60`, `Connect Retry Count=3`, `Connect Retry Interval=10`; requests during resume → 503 'Service unavailable'; §17 gets the matching risk row. Fixed in PR-12. Orchestrator under the human's standing instruction; no Gate 2 reopen. | BUG-008 |
 | 2026-11-05 | Erratum (BUG-009, feature review F-7): §15 states NFR-6 browser coverage: Desktop Chrome and Desktop Firefox Playwright projects run the local suite in CI; Edge is covered by the shared Chromium engine of the Chrome project. Fixed in PR-13. Orchestrator under the human's standing instruction; no Gate 2 reopen. | BUG-009 |
 | 2026-11-05 | Doc-only edits (feature review F-8, F-9): AC-26 check mapping added to T-C-1; DEC-10, DEC-12, §5, §9, §11, §12, §13, §14, §15.1 brought in line with the BUG-001/004/005 errata and the code (CardLabEvents location, AZURE_SQL_* repo variables, rollback by re-running the last green run, warm-up measured not asserted, `CapturingLogger<T>`). Orchestrator under the human's standing instruction; no Gate 2 reopen. | F-8, F-9 |
+| 2026-11-05 | Erratum (BUG-010, PR-13 review M-1): §4.1 rule: focus stays on the control that started an action (pending buttons use `aria-disabled` plus a guard, not native `disabled`); when that control disappears (Remove), focus moves to the resulting notice. Checked by T-E-5 `toBeFocused()` steps. Orchestrator under the human's standing instruction; no Gate 2 reopen. | BUG-010 |

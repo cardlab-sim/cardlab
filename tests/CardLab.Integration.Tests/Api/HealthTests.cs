@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Net;
 using CardLab.Api.Endpoints;
+using CardLab.Infrastructure;
 using CardLab.Infrastructure.Model;
 using CardLab.Infrastructure.Sql;
 using CardLab.Integration.Tests.Harness;
@@ -42,7 +43,7 @@ public sealed class HealthTests : IClassFixture<ApiFactory>
     [InlineData("  ", "1.0.0", "1.0.0")]
     [InlineData("", null, "unknown")]
     public void Commit_comes_from_config_then_source_revision(string configured, string? informationalVersion, string expected) =>
-        Assert.Equal(expected, HealthEndpoints.ResolveCommit(configured, informationalVersion));
+        Assert.Equal(expected, BuildInfo.Resolve(configured, informationalVersion));
 
     // T-I-10 · PR-09 · integration
     // Given a DatabaseProbe on a connection string to a non-existent server (constructed directly, short connect timeout), When CanConnectAsync, Then false without throwing; and the handler maps false to 503 {database:"unreachable"}
