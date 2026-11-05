@@ -103,7 +103,7 @@
       "depends_on": [
         "PR-02"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/001-card-controls/07-card-detail",
       "url": ""
     },
