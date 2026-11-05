@@ -37,7 +37,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/01-harness",
       "url": "https://github.com/cardlab-sim/cardlab/pull/6"
     },
@@ -70,7 +70,7 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/001-card-controls/04-decision-core",
       "url": ""
     },
@@ -81,7 +81,7 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/001-card-controls/05-card-controls",
       "url": ""
     },
@@ -92,7 +92,7 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/001-card-controls/06-sql-store",
       "url": ""
     },
@@ -209,6 +209,10 @@
     {
       "at": "2026-11-05T11:00Z",
       "event": "PR-02 fixes verified by orchestrator (TZ mutation), merged (#5)"
+    },
+    {
+      "at": "2026-11-05T11:30Z",
+      "event": "PR-01 fixes verified (no-lock mutation), merged (#6); wave 1 complete; PR-04, PR-05, PR-06 dispatched"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
