@@ -8,7 +8,7 @@
 | BUG-002 | coder (PR-06), reproduced by orchestrator | S2 | AC-34, R-9 | Host tests throw DirectoryNotFoundException for wwwroot after a web build | plan (skeleton PR-00) | fix-now (skeleton delta PR-00b) | fixed | build (PR-00b before wave 3) | | 2026-11-05 |
 | BUG-003 | reviewer (PR-07) | S3 | AC-23 | FakeApiClient writes audit values in a format the API never returns | test-harness | fix-now (fold into PR-07 fix round) | fixed | build (PR-07 fix round) | | 2026-11-05 |
 | BUG-004 | reviewer (PR-04) | S3 | AC-20 | Timestamps outside the calendar range or in non-ISO text pass validation | design | fix-now (PR-04 fix round) | fixed | build (PR-04 fix round) | | 2026-11-05 |
-| BUG-005 | reviewer (PR-08) | S2 | NFR-1, AC-24 | A 16-digit merchant name is stored and returned in history | design | fix-now (option A, PR-08 fix round) | approved | build (PR-08 fix round) | | 2026-11-05 |
+| BUG-005 | reviewer (PR-08) | S2 | NFR-1, AC-24 | A 16-digit merchant name is stored and returned in history | design | fix-now (option A, PR-08 fix round) | fixed | build (PR-08 fix round) | | 2026-11-05 |
 | BUG-006 | reviewer (PR-08) | S3 | AC-20 | Non-binding JSON body gives 500 (Development) / empty 400 instead of ProblemDetails | plan | fix-now (PR-09 fix round) | approved | build (PR-09 fix round) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
@@ -71,7 +71,7 @@ Option A: `TransactionRules` rejects a merchant containing a run of 13 or more c
 ### Decision (orchestrator, 2026-11-05)
 Option A, because option B would break the approved NFR-1 ("no card numbers anywhere"); A is the smallest change that keeps it. Design erratum for §9/§10; no Gate 2 reopen. `TransactionRules.cs` and `TransactionRulesTests.cs` (PR-04, merged) released to PR-08's fix round. Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
 ### Resolution
-PR-08 fix round. (PR-09 review M-2 found the same gap independently; covered here.)
+PR-08 fix round (#12): `CardNumberLikeRun` rule `[0-9](?:[ -]?[0-9]){12,}` on merchant in Validate and ValidatePurchase; unit and integration cases; checks in reviews/PR-08.review.md. (PR-09 review M-2 found the same gap independently; covered here.)
 
 ## BUG-006
 **Repro:** `POST /api/authorisations` with `{"cardNumber": 9999000100000001, ...}` (number, not string) → 500 on the Development host, empty-body 400 in Production; the admin limit PUT has the same gap.

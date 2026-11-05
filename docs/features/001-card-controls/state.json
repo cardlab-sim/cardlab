@@ -126,7 +126,7 @@
         "PR-04",
         "PR-06"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/08-authorisation",
       "url": "https://github.com/cardlab-sim/cardlab/pull/12"
     },
@@ -170,7 +170,6 @@
   ],
   "bugs_open": [
     "BUG-001",
-    "BUG-005",
     "BUG-006"
   ],
   "resume": null,
@@ -266,6 +265,10 @@
     {
       "at": "2026-11-05T16:30Z",
       "event": "PR-09 review CHANGES (health commit format B-1, COEP header); BUG-006 and Program.cs release folded into PR-09 fix round"
+    },
+    {
+      "at": "2026-11-05T17:00Z",
+      "event": "PR-08 fixes verified (merchant-rule mutation fails 6), merged (#12); BUG-005 fixed"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
