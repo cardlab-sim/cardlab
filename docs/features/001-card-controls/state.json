@@ -166,10 +166,36 @@
       "status": "merged",
       "branch": "pr/001-card-controls/11-cross-path-checks",
       "url": "https://github.com/cardlab-sim/cardlab/pull/14"
+    },
+    {
+      "id": "PR-12",
+      "title": "Feature review fixes: startup retry, limit order, HSTS, build version (BUG-008)",
+      "wave": 5,
+      "depends_on": [
+        "PR-10",
+        "PR-11"
+      ],
+      "status": "coding",
+      "branch": "pr/001-card-controls/12-fix-feature-backend",
+      "url": ""
+    },
+    {
+      "id": "PR-13",
+      "title": "Feature review fixes: keyboard simulate, Firefox, CI commit chain, README (BUG-009)",
+      "wave": 5,
+      "depends_on": [
+        "PR-10",
+        "PR-11"
+      ],
+      "status": "coding",
+      "branch": "pr/001-card-controls/13-fix-feature-e2e",
+      "url": ""
     }
   ],
   "bugs_open": [
-    "BUG-001"
+    "BUG-001",
+    "BUG-008",
+    "BUG-009"
   ],
   "resume": null,
   "history": [
@@ -296,6 +322,10 @@
     {
       "at": "2026-11-05T21:20Z",
       "event": "PR-10 fixes verified (focus-ring E2E mutation), merged (#15); BUG-007 fixed; all PRs merged"
+    },
+    {
+      "at": "2026-11-05T22:00Z",
+      "event": "feature review CHANGES (2 major, 11 minor); BUG-008 (DB resume) and BUG-009 (browsers) decided by orchestrator under standing instruction; fix PRs PR-12, PR-13 dispatched; F-8/F-9 doc sync by orchestrator; F-11 tooling references kept (no confidential names)"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

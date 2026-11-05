@@ -11,6 +11,8 @@
 | BUG-005 | reviewer (PR-08) | S2 | NFR-1, AC-24 | A 16-digit merchant name is stored and returned in history | design | fix-now (option A, PR-08 fix round) | fixed | build (PR-08 fix round) | | 2026-11-05 |
 | BUG-006 | reviewer (PR-08) | S3 | AC-20 | Non-binding JSON body gives 500 (Development) / empty 400 instead of ProblemDetails | plan | fix-now (PR-09 fix round) | fixed | build (PR-09 fix round) | | 2026-11-05 |
 | BUG-007 | coder (PR-10, axe) | S2 | AC-37, NFR-6 | Scrollable table container is not keyboard-focusable (axe scrollable-region-focusable, serious) | code | fix-now (PR-10, released DataTable files) | fixed | build (PR-10) | | 2026-11-05 |
+| BUG-008 | reviewer (feature F-1) | S2 | NFR-5, AC-34, AC-36 | Host crash-loops when the free database resumes from idle auto-pause | design | fix-now (PR-12) | approved | build (PR-12) | | 2026-11-05 |
+| BUG-009 | reviewer (feature F-7) | S3 | NFR-6 | Only Chrome is exercised; Edge and Firefox support is untraced | design | fix-now (PR-13: add Firefox project; Edge via shared Chromium engine) | approved | build (PR-13) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -95,3 +97,23 @@ Root cause visible in code (PR-02 primitive). Fix: the scroll container gets `ta
 Fix now in PR-10: `web/src/components/DataTable.tsx` and `web/src/components/components.test.tsx` (PR-02, merged) released to PR-10 so its CI goes green in one PR; `tests/e2e/src/notImplemented.ts` (skeleton, unused) also released and deleted. Orchestrator under the human's standing instruction (autopilot: fix in code).
 ### Resolution
 PR-10 (#15): focusable named region on the DataTable scroll container + component test (attribute removal fails it); local E2E 7 passed incl. axe at 1024/1280 px; PR CI e2e green.
+
+## BUG-008
+**Repro (by reasoning, reviewer):** `infra/main.bicep` sets the free serverless database to auto-pause after 60 idle minutes; on F1 the app also unloads when idle. The first request after an idle hour cold-starts the host; `MigrateAsync` hits a resuming database (error 40613) with no retry, the process exits and App Service restarts it repeatedly.
+**Expected / actual:** warm-up answers within 60 s (NFR-5, AC-34, AC-36) / likely crash loop beyond 60 s.
+**Evidence:** reviews/feature.review.md F-1.
+### Triage (reviewer)
+Fix: retry `MigrateAsync` + seed on `SqlException` for up to 120 s (5 s delay, fixed log message, rethrow after the deadline); connection-string `Connect Timeout=60;Connect Retry Count=3;Connect Retry Interval=10` on demo; design §9/§17 rows. Test: database OFFLINE → ONLINE after 10 s → initialisation completes.
+### Decision (orchestrator, 2026-11-05)
+Fix now as the reviewer specified (fix PR-12) plus a design erratum. Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
+### Resolution
+PR-12.
+
+## BUG-009
+**Repro:** `tests/e2e/playwright.config.ts` and `ci.yml` run Desktop Chrome only; NFR-6 names latest Chrome, Edge and Firefox; design §15 never says how the other two are covered.
+### Triage (reviewer)
+Option 1: add a `local-firefox` project (Desktop Firefox, smoke excluded) to CI (~+1 min); Edge shares the Chromium engine with the tested Chrome project. Option 2: record Firefox as not tested.
+### Decision (orchestrator, 2026-11-05)
+Option 1, because option 2 would leave an approved NFR clause unverified; Edge recorded as covered by the shared Chromium engine (design erratum). Orchestrator under the human's standing instruction.
+### Resolution
+PR-13.
