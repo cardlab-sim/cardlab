@@ -1,4 +1,4 @@
-﻿using CardLab.Domain.Controls;
+using CardLab.Domain.Controls;
 using CardLab.Infrastructure.Model;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;

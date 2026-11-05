@@ -1,11 +1,11 @@
-﻿using System.Net;
+using System.Net;
 using CardLab.Domain.Authorisation;
 using CardLab.Domain.Limits;
 using CardLab.Infrastructure.Model;
 using CardLab.Integration.Tests.Harness;
 using CardLab.TestKit;
-using TestSeed = CardLab.TestKit.Seed;
 using CardLab.TestKit.Builders;
+using TestSeed = CardLab.TestKit.Seed;
 
 namespace CardLab.Integration.Tests.Api;
 
