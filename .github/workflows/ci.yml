@@ -93,6 +93,81 @@ jobs:
   e2e:
     needs: [backend, web]
     runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          # Ephemeral per-run password for a throwaway container; not a stored credential (design §11).
+          MSSQL_SA_PASSWORD: Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!' -Q 'SELECT 1' -b"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+    env:
+      DOTNET_NOLOGO: 'true'
+      BASE_URL: http://localhost:5080
     steps:
-      - name: Placeholder until PR-10
-        run: echo "E2E + ZAP baseline are added by PR-10 (DEC-18)."
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            tests/e2e/package-lock.json
+      - name: Build the SPA
+        run: |
+          npm ci --prefix web
+          npm run build --prefix web
+      - name: Publish the host (with the SPA as wwwroot)
+        run: dotnet publish src/CardLab.Api -c Release -o publish
+      - name: Start the host
+        env:
+          ASPNETCORE_URLS: http://localhost:5080
+          ASPNETCORE_ENVIRONMENT: Production
+          ConnectionStrings__CardLab: Server=localhost,1433;Database=CardLab;User Id=sa;Password=Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!;TrustServerCertificate=True
+          CardLab__TestEndpoints: 'true'
+          CardLab__Commit: ${{ github.sha }}
+        run: |
+          # The committed development key protects only fictional card numbers (DEC-8).
+          export CardLab__LookupKey="$(jq -r .CardLab.LookupKey src/CardLab.Api/appsettings.Development.json)"
+          cd publish
+          nohup dotnet CardLab.Api.dll > "$GITHUB_WORKSPACE/host.log" 2>&1 &
+          cd "$GITHUB_WORKSPACE"
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:5080/api/health > /dev/null; then echo "host is up"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::host did not become healthy"; cat host.log; exit 1
+      - run: npm ci --prefix tests/e2e
+      - run: npx --prefix tests/e2e playwright install --with-deps chromium
+      - name: Playwright (project local)
+        run: npm run e2e --prefix tests/e2e -- --project local
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            tests/e2e/playwright-report
+            tests/e2e/test-results
+          retention-days: 7
+      - name: ZAP baseline
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: http://localhost:5080
+          rules_file_name: .zap/rules.tsv
+          fail_action: true
+          allow_issue_writing: false
+      - name: Upload the host log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-log
+          path: host.log
+          retention-days: 7
