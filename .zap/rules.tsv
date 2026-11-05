@@ -1,1 +1,4 @@
 # ZAP baseline rule overrides (DEC-18): <rule id>	<IGNORE|WARN|FAIL>	<reason>. Owned by PR-10; every entry needs a one-line reason.
+10027	IGNORE	Matches only comments inside the minified, public SPA bundle (third-party library text); no secrets are shipped.
+10049	IGNORE	Flags the public static SPA shell and assets (and 404s); no user data is served from those URLs and API responses are not affected.
+10109	IGNORE	Informational: the app is intentionally a single-page application.
