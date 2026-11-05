@@ -1,3 +1,4 @@
+﻿using System.Reflection;
 using CardLab.Api.Contracts;
 using CardLab.Infrastructure.Options;
 using CardLab.Infrastructure.Sql;
@@ -23,7 +24,15 @@ public static class HealthEndpoints
     /// else 503 <c>{commit, database:"unreachable"}</c>. Commit = <c>CardLab:Commit</c>, falling back to the entry
     /// assembly's informational version when empty.
     /// </summary>
-    internal static Task<IResult> Health(DatabaseProbe probe, IOptions<CardLabOptions> options, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> Health(DatabaseProbe probe, IOptions<CardLabOptions> options, CancellationToken ct)
+    {
+        var commit = string.IsNullOrWhiteSpace(options.Value.Commit)
+            ? Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown"
+            : options.Value.Commit;
+        return await probe.CanConnectAsync(ct)
+            ? TypedResults.Ok(new HealthDto(commit, "ok"))
+            : TypedResults.Json(new HealthDto(commit, "unreachable"), statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
 }
 
 /// <summary><c>POST /api/test/reset</c> (DEC-16), mapped by Program.cs only when <c>CardLab:TestEndpoints=true</c>.</summary>
@@ -40,5 +49,9 @@ public static class TestEndpoints
     }
 
     /// <summary>Runs <see cref="TestDataReset.ResetAsync"/> → 204.</summary>
-    internal static Task<IResult> Reset(TestDataReset reset, CancellationToken ct) => throw new NotImplementedException("PR-09");
+    internal static async Task<IResult> Reset(TestDataReset reset, CancellationToken ct)
+    {
+        await reset.ResetAsync(ct);
+        return TypedResults.NoContent();
+    }
 }
