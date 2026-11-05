@@ -12,9 +12,12 @@ public readonly record struct LookupHash(string Hex)
     /// <param name="bytes">Exactly 32 bytes.</param>
     /// <returns>The hash with lower-case hex.</returns>
     /// <exception cref="ArgumentException">When <paramref name="bytes"/> is not 32 bytes long.</exception>
-    public static LookupHash FromBytes(ReadOnlySpan<byte> bytes) => throw new NotImplementedException("PR-01");
+    public static LookupHash FromBytes(ReadOnlySpan<byte> bytes) =>
+        bytes.Length == 32
+            ? new LookupHash(Convert.ToHexStringLower(bytes))
+            : throw new ArgumentException("A lookup hash is exactly 32 bytes.", nameof(bytes));
 
     /// <summary>The raw 32 bytes (for the <c>binary(32)</c> column).</summary>
     /// <returns>A new array of 32 bytes.</returns>
-    public byte[] ToBytes() => throw new NotImplementedException("PR-01");
+    public byte[] ToBytes() => Convert.FromHexString(Hex);
 }
