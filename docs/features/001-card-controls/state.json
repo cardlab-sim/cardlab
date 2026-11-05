@@ -190,11 +190,24 @@
       "status": "merged",
       "branch": "pr/001-card-controls/13-fix-feature-e2e",
       "url": "https://github.com/cardlab-sim/cardlab/pull/16"
+    },
+    {
+      "id": "PR-14",
+      "title": "Fix rollback comment and secret-scanning setup wording (BUG-011, BUG-012)",
+      "wave": 5,
+      "depends_on": [
+        "PR-12",
+        "PR-13"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/14-fix-validation-docs",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/18"
     }
   ],
   "bugs_open": [
     "BUG-001",
-    "BUG-008"
+    "BUG-008",
+    "BUG-012"
   ],
   "resume": null,
   "history": [
@@ -345,6 +358,10 @@
     {
       "at": "2026-11-06T00:50Z",
       "event": "PR-13 fixes verified (focus mutation on both browsers), merged (#16); BUG-009, BUG-010 fixed; all feature-review findings addressed; phase validate"
+    },
+    {
+      "at": "2026-11-06T02:00Z",
+      "event": "validation DELIVERED WITH CAVEATS: 36 pass, 0 fail, 4 pending-human (AC-27, AC-28, AC-34 on demo, AC-36); BUG-011 fixed (PR-14 #18), BUG-012 wording fixed, setting left to human; autopilot stops: only PENDING-HUMAN checks remain"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

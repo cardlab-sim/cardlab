@@ -14,6 +14,8 @@
 | BUG-008 | reviewer (feature F-1) | S2 | NFR-5, AC-34, AC-36 | Host crash-loops when the free database resumes from idle auto-pause | design | fix-now (PR-12) | fixed | build (PR-12) | | 2026-11-05 |
 | BUG-009 | reviewer (feature F-7) | S3 | NFR-6 | Only Chrome is exercised; Edge and Firefox support is untraced | design | fix-now (PR-13: add Firefox project; Edge via shared Chromium engine) | fixed | build (PR-13) | | 2026-11-05 |
 | BUG-010 | reviewer (PR-13) | S3 | AC-37, NFR-6 | Keyboard focus falls to the page body after every pending action | design | fix-now (PR-13 fix round) | fixed | build (PR-13) | | 2026-11-05 |
+| BUG-011 | validator | S4 | R-10 | deploy.yml header documents an impossible rollback (re-run workflow_dispatch on an old commit) | code (comment) | fix-now (PR-14, text only) | fixed | build (PR-14) | | 2026-11-06 |
+| BUG-012 | validator | S3 | AC-29, NFR-4 | GitHub secret scanning and push protection are disabled; setup guide implies they are on | environment | fix-now: guide wording (PR-14); turning the setting on is the human's (run sheet R-1) | approved | validate (human R-1) | | 2026-11-06 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -129,3 +131,21 @@ Design §4.1 has no focus rule. Fix: while pending, Button uses `aria-disabled="
 Fix now, as the reviewer recommends, inside PR-13's fix round (`web/src/components/Button.tsx`, `web/src/components/components.test.tsx`, `web/src/pages/cardDetail/sections.tsx` released to PR-13; PR-02 and PR-07 are merged). Design §4.1 erratum: "focus stays on the control that started an action; when that control disappears, focus moves to the resulting notice". Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
 ### Resolution
 PR-13 (#16): pending buttons keep focus (`aria-disabled` + guard); Remove focuses its notice; T-E-5 asserts focus after each action (restoring native `disabled` fails it on both browsers).
+
+## BUG-011
+**Repro:** `.github/workflows/deploy.yml` line 2 says "Rollback = re-run workflow_dispatch on the previous green commit"; `workflow_dispatch` cannot target an old commit, and design §14 / `docs/ops/azure-setup.md` say "Re-run all jobs on the last green run".
+### Triage (validator)
+Comment drift only; no behaviour impact. Minor (S4): fix if cheap.
+### Decision (orchestrator, 2026-11-06)
+Fix the comment in PR-14 (text-only, no reviewer: diff read by the orchestrator). Orchestrator under the human's standing instruction.
+### Resolution
+PR-14 (#18): comment now says "Re-run all jobs" on the last green deploy run.
+
+## BUG-012
+**Repro:** `gh api repos/cardlab-sim/cardlab --jq .security_and_analysis` shows secret scanning and push protection disabled (alerts API 404 "disabled"); `docs/ops/azure-setup.md` §10 says "keep … enabled".
+### Triage (validator)
+Environment setting on the public repo; no secret found in any of 130 commits (AC-29 passes with caveat). Changing repository security settings is outward-facing.
+### Decision (orchestrator, 2026-11-06)
+PR-14 rewords §10 to "turn on" with the exact settings and a check command; enabling the setting is left to the human (validation run sheet R-1), because it changes repository settings outside the feature branch. Orchestrator under the human's standing instruction.
+### Resolution
+PR-14 (wording); human R-1 (setting).
