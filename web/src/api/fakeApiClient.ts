@@ -23,9 +23,22 @@ export interface FakeSeed {
 const AMOUNT_PATTERN = /^\d+(\.\d{1,2})?$/;
 const MAX_AMOUNT = 1000000;
 
+function pascal(wire: string): string {
+  return wire
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+}
+
+/** Audit value of a limit in the API's format (design §6): `Fuel/Day/50.00`, `MealsAndEntertainment/Week/10.00`. */
+function limitValue(category: Category, period: Period, amount: string): string {
+  return `${pascal(category)}/${pascal(period)}/${amount}`;
+}
+
 /**
  * In-memory ApiClient for Vitest (design §15.2). Behaves like the real API for the cases the UI needs:
- * freeze/unfreeze update status and prepend an audit entry (no-ops add none); setLimit validates the amount
+ * freeze/unfreeze update status and prepend an audit entry (no-ops add none); audit values use the API's format
+ * (design §6): `Active`/`Frozen` and `Category/Period/Amount` (PascalCase, e.g. `Fuel/Day/50.00`); setLimit validates the amount
  * like R-11 (rejects with ApiError 400 and `problem.errors.amount`) and upserts; removeLimit removes;
  * simulatePurchase returns `nextDecision` if set (else approved), and for outcomes other than invalid_request /
  * card_not_found prepends a transaction. Unknown ids reject with ApiError 404, except simulatePurchase, which
@@ -116,11 +129,16 @@ export class FakeApiClient implements ApiClient {
     const limit: Limit = { category, period, amount };
     if (existing === undefined) {
       card.limits.push(limit);
-      this.addAudit(id, 'limit_set', null, amount);
+      this.addAudit(id, 'limit_set', null, limitValue(category, period, amount));
     } else {
       const old = existing.amount;
       existing.amount = amount;
-      this.addAudit(id, 'limit_changed', old, amount);
+      this.addAudit(
+        id,
+        'limit_changed',
+        limitValue(category, period, old),
+        limitValue(category, period, amount),
+      );
     }
     return { ...limit };
   }
@@ -131,7 +149,12 @@ export class FakeApiClient implements ApiClient {
     const index = card.limits.findIndex((l) => l.category === category && l.period === period);
     if (index >= 0) {
       const [removed] = card.limits.splice(index, 1);
-      this.addAudit(id, 'limit_removed', removed?.amount ?? null, null);
+      this.addAudit(
+        id,
+        'limit_removed',
+        removed === undefined ? null : limitValue(category, period, removed.amount),
+        null,
+      );
     }
   }
 
@@ -207,7 +230,7 @@ export class FakeApiClient implements ApiClient {
     if (card.status !== status) {
       const old = card.status;
       card.status = status;
-      this.addAudit(id, action, old, status);
+      this.addAudit(id, action, pascal(old), pascal(status));
     }
     return { status: card.status };
   }
