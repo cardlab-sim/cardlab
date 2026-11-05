@@ -103,7 +103,7 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/06-sql-store",
       "url": "https://github.com/cardlab-sim/cardlab/pull/10"
     },
@@ -126,9 +126,9 @@
         "PR-04",
         "PR-06"
       ],
-      "status": "planned",
+      "status": "changes",
       "branch": "pr/001-card-controls/08-authorisation",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/12"
     },
     {
       "id": "PR-09",
@@ -138,9 +138,9 @@
         "PR-05",
         "PR-06"
       ],
-      "status": "planned",
+      "status": "review",
       "branch": "pr/001-card-controls/09-admin-api",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/13"
     },
     {
       "id": "PR-10",
@@ -169,7 +169,9 @@
     }
   ],
   "bugs_open": [
-    "BUG-001"
+    "BUG-001",
+    "BUG-005",
+    "BUG-006"
   ],
   "resume": null,
   "history": [
@@ -248,6 +250,18 @@
     {
       "at": "2026-11-05T14:30Z",
       "event": "PR-04 fixes verified (timestamp bound mutation), merged (#9); BUG-004 fixed"
+    },
+    {
+      "at": "2026-11-05T15:00Z",
+      "event": "PR-06 fixes verified (truncation mutation; integration 18 passed with web/dist built), merged (#10); wave 2 complete; integrated branch: build 0/0, domain 128 passed, integration 18 passed, web 56 passed; earlier feature CI red was the pre-PR-06 NotImplemented stub; PR-08, PR-09 dispatched"
+    },
+    {
+      "at": "2026-11-05T15:40Z",
+      "event": "PR-08 verified (lock-removal mutation fails T-I-6), PR-09 verified (nosniff mutation); both in review; feature CI green on 907593d"
+    },
+    {
+      "at": "2026-11-05T16:10Z",
+      "event": "PR-08 review APPROVE WITH FIXES; BUG-005 (merchant PAN, option A) and BUG-006 (binding errors \u2192 PR-09) decided by orchestrator under standing instruction"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
