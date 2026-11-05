@@ -28,6 +28,18 @@ public sealed class TransactionRulesTests
     [InlineData("timestamp", "2026-11-04T10:00:00")]
     [InlineData("timestamp", null)]
     [InlineData("timestamp", "")]
+    [InlineData("timestamp", "9999-12-31T12:00:00Z")]
+    [InlineData("timestamp", "1999-12-31T23:59:59Z")]
+    [InlineData("timestamp", "2100-01-01T00:00:00Z")]
+    [InlineData("timestamp", "2099-12-31T23:59:59-01:00")]
+    [InlineData("timestamp", "04/11/2026 10:00:00 +00:00")]
+    [InlineData("timestamp", "2026-11-04Z")]
+    [InlineData("timestamp", "2026-11-04")]
+    [InlineData("timestamp", "Wednesday, 04 November 2026 10:00:00 +00:00")]
+    [InlineData("timestamp", "2026-11-04 10:00:00Z")]
+    [InlineData("timestamp", "2026-11-04T10:00Z")]
+    [InlineData("timestamp", "2026-11-04T10:00:00Z\n")]
+    [InlineData("timestamp", "2026-02-30T10:00:00Z")]
     [InlineData("merchant", "")]
     [InlineData("merchant", "   ")]
     [InlineData("merchant", null)]
@@ -133,6 +145,33 @@ public sealed class TransactionRulesTests
         Assert.Equal(Seed.OpsVan.CardNumber, valid.CardNumberDigits);
     }
 
+    // Added to T-U-17 (BUG-004): the supported window is [2000-01-01T00:00Z, 2100-01-01T00:00Z); its edges are accepted.
+    [Theory]
+    [InlineData("2099-12-31T23:59:59Z")]
+    [InlineData("2000-01-01T00:00:00Z")]
+    [InlineData("2099-12-31T23:59:59.9999999Z")]
+    [InlineData("2000-01-01T01:00:00+01:00")]
+    public void Timestamps_inside_the_supported_window_are_accepted(string timestamp)
+    {
+        Assert.True(TransactionRules.Validate(Valid().WithTimestamp(timestamp).Build()).IsOk);
+        Assert.True(TransactionRules.ValidatePurchase(Valid().WithTimestamp(timestamp).BuildPurchase(), DateTimeOffset.UnixEpoch).IsOk);
+    }
+
+    // Added to T-U-30 (BUG-004): the same strict rule applies to a supplied simulate timestamp.
+    [Theory]
+    [InlineData("9999-12-31T12:00:00Z")]
+    [InlineData("1999-12-31T23:59:59Z")]
+    [InlineData("04/11/2026 10:00:00 +00:00")]
+    [InlineData("2026-11-04")]
+    [InlineData("Wednesday, 04 November 2026 10:00:00 +00:00")]
+    public void Purchase_rejects_non_iso_and_out_of_window_timestamps(string timestamp)
+    {
+        var result = TransactionRules.ValidatePurchase(Valid().WithTimestamp(timestamp).BuildPurchase(), DateTimeOffset.UnixEpoch);
+
+        Assert.False(result.IsOk);
+        Assert.Equal("timestamp", Assert.Single(result.Error).Field);
+    }
+
     // Added to T-U-29: a Z suffix is an explicit offset and is preserved as UTC.
     [Fact]
     public void Utc_timestamp_keeps_a_zero_offset()
@@ -150,7 +189,7 @@ public sealed class TransactionRulesTests
     [Fact]
     public void Purchase_validation_defaults_timestamp_and_skips_card_number()
     {
-        var fallback = new DateTimeOffset(2026, 11, 5, 9, 15, 0, TimeSpan.Zero);
+        var fallback = new DateTimeOffset(2026, 11, 5, 9, 15, 0, TimeSpan.Zero).AddTicks(7_890_000);
         var withoutTimestamp = Valid().WithTimestamp(null).BuildPurchase();
         var badAmount = Valid().WithAmount("abc").BuildPurchase();
 
@@ -158,7 +197,7 @@ public sealed class TransactionRulesTests
         var bad = TransactionRules.ValidatePurchase(badAmount, fallback);
 
         Assert.True(ok.IsOk);
-        Assert.Equal(fallback, ok.Value.OccurredAt);
+        Assert.Equal(new DateTimeOffset(2026, 11, 5, 9, 15, 0, TimeSpan.Zero).Ticks, ok.Value.OccurredAt.Ticks);
         Assert.Equal(TestMoney.Of("20.00"), ok.Value.Amount);
         Assert.False(bad.IsOk);
         Assert.Equal("amount", Assert.Single(bad.Error).Field);

@@ -15,14 +15,19 @@ namespace CardLab.Domain.Authorisation;
 /// (at most 2 dp, not negative); <see cref="MoneyBounds.IsValidTransactionAmount"/> (£0.01..£1,000,000.00).</item>
 /// <item><c>category</c>: required; <see cref="WireNames.TryParseCategory"/>.</item>
 /// <item><c>merchant</c>: required; non-blank after trimming; at most 200 characters.</item>
-/// <item><c>timestamp</c>: required on the processor path, optional on the simulate path; ISO-8601 with an
-/// explicit offset or <c>Z</c> (text without an offset is a problem); truncated to whole seconds.</item>
+/// <item><c>timestamp</c>: required on the processor path, optional on the simulate path; strict ISO-8601
+/// (<c>yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±hh:mm)</c>, explicit offset; any other text is a problem) within
+/// [2000-01-01T00:00Z, 2100-01-01T00:00Z); truncated to whole seconds, offset preserved.</item>
 /// </list>
 /// Messages never echo the submitted card number. Implemented in PR-04. High-risk path.
 /// </remarks>
 public static partial class TransactionRules
 {
     private const int MaxMerchantLength = 200;
+
+    // Supported timestamp window (BUG-004): keeps PeriodCalendar total over everything validation accepts.
+    private static readonly DateTimeOffset MinTimestamp = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset MaxTimestampExclusive = new(2100, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
     /// <summary>Validates a processor request.</summary>
     /// <param name="raw">The request as received.</param>
@@ -109,8 +114,10 @@ public static partial class TransactionRules
             timestampOk = true;
         }
         else if (!string.IsNullOrEmpty(timestampText)
-            && ExplicitOffset().IsMatch(timestampText)
-            && DateTimeOffset.TryParse(timestampText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            && IsoInstant().IsMatch(timestampText)
+            && DateTimeOffset.TryParse(timestampText, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
+            && parsed >= MinTimestamp
+            && parsed < MaxTimestampExclusive)
         {
             occurredAt = TruncateToSeconds(parsed);
             timestampOk = true;
@@ -128,13 +135,14 @@ public static partial class TransactionRules
 
     private static DateTimeOffset TruncateToSeconds(DateTimeOffset value) => value.AddTicks(-(value.Ticks % TimeSpan.TicksPerSecond));
 
+    // Strict ISO 8601 extended shape with an explicit offset; TryParse then checks calendar validity.
     // [0-9], not \d: \d also matches non-ASCII digits.
-    [GeneratedRegex(@"(Z|[+-][0-9]{2}:[0-9]{2})\z")]
-    private static partial Regex ExplicitOffset();
+    [GeneratedRegex(@"\A[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,7})?(Z|[+-][0-9]{2}:[0-9]{2})\z")]
+    private static partial Regex IsoInstant();
 
     /// <summary>Validates a simulated purchase (card already identified by id).</summary>
     /// <param name="raw">The purchase as received.</param>
-    /// <param name="defaultOccurredAt">Used when <c>raw.Timestamp</c> is null or empty (the service passes <c>IClock.UtcNow</c>).</param>
+    /// <param name="defaultOccurredAt">Used when <c>raw.Timestamp</c> is null or empty (the service passes <c>IClock.UtcNow</c>); truncated to whole seconds like a supplied timestamp.</param>
     /// <returns>The validated purchase, or every problem found (non-empty).</returns>
     public static Result<ValidatedPurchase, IReadOnlyList<ValidationProblem>> ValidatePurchase(SimulatedPurchase raw, DateTimeOffset defaultOccurredAt)
     {
