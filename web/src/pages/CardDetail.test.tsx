@@ -266,6 +266,8 @@ describe('CardDetailPage', () => {
             entry(3, 'limit_removed', 'Fuel/Day/80.00', null),
             entry(2, 'limit_changed', 'Fuel/Day/50.00', 'Fuel/Day/80.00'),
             entry(1, 'limit_set', null, 'MealsAndEntertainment/Week/10.00'),
+            entry(0, 'unfreeze', 'frozen', 'active'),
+            entry(4, 'limit_set', null, 'not a known shape'),
           ],
         },
       }),
@@ -273,7 +275,7 @@ describe('CardDetailPage', () => {
 
     const audit = within(await screen.findByRole('region', { name: 'Audit' }));
     const items = audit.getAllByRole('listitem');
-    expect(items).toHaveLength(3);
+    expect(items).toHaveLength(5);
     expect(items[0]).toHaveTextContent('Limit removed');
     expect(items[0]).toHaveTextContent('Sam Ellis');
     expect(items[0]).toHaveTextContent('1 Jul 2026 13:03');
@@ -282,6 +284,8 @@ describe('CardDetailPage', () => {
     expect(items[1]).toHaveTextContent('Fuel day £50.00 → Fuel day £80.00');
     expect(items[2]).toHaveTextContent('Limit set');
     expect(items[2]).toHaveTextContent('— → Meals & Entertainment week £10.00');
+    expect(items[3]).toHaveTextContent('Frozen → Active');
+    expect(items[4]).toHaveTextContent('— → not a known shape');
   });
 
   // T-W-9 · PR-07 · web unit (added in the fix round: M1, M2)
