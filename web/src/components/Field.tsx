@@ -34,7 +34,16 @@ function FieldError({ id, error }: { id: string; error: string | undefined }) {
 }
 
 /** Labelled text input with inline error (§4.1). */
-export function TextField({ id, label, error, className, ...rest }: TextFieldProps) {
+export function TextField({
+  id,
+  label,
+  error,
+  className,
+  'aria-describedby': callerDescribedBy,
+  ...rest
+}: TextFieldProps) {
+  const describedBy =
+    [callerDescribedBy, error ? `${id}-error` : undefined].filter(Boolean).join(' ') || undefined;
   return (
     <div className={styles['field']}>
       <label htmlFor={id} className={styles['label']}>
@@ -45,7 +54,7 @@ export function TextField({ id, label, error, className, ...rest }: TextFieldPro
         id={id}
         className={[styles['control'], className].filter(Boolean).join(' ')}
         aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${id}-error` : undefined}
+        aria-describedby={describedBy}
       />
       <FieldError id={id} error={error} />
     </div>

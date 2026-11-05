@@ -123,6 +123,17 @@ describe('HttpApiClient', () => {
     stubFetch(jsonResponse(404, decision('declined', 'card_not_found')));
     expect((await client.simulatePurchase('c1', input)).reason).toBe('card_not_found');
 
+    stubFetch(new Response(null, { status: 404 }));
+    const emptyNotFound = await client.simulatePurchase('c1', input).catch((e: unknown) => e);
+    expect(emptyNotFound).toBeInstanceOf(ApiError);
+    expect((emptyNotFound as ApiError).status).toBe(404);
+
+    stubFetch(jsonResponse(400, { title: 'Bad', status: 400 }, 'application/problem+json'));
+    const problemBody = await client.simulatePurchase('c1', input).catch((e: unknown) => e);
+    expect(problemBody).toBeInstanceOf(ApiError);
+    expect((problemBody as ApiError).status).toBe(400);
+    expect((problemBody as ApiError).problem?.title).toBe('Bad');
+
     stubFetch(new Response('down', { status: 503 }));
     const simError = await client.simulatePurchase('c1', input).catch((e: unknown) => e);
     expect(simError).toBeInstanceOf(ApiError);

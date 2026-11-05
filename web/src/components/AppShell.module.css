@@ -12,6 +12,10 @@
   top: var(--space-2);
 }
 
+.skip:focus-visible {
+  outline-color: var(--color-on-primary);
+}
+
 .header {
   color: var(--color-on-primary);
   background: var(--color-primary);

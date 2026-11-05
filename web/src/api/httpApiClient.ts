@@ -16,7 +16,8 @@ import type {
 /**
  * fetch-based ApiClient (DEC-20). JSON in/out; `Accept: application/json`; ids and path segments URI-encoded.
  * Non-2xx responses reject with ApiError carrying the ProblemDetails body (if JSON), except simulatePurchase,
- * which resolves with the decision body for 200, 400 and 404.
+ * which resolves with the decision body for 200, 400 and 404. A 400 or 404 whose body is not a decision (no
+ * string `reason`, e.g. a ProblemDetails or an empty body) rejects with ApiError instead.
  */
 export class HttpApiClient implements ApiClient {
   private readonly baseUrl: string;
@@ -61,8 +62,23 @@ export class HttpApiClient implements ApiClient {
 
   async simulatePurchase(id: string, input: SimulatePurchaseInput): Promise<Decision> {
     const response = await this.send('POST', `${this.cardPath(id)}/simulate-purchase`, input);
-    if (response.status === 200 || response.status === 400 || response.status === 404) {
+    if (response.status === 200) {
       return (await response.json()) as Decision;
+    }
+    if (response.status === 400 || response.status === 404) {
+      let body: unknown = null;
+      try {
+        body = await response.json();
+      } catch {
+        body = null;
+      }
+      if (typeof (body as { reason?: unknown } | null)?.reason === 'string') {
+        return body as Decision;
+      }
+      throw new ApiError(
+        response.status,
+        typeof body === 'object' ? (body as ProblemDetails | null) : null,
+      );
     }
     throw await this.toError(response);
   }

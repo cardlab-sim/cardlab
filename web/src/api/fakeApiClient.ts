@@ -28,7 +28,9 @@ const MAX_AMOUNT = 1000000;
  * freeze/unfreeze update status and prepend an audit entry (no-ops add none); setLimit validates the amount
  * like R-11 (rejects with ApiError 400 and `problem.errors.amount`) and upserts; removeLimit removes;
  * simulatePurchase returns `nextDecision` if set (else approved), and for outcomes other than invalid_request /
- * card_not_found prepends a transaction. Unknown ids reject with ApiError 404. `calls` records method names.
+ * card_not_found prepends a transaction. Unknown ids reject with ApiError 404, except simulatePurchase, which
+ * resolves with a card_not_found decision like the API. Audit `atUtc` and the default `occurredAt` come from
+ * `Date` (pin with `vi.setSystemTime`). `calls` records method names.
  * Every method can be made to hang with `hold()` to test pending states. Results are copies, so callers
  * cannot mutate the fake's state.
  */
@@ -58,12 +60,15 @@ export class FakeApiClient implements ApiClient {
   /** Makes every subsequent call stay pending until the returned release function is called. */
   hold(): () => void {
     let release: () => void = () => {};
-    this.gate = new Promise<void>((resolve) => {
+    const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
+    this.gate = gate;
     return () => {
       release();
-      this.gate = null;
+      if (this.gate === gate) {
+        this.gate = null;
+      }
     };
   }
 
@@ -144,7 +149,15 @@ export class FakeApiClient implements ApiClient {
 
   async simulatePurchase(id: string, input: SimulatePurchaseInput): Promise<Decision> {
     await this.enter('simulatePurchase');
-    this.find(id);
+    if (!this.cards.has(id)) {
+      return {
+        outcome: 'declined',
+        reason: 'card_not_found',
+        transactionId: null,
+        limits: [],
+        problems: [],
+      };
+    }
     const decision: Decision = this.nextDecision ?? {
       outcome: 'approved',
       reason: 'approved',

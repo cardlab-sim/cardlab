@@ -1,14 +1,12 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, test } from 'vitest';
+import { describe, expect, test } from 'vitest';
 import { AppShell } from './AppShell';
 import { Badge } from './Badge';
 import { Button } from './Button';
 import { DataTable } from './DataTable';
 import { SelectField, TextField } from './Field';
 import { Notice } from './Notice';
-
-afterEach(cleanup);
 
 describe('primitives', () => {
   // T-W-6 · PR-02 · web unit

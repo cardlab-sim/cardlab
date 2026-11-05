@@ -5,10 +5,6 @@
   box-sizing: border-box;
 }
 
-html {
-  font-size: var(--font-size-base);
-}
-
 body {
   margin: 0;
   font-family: var(--font-family);

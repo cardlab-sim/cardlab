@@ -35,7 +35,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.empty {
+.table td.empty {
   color: var(--color-muted-foreground);
-  text-align: center !important;
+  text-align: center;
 }

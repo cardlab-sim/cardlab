@@ -1,5 +1,5 @@
-import { cleanup, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, test } from 'vitest';
+import { screen, within } from '@testing-library/react';
+import { describe, expect, test } from 'vitest';
 import { ApiError } from '../api/apiClient';
 import { FakeApiClient } from '../api/fakeApiClient';
 import type { CardDetail } from '../api/types';
@@ -22,8 +22,6 @@ const marketing: CardDetail = {
   status: 'frozen',
   limits: [],
 };
-
-afterEach(cleanup);
 
 describe('CardListPage', () => {
   // T-W-7 · PR-02 · web unit
@@ -59,7 +57,7 @@ describe('CardListPage', () => {
     client.listCards = () => Promise.reject(new ApiError(503, null));
     renderWithApi(<CardListPage />, client);
 
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load cards');
     expect(screen.queryByRole('table')).toBeNull();
   });
 
