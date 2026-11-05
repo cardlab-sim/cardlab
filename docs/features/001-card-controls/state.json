@@ -153,7 +153,7 @@
       ],
       "status": "coding",
       "branch": "pr/001-card-controls/10-e2e",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/15"
     },
     {
       "id": "PR-11",
@@ -163,13 +163,14 @@
         "PR-08",
         "PR-09"
       ],
-      "status": "coding",
+      "status": "merged",
       "branch": "pr/001-card-controls/11-cross-path-checks",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/14"
     }
   ],
   "bugs_open": [
-    "BUG-001"
+    "BUG-001",
+    "BUG-007"
   ],
   "resume": null,
   "history": [
@@ -272,6 +273,18 @@
     {
       "at": "2026-11-05T17:40Z",
       "event": "PR-09 fixes verified (ThrowOnBadRequest mutation), merged (#13); BUG-006 fixed; wave 3 complete; PR-10, PR-11 dispatched"
+    },
+    {
+      "at": "2026-11-05T18:20Z",
+      "event": "PR-11 pr-light review APPROVE WITH FIXES; InMemoryLogExporter.cs released to PR-11 (m-4)"
+    },
+    {
+      "at": "2026-11-05T18:50Z",
+      "event": "PR-11 fixes verified (suppressed-log mutation fails T-I-7), merged (#14)"
+    },
+    {
+      "at": "2026-11-05T19:10Z",
+      "event": "PR-10 PARTIAL: BUG-007 (DataTable focusable scroll region) found by axe; DataTable files released to PR-10"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

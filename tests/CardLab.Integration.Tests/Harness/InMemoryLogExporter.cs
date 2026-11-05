@@ -9,7 +9,8 @@ namespace CardLab.Integration.Tests.Harness;
 /// <param name="EventName">Event name, e.g. "AuthorisationDecided".</param>
 /// <param name="Attributes">Structured attributes by name (e.g. "CardId"), excluding "{OriginalFormat}".</param>
 /// <param name="FormattedMessage">Formatted message, if any.</param>
-public sealed record CapturedRecord(string? EventName, IReadOnlyDictionary<string, object?> Attributes, string? FormattedMessage);
+/// <param name="Exception">Exception text (<c>Exception.ToString()</c>), if any; scanned by <see cref="InMemoryLogExporter.AssertNoPan"/>.</param>
+public sealed record CapturedRecord(string? EventName, IReadOnlyDictionary<string, object?> Attributes, string? FormattedMessage, string? Exception = null);
 
 /// <summary>
 /// Captures OpenTelemetry log records for assertions (DEC-12, AC-24, AC-39). <see cref="LogRecord"/> instances are pooled:
@@ -55,6 +56,7 @@ public sealed class InMemoryLogExporter : BaseExporter<LogRecord>
         foreach (var record in Records)
         {
             PanScanner.AssertNoPan(record.FormattedMessage, $"log message of '{record.EventName}'");
+            PanScanner.AssertNoPan(record.Exception, $"exception of '{record.EventName}'");
             foreach (var (name, value) in record.Attributes)
             {
                 PanScanner.AssertNoPan(Convert.ToString(value, CultureInfo.InvariantCulture), $"log attribute '{name}' of '{record.EventName}'");
@@ -88,7 +90,7 @@ public sealed class InMemoryLogExporter : BaseExporter<LogRecord>
                 }
             }
 
-            var captured = new CapturedRecord(record.EventId.Name, attributes, record.FormattedMessage);
+            var captured = new CapturedRecord(record.EventId.Name, attributes, record.FormattedMessage, record.Exception?.ToString());
             lock (_gate)
             {
                 _records.Add(captured);
