@@ -20,7 +20,12 @@ public sealed class MoneyTests
         var ok = Money.TryFromDecimal(value, out var money);
 
         Assert.Equal(expected, ok);
-        if (!ok)
+        if (ok)
+        {
+            Assert.Equal(value, money.Amount);
+            Assert.Equal(2, (decimal.GetBits(money.Amount)[3] >> 16) & 0xFF); // stored at scale 2
+        }
+        else
         {
             Assert.Equal(Money.Zero, money);
         }
