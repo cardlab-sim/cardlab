@@ -85,7 +85,7 @@ public sealed class InMemoryCardStore : ICardStore
         lock (gate)
         {
             var detail = cards.TryGetValue(id, out var c)
-                ? new CardDetail(c.Id, c.Name, c.CardholderName, c.LastFour, c.Status, c.Limits.ToList())
+                ? new CardDetail(c.Id, c.Name, c.CardholderName, c.LastFour, c.Status, c.Limits.OrderBy(l => l.Category).ThenBy(l => l.Period).ToList())
                 : null;
             return Task.FromResult(detail);
         }

@@ -88,6 +88,31 @@ public abstract class CardStoreContractTests
         Assert.Null(unknown);
     }
 
+    // T-U-21 / T-I-12 · PR-12 · contract
+    // Given limits upserted out of order (Fuel/Week, Travel/Day, Fuel/Day), When GetCardAsync, Then limits are ordered by category then period (Travel/Day, Fuel/Day, Fuel/Week)
+    // Catches: random limit order from the store (review F-3)
+    [Fact]
+    public async Task Limits_come_back_ordered_by_category_then_period()
+    {
+        var card = new CardBuilder().WithName("Order card").WithCardholder("Ola Order").WithCardNumber("9999000900000044").Build();
+        var store = await CreateStoreAsync([card]);
+        var fuelWeek = new LimitBuilder().For(Category.Fuel).Per(Period.Week).Of("90.00").Build();
+        var travelDay = new LimitBuilder().For(Category.Travel).Per(Period.Day).Of("70.00").Build();
+        var fuelDay = new LimitBuilder().For(Category.Fuel).Per(Period.Day).Of("50.00").Build();
+        await store.WithCardLockAsync(card.Id, w =>
+        {
+            w.UpsertLimit(fuelWeek);
+            w.UpsertLimit(travelDay);
+            w.UpsertLimit(fuelDay);
+            return Task.FromResult(0);
+        });
+
+        var detail = await store.GetCardAsync(card.Id);
+
+        Assert.NotNull(detail);
+        Assert.Equal([travelDay, fuelDay, fuelWeek], detail.Limits);
+    }
+
     // T-U-21 / T-I-12 · PR-01 · contract
     // Given a seeded card, When FindByLookupAsync with its hash / another hash, Then its id / null
     // Catches: lookup comparing hashes by reference or case
