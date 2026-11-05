@@ -1,5 +1,6 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net;
+using CardLab.Api.Endpoints;
 using CardLab.Infrastructure.Model;
 using CardLab.Infrastructure.Sql;
 using CardLab.Integration.Tests.Harness;
@@ -31,6 +32,17 @@ public sealed class HealthTests : IClassFixture<ApiFactory>
         Assert.Equal("ok", response.Body?.Database);
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(60));
     }
+
+    // T-I-10 · PR-09 review B-1
+    // Given CardLab:Commit set, empty or blank and an informational version such as 1.0.0+<sha>, When the commit is resolved, Then config wins, else the part after '+', else the version, else "unknown"
+    // Catches: the deploy health wait (commit == SHA) never matching on demo, where CardLab:Commit is unset (AC-27, AC-34)
+    [Theory]
+    [InlineData("test-commit", "1.0.0+abc", "test-commit")]
+    [InlineData("", "1.0.0+0123456789abcdef0123456789abcdef01234567", "0123456789abcdef0123456789abcdef01234567")]
+    [InlineData("  ", "1.0.0", "1.0.0")]
+    [InlineData("", null, "unknown")]
+    public void Commit_comes_from_config_then_source_revision(string configured, string? informationalVersion, string expected) =>
+        Assert.Equal(expected, HealthEndpoints.ResolveCommit(configured, informationalVersion));
 
     // T-I-10 · PR-09 · integration
     // Given a DatabaseProbe on a connection string to a non-existent server (constructed directly, short connect timeout), When CanConnectAsync, Then false without throwing; and the handler maps false to 503 {database:"unreachable"}
