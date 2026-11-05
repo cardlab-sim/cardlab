@@ -1,4 +1,4 @@
-using CardLab.Domain.Ports;
+﻿using CardLab.Domain.Ports;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +11,7 @@ public static class SecurityHeaders
     /// <summary>
     /// Adds to every response: <c>X-Content-Type-Options: nosniff</c>, <c>Referrer-Policy: no-referrer</c>,
     /// <c>X-Frame-Options: DENY</c>, <c>Permissions-Policy</c> (camera, microphone, geolocation disabled),
-    /// <c>Cross-Origin-Opener-Policy: same-origin</c>, <c>Cross-Origin-Resource-Policy: same-origin</c> and
+    /// <c>Cross-Origin-Opener-Policy: same-origin</c>, <c>Cross-Origin-Resource-Policy: same-origin</c>, <c>Cross-Origin-Embedder-Policy: require-corp</c> and
     /// <c>Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;
     /// font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';
     /// frame-ancestors 'none'</c>; <c>Cache-Control: no-store</c> on <c>/api/*</c>. HSTS comes from <c>UseHsts</c>.
@@ -32,6 +32,7 @@ public static class SecurityHeaders
                 headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()";
                 headers["Cross-Origin-Opener-Policy"] = "same-origin";
                 headers["Cross-Origin-Resource-Policy"] = "same-origin";
+                headers["Cross-Origin-Embedder-Policy"] = "require-corp";
                 headers["Content-Security-Policy"] = ContentSecurityPolicy;
                 if (context.Request.Path.StartsWithSegments("/api"))
                 {

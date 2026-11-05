@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using CardLab.Integration.Tests.Harness;
 
 namespace CardLab.Integration.Tests.Api;
@@ -27,6 +27,7 @@ public sealed class SecurityHeadersTests : IClassFixture<ApiFactory>
             Assert.Equal("DENY", Header(response, "X-Frame-Options", path));
             Assert.Equal("same-origin", Header(response, "Cross-Origin-Opener-Policy", path));
             Assert.Equal("same-origin", Header(response, "Cross-Origin-Resource-Policy", path));
+            Assert.Equal("require-corp", Header(response, "Cross-Origin-Embedder-Policy", path));
             Assert.Contains("camera=()", Header(response, "Permissions-Policy", path));
             var csp = Header(response, "Content-Security-Policy", path);
             Assert.Contains("default-src 'self'", csp);
