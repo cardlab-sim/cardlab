@@ -103,9 +103,9 @@
       "depends_on": [
         "PR-02"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/001-card-controls/07-card-detail",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/7"
     },
     {
       "id": "PR-08",
@@ -153,7 +153,7 @@
         "PR-09"
       ],
       "status": "planned",
-      "branch": "pr/001-card-controls/11-cross-path",
+      "branch": "pr/001-card-controls/11-cross-path-checks",
       "url": ""
     }
   ],
