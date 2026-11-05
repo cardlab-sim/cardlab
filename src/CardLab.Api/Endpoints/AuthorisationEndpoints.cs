@@ -1,6 +1,7 @@
 using CardLab.Api.Contracts;
 using CardLab.Domain.Application;
 using CardLab.Domain.Authorisation;
+using CardLab.Domain.Common;
 
 namespace CardLab.Api.Endpoints;
 
@@ -23,8 +24,30 @@ public static class AuthorisationEndpoints
     }
 
     /// <summary><c>POST /api/authorisations</c> body <see cref="AuthorisationRequest"/> → <see cref="DecisionDto"/> with 200/400/404.</summary>
-    internal static Task<IResult> Authorise(AuthorisationRequest body, AuthorisationService service, CancellationToken ct) => throw new NotImplementedException("PR-08");
+    internal static async Task<IResult> Authorise(AuthorisationRequest body, AuthorisationService service, CancellationToken ct) =>
+        ToResponse(await service.AuthoriseAsync(body, ct));
 
     /// <summary><c>POST /api/cards/{id}/simulate-purchase</c> body <see cref="SimulatedPurchase"/> → <see cref="DecisionDto"/> with 200/400/404.</summary>
-    internal static Task<IResult> SimulatePurchase(Guid id, SimulatedPurchase body, AuthorisationService service, CancellationToken ct) => throw new NotImplementedException("PR-08");
+    internal static async Task<IResult> SimulatePurchase(Guid id, SimulatedPurchase body, AuthorisationService service, CancellationToken ct) =>
+        ToResponse(await service.AuthoriseByCardIdAsync(new CardId(id), body, ct));
+
+    private static IResult ToResponse(AuthorisationResult result)
+    {
+        var decision = result.Decision;
+        var dto = new DecisionDto(
+            WireNames.ToWire(decision.Outcome),
+            WireNames.ToWire(decision.Reason),
+            result.TransactionId?.Value,
+            decision.Limits
+                .Select(l => new LimitRemainingDto(WireNames.ToWire(l.Category), WireNames.ToWire(l.Period), l.Limit.ToString(), l.Remaining.ToString()))
+                .ToList(),
+            result.Problems.Select(p => new ProblemDto(p.Field, p.Message)).ToList());
+        var status = decision.Reason switch
+        {
+            Reason.CardNotFound => StatusCodes.Status404NotFound,
+            Reason.InvalidRequest => StatusCodes.Status400BadRequest,
+            _ => StatusCodes.Status200OK,
+        };
+        return TypedResults.Json(dto, statusCode: status);
+    }
 }
