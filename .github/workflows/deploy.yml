@@ -67,7 +67,7 @@ jobs:
           package: publish
 
       # Merge semantics: only these keys are touched, so CardLab__LookupKey (set once by the human) survives.
-      # CardLab__Commit is deliberately never set: health reports the commit stamped into the build by
+      # The commit app setting is deliberately never set: health reports the commit stamped into the build by
       # SourceRevisionId, so it identifies the deployed binaries. Runs after the package so the restart loads the new files.
       - name: Set non-secret app settings
         run: >
