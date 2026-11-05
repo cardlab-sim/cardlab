@@ -74,12 +74,24 @@ public sealed class LimitProperties
 
     // T-P-3 · PR-04 · property
     // Given any state and amount, When decided, Then remaining = max(0, limit - spendAfter) where spendAfter = spend + amount if approved else spend
-    // Catches: remaining formula drift (AC-25)
+    // and the outcome and reason follow design §8: frozen first, then any limit exceeded, else approved.
+    // Catches: remaining formula drift (AC-25); wrong spend used per limit; limits checked before frozen
     [Property(Arbitrary = [typeof(CardLabArbitraries)])]
     public bool Remaining_is_limit_minus_approved_spend_floored(DecisionInput input)
     {
         var decision = AuthorisationDecider.Decide(input.Status, input.Limits, input.Amount);
         var approved = decision.Outcome == Outcome.Approved;
+
+        var exceeded = input.Limits.Any(l => l.ApprovedSpendInPeriod.Amount + input.Amount.Amount > l.Limit.Amount.Amount);
+        var (expectedOutcome, expectedReason) = input.Status == CardStatus.Frozen
+            ? (Outcome.Declined, Reason.CardFrozen)
+            : exceeded
+                ? (Outcome.Declined, Reason.LimitExceeded)
+                : (Outcome.Approved, Reason.Approved);
+        if (decision.Outcome != expectedOutcome || decision.Reason != expectedReason)
+        {
+            return false;
+        }
 
         return decision.Limits.Count == input.Limits.Count
             && input.Limits.Select((l, i) =>

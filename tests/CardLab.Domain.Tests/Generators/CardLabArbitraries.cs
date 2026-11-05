@@ -25,8 +25,9 @@ public sealed record DecisionInput(CardStatus Status, IReadOnlyList<LimitWithSpe
 /// FsCheck arbitraries for the property tests (DEC-7): <c>Money</c> (0..1,000,000.00, 2 dp, biased to small values and
 /// bounds), <c>Category</c>, <c>Period</c>, limit sets for one category (0-3 limits, distinct periods) and
 /// <c>DateTimeOffset</c> instants in 2025-2027 biased to ±2 h around the 2026 DST changes (2026-03-29T01:00Z,
-/// 2026-10-25T01:00Z) and to local midnights. Implemented in PR-04 as public static methods returning
-/// <c>Arbitrary&lt;T&gt;</c>.
+/// 2026-10-25T01:00Z) and to local midnights. Limit scenarios and decision inputs are biased to exact fills
+/// (<c>spend + amount == limit</c>) and shrink by dropping amounts, limits or the frozen status. Implemented in PR-04
+/// as public static methods returning <c>Arbitrary&lt;T&gt;</c>.
 /// </summary>
 public static class CardLabArbitraries
 {
@@ -54,22 +55,90 @@ public static class CardLabArbitraries
     /// <returns>The arbitrary.</returns>
     public static Arbitrary<LimitScenario> LimitScenarios() =>
         Arb.From(
-            from category in Gen.Elements(Enum.GetValues<Category>())
-            from limits in LimitSetGen(category)
-            from count in Gen.Choose(1, 40)
-            from amounts in ListOf(count, TransactionAmountGen())
-            select new LimitScenario(limits, amounts));
+            Gen.Frequency((3, GeneralScenarioGen()), (1, ExactFillScenarioGen())),
+            ShrinkScenario);
 
-    /// <summary>Single decisions: any status, any spend (including spend above the limit) and any valid amount.</summary>
+    /// <summary>Single decisions: any status, any spend (including spend above the limit) and any valid amount, biased to exact fills.</summary>
     /// <returns>The arbitrary.</returns>
     public static Arbitrary<DecisionInput> DecisionInputs() =>
         Arb.From(
-            from status in Gen.Elements(CardStatus.Active, CardStatus.Frozen)
-            from category in Gen.Elements(Enum.GetValues<Category>())
-            from limits in LimitSetGen(category)
-            from spends in ListOf(limits.Count, CentsGen().Select(ToMoney))
-            from amount in TransactionAmountGen()
-            select new DecisionInput(status, limits.Zip(spends, (l, s) => new LimitWithSpend(l, s)).ToList(), amount));
+            Gen.Frequency((3, GeneralInputGen()), (1, GeneralInputGen().Select(MakeOneLimitAnExactFill))),
+            ShrinkInput);
+
+    private static Gen<LimitScenario> GeneralScenarioGen() =>
+        from category in Gen.Elements(Enum.GetValues<Category>())
+        from limits in LimitSetGen(category)
+        from count in Gen.Choose(1, 40)
+        from amounts in ListOf(count, TransactionAmountGen())
+        select new LimitScenario(limits, amounts);
+
+    // One limit that `fills` equal amounts fill exactly, followed by `extra` more of the same amount (which must be declined).
+    private static Gen<LimitScenario> ExactFillScenarioGen() =>
+        from category in Gen.Elements(Enum.GetValues<Category>())
+        from period in Gen.Elements(Enum.GetValues<Period>())
+        from unit in Gen.Choose(1, 3_000)
+        from fills in Gen.Choose(1, 10)
+        from extra in Gen.Choose(1, 5)
+        select new LimitScenario(
+            [new SpendLimit(category, period, ToMoney(unit * fills))],
+            Enumerable.Repeat(ToMoney(unit), fills + extra).ToList());
+
+    private static Gen<DecisionInput> GeneralInputGen() =>
+        from status in Gen.Elements(CardStatus.Active, CardStatus.Frozen)
+        from category in Gen.Elements(Enum.GetValues<Category>())
+        from limits in LimitSetGen(category)
+        from spends in ListOf(limits.Count, CentsGen().Select(ToMoney))
+        from amount in TransactionAmountGen()
+        select new DecisionInput(status, limits.Zip(spends, (l, s) => new LimitWithSpend(l, s)).ToList(), amount);
+
+    // Rewrites the first limit so that spend + amount equals the limit exactly (the R-5 boundary); other limits keep arbitrary spend.
+    private static DecisionInput MakeOneLimitAnExactFill(DecisionInput input)
+    {
+        if (input.Limits.Count == 0)
+        {
+            return input;
+        }
+
+        var first = input.Limits[0];
+        var filled = first.ApprovedSpendInPeriod.Amount + input.Amount.Amount;
+        if (filled > MaxCents / 100m)
+        {
+            return input;
+        }
+
+        var limits = input.Limits.ToList();
+        limits[0] = first with { Limit = first.Limit with { Amount = Pounds(filled) } };
+        return input with { Limits = limits };
+    }
+
+    private static Money Pounds(decimal value) =>
+        Money.TryFromDecimal(value, out var money) ? money : throw new InvalidOperationException("Generator produced an invalid amount.");
+
+    private static IEnumerable<LimitScenario> ShrinkScenario(LimitScenario s)
+    {
+        for (var i = 0; i < s.Amounts.Count && s.Amounts.Count > 1; i++)
+        {
+            yield return s with { Amounts = s.Amounts.Where((_, j) => j != i).ToList() };
+        }
+
+        for (var i = 0; i < s.Limits.Count; i++)
+        {
+            yield return s with { Limits = s.Limits.Where((_, j) => j != i).ToList() };
+        }
+    }
+
+    private static IEnumerable<DecisionInput> ShrinkInput(DecisionInput input)
+    {
+        if (input.Status == CardStatus.Frozen)
+        {
+            yield return input with { Status = CardStatus.Active };
+        }
+
+        for (var i = 0; i < input.Limits.Count; i++)
+        {
+            yield return input with { Limits = input.Limits.Where((_, j) => j != i).ToList() };
+        }
+    }
 
     /// <summary>Instants in 2025-2027 with random offsets, biased to ±2 h around the 2026 DST changes and to London midnights.</summary>
     /// <returns>The arbitrary.</returns>
