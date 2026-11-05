@@ -187,9 +187,9 @@
         "PR-10",
         "PR-11"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/001-card-controls/13-fix-feature-e2e",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/16"
     }
   ],
   "bugs_open": [
@@ -330,6 +330,10 @@
     {
       "at": "2026-11-05T22:50Z",
       "event": "PR-12 pr-light APPROVE WITH FIXES (give-up path test); reviewer confirmed F-1 through real Program.cs, HSTS with forwarded proto, service.version = sha"
+    },
+    {
+      "at": "2026-11-05T23:20Z",
+      "event": "PR-13 verified (keyboard mutation fails on Chrome and Firefox; PR CI green incl. BUG-001 chain step); in pr-light review; design \u00a715.3 AC-37 note updated"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

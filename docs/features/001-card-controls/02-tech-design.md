@@ -731,7 +731,7 @@ integration, `T-E-n` E2E, `T-C-n` CI/deploy evidence checked by the validator.
 | AC-34 | integration + deploy | T-I-10 `Api/HealthTests.cs`; T-C-2 | |
 | AC-35 | integration | T-I-14 `Performance/DecisionLatencyTests.cs` | 1,000 rows, 200 requests, p95 ≤ 300 ms |
 | AC-36 | e2e (smoke) | T-E-7 `smoke/j1.spec.ts` | simulate round trip ≤ 2 s |
-| AC-37 | e2e | T-E-5 `a11y.spec.ts` | axe on both pages; keyboard-only J-1 and J-2 |
+| AC-37 | e2e | T-E-5 `a11y.spec.ts` | axe on both pages; keyboard-only J-1, J-2 and J-3 (simulate), on Chrome and Firefox projects (feature review F-2, BUG-009) |
 | AC-38 | web unit + e2e | T-W-1 `format/money.test.ts`, T-W-2 `format/time.test.ts`; T-E-6 `formatting.spec.ts` | |
 | AC-39 | integration | T-I-11 `Logging/EventTests.cs` | exactly one event per action, fields, no PAN |
 | AC-40 | unit | T-U-20 `Controls/FreezeTests.cs` | unfreeze active no-op |
