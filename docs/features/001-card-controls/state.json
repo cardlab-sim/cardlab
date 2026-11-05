@@ -37,7 +37,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "review",
+      "status": "changes",
       "branch": "pr/001-card-controls/01-harness",
       "url": "https://github.com/cardlab-sim/cardlab/pull/6"
     },
@@ -201,6 +201,10 @@
     {
       "at": "2026-11-05T10:30Z",
       "event": "PR-02 review APPROVE WITH FIXES; doc-only plan amend (owned files +2, PR-10 names); coder fix round"
+    },
+    {
+      "at": "2026-11-05T10:45Z",
+      "event": "PR-01 review CHANGES (contract suite seams); doc-only amends to PR-06/PR-08 briefs; coder fix round"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
