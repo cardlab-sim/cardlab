@@ -14,7 +14,8 @@ namespace CardLab.Domain.Authorisation;
 /// <item><c>amount</c>: required; <see cref="WireNames.TryParseAmount"/>; <see cref="Money.TryFromDecimal"/>
 /// (at most 2 dp, not negative); <see cref="MoneyBounds.IsValidTransactionAmount"/> (£0.01..£1,000,000.00).</item>
 /// <item><c>category</c>: required; <see cref="WireNames.TryParseCategory"/>.</item>
-/// <item><c>merchant</c>: required; non-blank after trimming; at most 200 characters.</item>
+/// <item><c>merchant</c>: required; non-blank after trimming; at most 200 characters; no run of 13 or more digits,
+/// optionally separated by single spaces or dashes (card-number-shaped, NFR-1, BUG-005). The message never echoes the text.</item>
 /// <item><c>timestamp</c>: required on the processor path, optional on the simulate path; strict ISO-8601
 /// (<c>yyyy-MM-ddTHH:mm:ss[.fffffff](Z|±hh:mm)</c>, explicit offset; any other text is a problem) within
 /// [2000-01-01T00:00Z, 2100-01-01T00:00Z); truncated to whole seconds, offset preserved.</item>
@@ -100,10 +101,10 @@ public static partial class TransactionRules
         }
 
         var merchant = merchantText?.Trim() ?? string.Empty;
-        var merchantOk = merchant.Length is >= 1 and <= MaxMerchantLength;
+        var merchantOk = merchant.Length is >= 1 and <= MaxMerchantLength && !CardNumberLikeRun().IsMatch(merchant);
         if (!merchantOk)
         {
-            problems.Add(new ValidationProblem("merchant", "Merchant must be between 1 and 200 characters."));
+            problems.Add(new ValidationProblem("merchant", "Merchant must be between 1 and 200 characters and must not contain a card number."));
         }
 
         DateTimeOffset occurredAt = default;
@@ -132,6 +133,10 @@ public static partial class TransactionRules
             ? new ValidatedPurchase(amount, category, merchant, occurredAt)
             : null;
     }
+
+    // 13+ digits, each pair optionally separated by one space or dash (a PAN is 13..19 digits).
+    [GeneratedRegex(@"[0-9](?:[ -]?[0-9]){12,}")]
+    private static partial Regex CardNumberLikeRun();
 
     private static DateTimeOffset TruncateToSeconds(DateTimeOffset value) => value.AddTicks(-(value.Ticks % TimeSpan.TicksPerSecond));
 
