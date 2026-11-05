@@ -11,7 +11,7 @@
 | BUG-005 | reviewer (PR-08) | S2 | NFR-1, AC-24 | A 16-digit merchant name is stored and returned in history | design | fix-now (option A, PR-08 fix round) | fixed | build (PR-08 fix round) | | 2026-11-05 |
 | BUG-006 | reviewer (PR-08) | S3 | AC-20 | Non-binding JSON body gives 500 (Development) / empty 400 instead of ProblemDetails | plan | fix-now (PR-09 fix round) | fixed | build (PR-09 fix round) | | 2026-11-05 |
 | BUG-007 | coder (PR-10, axe) | S2 | AC-37, NFR-6 | Scrollable table container is not keyboard-focusable (axe scrollable-region-focusable, serious) | code | fix-now (PR-10, released DataTable files) | fixed | build (PR-10) | | 2026-11-05 |
-| BUG-008 | reviewer (feature F-1) | S2 | NFR-5, AC-34, AC-36 | Host crash-loops when the free database resumes from idle auto-pause | design | fix-now (PR-12) | approved | build (PR-12) | | 2026-11-05 |
+| BUG-008 | reviewer (feature F-1) | S2 | NFR-5, AC-34, AC-36 | Host crash-loops when the free database resumes from idle auto-pause | design | fix-now (PR-12) | fixed | build (PR-12) | | 2026-11-05 |
 | BUG-009 | reviewer (feature F-7) | S3 | NFR-6 | Only Chrome is exercised; Edge and Firefox support is untraced | design | fix-now (PR-13: add Firefox project; Edge via shared Chromium engine) | approved | build (PR-13) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
@@ -107,7 +107,7 @@ Fix: retry `MigrateAsync` + seed on `SqlException` for up to 120 s (5 s delay, f
 ### Decision (orchestrator, 2026-11-05)
 Fix now as the reviewer specified (fix PR-12) plus a design erratum. Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
 ### Resolution
-PR-12.
+PR-12 (#17): retry loop (120 s / 5 s, SqlException only, fixed log text, rethrow) with online-after-10 s and give-up tests; demo connect-retry settings in deploy.yml. Verified status waits for the validator's warm-up-after-idle measurement on demo (T-C-2).
 
 ## BUG-009
 **Repro:** `tests/e2e/playwright.config.ts` and `ci.yml` run Desktop Chrome only; NFR-6 names latest Chrome, Edge and Firefox; design §15 never says how the other two are covered.
