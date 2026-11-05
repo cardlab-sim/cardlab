@@ -5,6 +5,7 @@ using CardLab.Domain.Cards;
 using CardLab.Domain.Common;
 using CardLab.Domain.Limits;
 using CardLab.Domain.Periods;
+using CardLab.Domain.Ports;
 using CardLab.TestKit;
 using CardLab.TestKit.Builders;
 using CardLab.TestKit.Contracts;
@@ -195,17 +196,19 @@ public sealed class AuthorisationServiceTests
         await _service.AuthoriseAsync(Request("20.01").Build(), Ct);
         await _service.AuthoriseAsync(Request().WithCardNumber(Seed.UnknownCardNumber).Build(), Ct);
         await _service.AuthoriseAsync(Request("0.00").Build(), Ct);
+        await _service.AuthoriseAsync(Request("10.00").WithTimestamp("not-a-time").Build(), Ct);
+        await _service.AuthoriseAsync(Request("10.00").WithCategory("petrol").Build(), Ct);
 
         var events = _logger.Events("AuthorisationDecided");
-        Assert.Equal(4, events.Count);
-        Assert.Equal(4, _logger.Entries.Count);
+        Assert.Equal(6, events.Count);
+        Assert.Equal(6, _logger.Entries.Count);
 
-        string[] cardId = [CardId.Value.ToString(), CardId.Value.ToString(), "-", "-"];
-        string[] lastFour = ["0001", "0001", "-", "-"];
-        string[] category = ["fuel", "fuel", "fuel", "-"];
-        string[] amount = ["20.00", "20.01", "10.00", "-"];
-        string[] outcome = ["approved", "declined", "declined", "declined"];
-        string[] reason = ["approved", "limit_exceeded", "card_not_found", "invalid_request"];
+        string[] cardId = [CardId.Value.ToString(), CardId.Value.ToString(), "-", "-", "-", "-"];
+        string[] lastFour = ["0001", "0001", "-", "-", "-", "-"];
+        string[] category = ["fuel", "fuel", "fuel", "fuel", "fuel", "-"];
+        string[] amount = ["20.00", "20.01", "10.00", "-", "10.00", "10.00"];
+        string[] outcome = ["approved", "declined", "declined", "declined", "declined", "declined"];
+        string[] reason = ["approved", "limit_exceeded", "card_not_found", "invalid_request", "invalid_request", "invalid_request"];
         for (var i = 0; i < events.Count; i++)
         {
             var fields = events[i].Fields;
@@ -247,6 +250,46 @@ public sealed class AuthorisationServiceTests
         Assert.Equal(Outcome.Declined, unknown.Decision.Outcome);
         Assert.Null(unknown.TransactionId);
         Assert.Equal(before, _store.TransactionCount);
+
+        var invalid = await _service.AuthoriseByCardIdAsync(CardId, new SimulatedPurchase("abc", "fuel", "Test Fuel Ltd", null), Ct);
+        Assert.Equal(Reason.InvalidRequest, invalid.Decision.Reason);
+        Assert.Equal(before, _store.TransactionCount);
+
+        var events = _logger.Events("AuthorisationDecided");
+        Assert.Equal(3, events.Count);
+        string[] cardId = [CardId.Value.ToString(), "-", "-"];
+        string[] lastFour = ["0001", "-", "-"];
+        string[] reason = ["approved", "card_not_found", "invalid_request"];
+        string[] amount = ["20.00", "20.00", "-"];
+        for (var i = 0; i < events.Count; i++)
+        {
+            Assert.Equal(cardId[i], events[i].Fields["CardId"]);
+            Assert.Equal(lastFour[i], events[i].Fields["LastFour"]);
+            Assert.Equal(reason[i], events[i].Fields["Reason"]);
+            Assert.Equal(amount[i], events[i].Fields["Amount"]);
+            Assert.Equal("fuel", events[i].Fields["Category"]);
+        }
+    }
+
+    // Added to T-U-45: the logged duration is measured (a lookup that takes 30 ms shows up), not a constant.
+    [Fact]
+    public async Task Logged_duration_covers_the_work_done()
+    {
+        var service = new AuthorisationService(_store, _clock, new SlowLookup(_lookup, TimeSpan.FromMilliseconds(30)), _logger);
+
+        await service.AuthoriseAsync(Request().Build(), Ct);
+
+        var duration = Assert.IsType<long>(Assert.Single(_logger.Events("AuthorisationDecided")).Fields["DurationMs"]);
+        Assert.InRange(duration, 25, 5000);
+    }
+
+    private sealed class SlowLookup(ICardNumberLookup inner, TimeSpan delay) : ICardNumberLookup
+    {
+        public LookupHash Compute(string digits)
+        {
+            Thread.Sleep(delay);
+            return inner.Compute(digits);
+        }
     }
 
     private async Task<AuthorisationResult> ProcessorDecisionForSameStateAsync()

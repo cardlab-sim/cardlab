@@ -118,7 +118,7 @@ public sealed class AuthorisationEndpointTests : IClassFixture<ApiFactory>
     }
 
     // T-I-5 · PR-08 · integration
-    // Given TestSeed.UnknownCardNumber, When POST /api/authorisations, Then 404 {declined, card_not_found, transactionId null, limits []} and Database.CountTransactionsAsync unchanged
+    // Given Seed.UnknownCardNumber, When POST /api/authorisations, Then 404 {declined, card_not_found, transactionId null, limits []} and Database.CountTransactionsAsync unchanged
     // Catches: unknown card stored or 200 (AC-19, DEC-14)
     [Fact]
     public async Task Unknown_card_is_404_and_stores_nothing()
@@ -160,6 +160,26 @@ public sealed class AuthorisationEndpointTests : IClassFixture<ApiFactory>
         Assert.Equal("invalid_request", response.Body.Reason);
         Assert.Null(response.Body.TransactionId);
         Assert.Equal([field], response.Body.Problems.Select(p => p.Field));
+        Assert.Equal(before, await _factory.Database.CountTransactionsAsync());
+    }
+
+    // BUG-005 · PR-08 · integration
+    // Given a valid request whose merchant is a card number (plain and spaced), When POST /api/authorisations, Then 400 invalid_request with problems [merchant], nothing stored, the digits not echoed
+    // Catches: a PAN-shaped merchant stored and later displayed (NFR-1, AC-24)
+    [Theory]
+    [InlineData("9999000100000001")]
+    [InlineData("9999 0001 0000 0001")]
+    public async Task Card_number_like_merchant_is_rejected_and_not_stored(string merchant)
+    {
+        var before = await _factory.Database.CountTransactionsAsync();
+        var request = FuelRequest(TestSeed.OpsVan, "5.00", "2026-11-04T10:00:00Z") with { Merchant = merchant };
+
+        var response = await _factory.CreateApiClient().AuthoriseAsync(request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.Status);
+        Assert.Equal("invalid_request", response.Body?.Reason);
+        Assert.Equal(["merchant"], response.Body!.Problems.Select(p => p.Field));
+        Assert.DoesNotContain("0001", response.Raw);
         Assert.Equal(before, await _factory.Database.CountTransactionsAsync());
     }
 

@@ -21,8 +21,9 @@ namespace CardLab.Domain.Application;
 /// <see cref="CardLabEvents.AuthorisationDecided"/>. Invalid requests and unknown cards store nothing but
 /// are still logged once. The period comes from the request timestamp, never the clock (R-13, AC-33);
 /// the clock gives only <c>DecidedAtUtc</c> and the simulate default timestamp.
-/// Implemented in PR-08. Unknown-card events carry the category and amount (valid) but "-" for card id and last four;
-/// invalid requests carry "-" everywhere because their raw text is never logged.
+/// Implemented in PR-08. Unknown-card events carry "-" for card id and last four. Invalid requests log the category
+/// and amount only when that field is itself valid (wire name / <c>Money.ToString()</c>), otherwise "-"; raw
+/// request text is never logged because it could contain a card number.
 /// </remarks>
 public sealed class AuthorisationService
 {
@@ -56,7 +57,7 @@ public sealed class AuthorisationService
         var validated = TransactionRules.Validate(request);
         if (!validated.IsOk)
         {
-            return LogAndReturn(Rejected(validated.Error), null, null, started);
+            return LogAndReturn(Rejected(validated.Error), null, CategoryForLog(request.Category), AmountForLog(request.Amount), started);
         }
 
         var hash = _lookup.Compute(validated.Value.CardNumberDigits);
@@ -78,7 +79,7 @@ public sealed class AuthorisationService
         var validated = TransactionRules.ValidatePurchase(purchase, _clock.UtcNow);
         return validated.IsOk
             ? await DecideAsync(cardId, validated.Value, started, ct)
-            : LogAndReturn(Rejected(validated.Error), null, null, started);
+            : LogAndReturn(Rejected(validated.Error), null, CategoryForLog(purchase.Category), AmountForLog(purchase.Amount), started);
     }
 
     private static AuthorisationResult Rejected(IReadOnlyList<ValidationProblem> problems) =>
@@ -116,14 +117,24 @@ public sealed class AuthorisationService
         return LogAndReturn(result, card, purchase, started);
     }
 
-    private AuthorisationResult LogAndReturn(AuthorisationResult result, CardRef? card, ValidatedPurchase? purchase, long started)
+    private static string CategoryForLog(string? raw) => WireNames.TryParseCategory(raw, out var category) ? WireNames.ToWire(category) : "-";
+
+    private static string AmountForLog(string? raw) =>
+        WireNames.TryParseAmount(raw, out var value) && Money.TryFromDecimal(value, out var money) && MoneyBounds.IsValidTransactionAmount(money)
+            ? money.ToString()
+            : "-";
+
+    private AuthorisationResult LogAndReturn(AuthorisationResult result, CardRef? card, ValidatedPurchase purchase, long started) =>
+        LogAndReturn(result, card, WireNames.ToWire(purchase.Category), purchase.Amount.ToString(), started);
+
+    private AuthorisationResult LogAndReturn(AuthorisationResult result, CardRef? card, string category, string amount, long started)
     {
         CardLabEvents.AuthorisationDecided(
             _logger,
             card is null ? "-" : card.Id.Value.ToString(),
             card?.LastFour ?? "-",
-            purchase is null ? "-" : WireNames.ToWire(purchase.Category),
-            purchase is null ? "-" : purchase.Amount.ToString(),
+            category,
+            amount,
             WireNames.ToWire(result.Decision.Outcome),
             WireNames.ToWire(result.Decision.Reason),
             (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
