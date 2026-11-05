@@ -1,6 +1,7 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { AppShell } from './AppShell';
 import { Badge } from './Badge';
 import { Button } from './Button';
@@ -48,7 +49,7 @@ describe('primitives', () => {
   });
 
   // T-W-6 · PR-02 · web unit
-  // Given Button pending, When rendered, Then disabled with aria-busy and the pending label; Badge renders its text; Notice error has role="alert", success role="status"; DataTable renders a caption, th scope=col and the empty text
+  // Given Button pending, When rendered, Then aria-disabled with aria-busy and the pending label; Badge renders its text; Notice error has role="alert", success role="status"; DataTable renders a caption, th scope=col and the empty text
   // Catches: colour-only status, toast-only feedback, inaccessible tables (§4.1)
   test('T-W-6 button, badge, notice and table are accessible', () => {
     const { rerender } = render(
@@ -57,7 +58,7 @@ describe('primitives', () => {
       </Button>,
     );
     const pending = screen.getByRole('button', { name: 'Saving…' });
-    expect(pending).toBeDisabled();
+    expect(pending).toHaveAttribute('aria-disabled', 'true');
     expect(pending).toHaveAttribute('aria-busy', 'true');
 
     rerender(<Button>Save</Button>);
@@ -144,4 +145,22 @@ describe('primitives', () => {
     expect(within(screen.getByRole('main')).getByText('Body')).toBeInTheDocument();
     expect(screen.getByRole('main')).toHaveAttribute('id', 'main');
   });
+});
+
+// T-W-6b · PR-13 (BUG-010) · web unit
+// Given a pending Button, When it is focused and activated, Then it keeps focus, is not natively disabled and ignores the click
+// Catches: focus falling to the page body after an action (WCAG 2.4.3), double submits
+test('T-W-6b a pending button keeps focus and ignores clicks', async () => {
+  const onClick = vi.fn();
+  render(
+    <Button pending pendingLabel="Saving…" onClick={onClick}>
+      Save
+    </Button>,
+  );
+  const button = screen.getByRole('button', { name: 'Saving…' });
+  button.focus();
+  await userEvent.click(button);
+  expect(button).toHaveFocus();
+  expect(button).toBeEnabled();
+  expect(onClick).not.toHaveBeenCalled();
 });
