@@ -15,4 +15,9 @@ public sealed class SqlCardStoreContractTests : CardStoreContractTests, IClassFi
 
     /// <inheritdoc />
     protected override Task<ICardStore> CreateStoreAsync(IReadOnlyList<StoreSeedCard> cards) => throw new NotImplementedException("PR-06");
+
+    /// <summary>PR-06 implements this: a new SqlCardStore on a new DbContext over the class database.</summary>
+    /// <param name="seeded">A store returned by <see cref="CreateStoreAsync"/>.</param>
+    /// <returns>A store over the same data.</returns>
+    protected override Task<ICardStore> OpenStoreAsync(ICardStore seeded) => throw new NotImplementedException("PR-06");
 }
