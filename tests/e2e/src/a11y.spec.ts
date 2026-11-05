@@ -66,10 +66,16 @@ test('T-E-5 J-1 and J-2 complete with the keyboard only', async ({ page }) => {
   await tabTo(page, 'Save');
   await page.keyboard.press('Enter');
   await expect(limits.getByRole('status').filter({ hasText: 'Limit saved' })).toBeVisible();
-  await expect(limits.getByRole('table', { name: 'Limits' }).locator('tbody tr')).toHaveCount(1);
+  await expect(
+    limits
+      .getByRole('table', { name: 'Limits' })
+      .getByRole('row')
+      .filter({ has: page.getByRole('cell') }),
+  ).toHaveCount(1);
 
   await tabTo(page, /^Remove .* limit$/);
   await page.keyboard.press('Enter');
   await expect(limits.getByRole('status').filter({ hasText: 'Limit removed' })).toBeVisible();
   await expect(limits.getByText('No spend limits are set.')).toBeVisible();
+  await expectNoSeriousViolations(page);
 });

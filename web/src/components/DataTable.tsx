@@ -22,7 +22,8 @@ export interface DataTableProps<T> {
   emptyText: string;
 }
 
-/** Semantic `<table>` (thead/th scope="col"/tbody) inside an `overflow-x: auto` container (§4.1 table rule). */
+/** Semantic `<table>` (thead/th scope="col"/tbody) inside an `overflow-x: auto` container (§4.1 table rule). The container is a keyboard-focusable
+ * `region` named by the caption, so a scrolled table stays reachable without a mouse (BUG-007). */
 export function DataTable<T>({ caption, columns, rows, rowKey, emptyText }: DataTableProps<T>) {
   const cellClass = (numeric: boolean | undefined): string | undefined =>
     numeric ? styles['numeric'] : undefined;

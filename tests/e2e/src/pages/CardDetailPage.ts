@@ -92,7 +92,10 @@ export class CardDetailPage {
 
   /** Limits table rows as [category, period, amount] text. */
   async limits(): Promise<string[][]> {
-    const rows = this.limitsRegion.getByRole('table', { name: 'Limits' }).locator('tbody tr');
+    const rows = this.limitsRegion
+      .getByRole('table', { name: 'Limits' })
+      .getByRole('row')
+      .filter({ has: this.page.getByRole('cell') });
     const result: string[][] = [];
     for (const row of await rows.all()) {
       const cells = await row.getByRole('cell').allInnerTexts();
@@ -117,7 +120,10 @@ export class CardDetailPage {
   }
 
   async transactions(): Promise<TransactionRow[]> {
-    const rows = this.page.getByRole('table', { name: 'Transaction history' }).locator('tbody tr');
+    const rows = this.page
+      .getByRole('table', { name: 'Transaction history' })
+      .getByRole('row')
+      .filter({ has: this.page.getByRole('cell') });
     const result: TransactionRow[] = [];
     for (const row of await rows.all()) {
       const c = (await row.getByRole('cell').allInnerTexts()).map((t) => t.trim());

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
+import { expectNoSeriousViolations } from './a11y';
 import { Api } from './api';
-import { expectNoPan, findPans } from './panScanner';
+import { expectNoPan } from './panScanner';
 import { CardDetailPage } from './pages/CardDetailPage';
 import { CardListPage } from './pages/CardListPage';
 import { seed } from './seed';
@@ -59,6 +60,7 @@ test('T-E-4 no full card number appears in the UI or API responses, only the las
     await page.goBack();
     await expect(page.getByRole('table', { name: 'Card list' })).toBeVisible();
   }
+  await expectNoSeriousViolations(page);
 });
 
 async function expectPageHasNoPan(
@@ -67,5 +69,4 @@ async function expectPageHasNoPan(
 ): Promise<void> {
   expectNoPan(await page.locator('body').innerText(), `${where} text`);
   expectNoPan(await page.content(), `${where} HTML`);
-  expect(findPans(await page.content())).toEqual([]);
 }

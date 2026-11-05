@@ -93,6 +93,7 @@ jobs:
   e2e:
     needs: [backend, web]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       mssql:
         image: mcr.microsoft.com/mssql/server:2022-latest
