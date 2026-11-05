@@ -1,13 +1,45 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using System.Text;
 using CardLab.Api.Middleware;
 using CardLab.Domain.Ports;
+using CardLab.Integration.Tests.Harness;
+using CardLab.TestKit;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CardLab.Integration.Tests.Api;
+
+[Collection("sql")]
+public sealed class BadRequestBodyTests : IClassFixture<ApiFactory>
+{
+    private readonly ApiFactory _factory;
+
+    public BadRequestBodyTests(ApiFactory factory) => _factory = factory;
+
+    // T-I-5 · PR-09 review BUG-006
+    // Given a numeric cardNumber body, When POST /api/authorisations, Then 400 application/problem+json, no 16-digit run in the response, nothing stored
+    // Catches: unbindable bodies surfacing as 500 or echoing the card number (NFR-1)
+    [Fact]
+    public async Task Numeric_card_number_is_a_400_without_echo()
+    {
+        var api = _factory.CreateApiClient();
+        var before = await _factory.Database.CountTransactionsAsync();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/authorisations")
+        {
+            Content = new StringContent("{\"cardNumber\":9999000100000001,\"amount\":\"1.00\",\"category\":\"fuel\",\"merchant\":\"Shop\"}", Encoding.UTF8, "application/json"),
+        };
+
+        using var response = await api.SendRawAsync(request);
+        var raw = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        PanScanner.AssertNoPan(raw, "400 body");
+        Assert.Equal(before, await _factory.Database.CountTransactionsAsync());
+    }
+}
 
 public sealed class ErrorMappingTests
 {
@@ -26,6 +58,7 @@ public sealed class ErrorMappingTests
             (sql, "Service unavailable"),
             (new DbUpdateException(Secret, sql), "Service unavailable"),
             (new InvalidOperationException(Secret, sql), "Service unavailable"),
+            (new BadHttpRequestException(Secret, StatusCodes.Status400BadRequest), "Bad request"),
         };
 
         foreach (var (exception, title) in cases)
@@ -33,7 +66,7 @@ public sealed class ErrorMappingTests
             var (handled, status, contentType, body) = await HandleAsync(exception);
 
             Assert.True(handled, exception.GetType().Name);
-            Assert.Equal(503, status);
+            Assert.Equal(exception is BadHttpRequestException ? 400 : 503, status);
             Assert.StartsWith("application/problem+json", contentType, StringComparison.Ordinal);
             Assert.Contains($"\"title\":\"{title}\"", body);
             Assert.DoesNotContain(Secret, body);

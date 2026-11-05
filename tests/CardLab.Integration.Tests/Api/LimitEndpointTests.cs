@@ -1,5 +1,7 @@
-using System.Net;
+﻿using System.Net;
+using System.Text;
 using CardLab.Integration.Tests.Harness;
+using CardLab.TestKit;
 
 namespace CardLab.Integration.Tests.Api;
 
@@ -62,6 +64,7 @@ public sealed class LimitEndpointTests : IClassFixture<ApiFactory>
     {
         var api = _factory.CreateApiClient();
         var id = (await _factory.Database.CardIdAsync("Marketing")).Value;
+        Assert.Equal(HttpStatusCode.OK, (await api.SetLimitAsync(id, "fuel", "day", "50.00")).Status);
         var auditBefore = await _factory.Database.CountAuditEventsAsync();
         var limitsBefore = (await api.GetCardAsync(id)).Body!.Limits.Count;
 
@@ -71,7 +74,56 @@ public sealed class LimitEndpointTests : IClassFixture<ApiFactory>
         Assert.Contains($"\"{errorField}\":[", response.Raw);
         Assert.Contains("\"errors\":", response.Raw);
         Assert.Equal(auditBefore, await _factory.Database.CountAuditEventsAsync());
+        var after = (await api.GetCardAsync(id)).Body!.Limits;
+        Assert.Equal(limitsBefore, after.Count);
+        Assert.Equal("50.00", after.Single(l => l is { Category: "fuel", Period: "day" }).Amount);
+    }
+
+    // T-I-3 · PR-09 review m-2 (BUG-006)
+    // Given a body whose amount is a JSON number, When PUT fuel/day, Then 400 application/problem+json, no 16-digit run, and no limit or audit change
+    // Catches: unbindable bodies surfacing as 500 (design §7)
+    [Fact]
+    public async Task Unbindable_body_is_a_400_with_no_side_effects()
+    {
+        var api = _factory.CreateApiClient();
+        var id = (await _factory.Database.CardIdAsync("Marketing")).Value;
+        var auditBefore = await _factory.Database.CountAuditEventsAsync();
+        var limitsBefore = (await api.GetCardAsync(id)).Body!.Limits.Count;
+        using var request = new HttpRequestMessage(HttpMethod.Put, $"/api/cards/{id}/limits/fuel/day")
+        {
+            Content = new StringContent("{\"amount\":50}", Encoding.UTF8, "application/json"),
+        };
+
+        using var response = await api.SendRawAsync(request);
+        var raw = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        PanScanner.AssertNoPan(raw, "400 body");
+        Assert.Equal(auditBefore, await _factory.Database.CountAuditEventsAsync());
         Assert.Equal(limitsBefore, (await api.GetCardAsync(id)).Body!.Limits.Count);
+    }
+
+    // T-I-3 · PR-09 review m-1
+    // Given the R-11 bounds, When PUT 1000000.00 and 0.00, Then both are accepted (inclusive) and the error text names the same maximum
+    // Catches: API bound differing from MoneyBounds / R-11
+    [Fact]
+    public async Task Limit_bounds_are_inclusive()
+    {
+        var api = _factory.CreateApiClient();
+        var id = (await _factory.Database.CardIdAsync("Ops van")).Value;
+
+        var max = await api.SetLimitAsync(id, "fuel", "week", "1000000.00");
+        var zero = await api.SetLimitAsync(id, "fuel", "month", "0.00");
+        var over = await api.SetLimitAsync(id, "fuel", "week", "1000000.01");
+
+        Assert.Equal(HttpStatusCode.OK, max.Status);
+        Assert.Equal("1000000.00", max.Body?.Amount);
+        Assert.Equal(HttpStatusCode.OK, zero.Status);
+        Assert.Equal("0.00", zero.Body?.Amount);
+        Assert.Equal(HttpStatusCode.BadRequest, over.Status);
+        Assert.Contains("1000000.00", over.Raw);
+        Assert.Equal("1000000.00", (await api.GetCardAsync(id)).Body!.Limits.Single(l => l is { Category: "fuel", Period: "week" }).Amount);
     }
 
     // T-I-3 · PR-09 · integration

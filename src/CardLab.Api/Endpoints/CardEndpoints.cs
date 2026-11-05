@@ -1,4 +1,4 @@
-using CardLab.Api.Contracts;
+﻿using CardLab.Api.Contracts;
 using CardLab.Domain.Application;
 using CardLab.Domain.Common;
 using CardLab.Domain.Controls;
@@ -94,7 +94,7 @@ public static class CardEndpoints
         }
 
         return result.Error == DomainError.InvalidAmount
-            ? TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["amount"] = ["Amount must be between 0.00 and 999,999.99 with at most two decimal places."] })
+            ? TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["amount"] = ["Amount must be between 0.00 and 1000000.00 with at most two decimal places."] })
             : CardNotFound();
     }
 

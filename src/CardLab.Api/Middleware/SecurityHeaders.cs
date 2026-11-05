@@ -54,19 +54,27 @@ public static class SecurityHeaders
 /// <c>Microsoft.Data.SqlClient.SqlException</c> / EF connection failures ("Service unavailable"). Never includes request
 /// bodies or exception messages that could carry a card number.
 /// </summary>
-/// <remarks>Any other exception returns false so the default 500 handling applies. Needs <c>AddProblemDetails</c>.</remarks>
+/// <remarks><c>BadHttpRequestException</c> (an unbindable request body) maps to its own 4xx status as "Bad request". Any other exception returns false so the default 500 handling applies. Needs <c>AddProblemDetails</c>.</remarks>
 public sealed class CardLabExceptionHandler(IProblemDetailsService problemDetails) : IExceptionHandler
 {
     /// <inheritdoc />
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
+        int status;
         string title;
-        if (exception is CardLockTimeoutException)
+        if (exception is BadHttpRequestException badRequest)
         {
+            status = badRequest.StatusCode;
+            title = "Bad request";
+        }
+        else if (exception is CardLockTimeoutException)
+        {
+            status = StatusCodes.Status503ServiceUnavailable;
             title = "Try again";
         }
         else if (IsSqlFailure(exception))
         {
+            status = StatusCodes.Status503ServiceUnavailable;
             title = "Service unavailable";
         }
         else
@@ -74,11 +82,11 @@ public sealed class CardLabExceptionHandler(IProblemDetailsService problemDetail
             return false;
         }
 
-        httpContext.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+        httpContext.Response.StatusCode = status;
         return await problemDetails.TryWriteAsync(new ProblemDetailsContext
         {
             HttpContext = httpContext,
-            ProblemDetails = { Status = StatusCodes.Status503ServiceUnavailable, Title = title },
+            ProblemDetails = { Status = status, Title = title },
         });
     }
 
