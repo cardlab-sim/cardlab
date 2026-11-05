@@ -10,6 +10,7 @@
 | BUG-004 | reviewer (PR-04) | S3 | AC-20 | Timestamps outside the calendar range or in non-ISO text pass validation | design | fix-now (PR-04 fix round) | fixed | build (PR-04 fix round) | | 2026-11-05 |
 | BUG-005 | reviewer (PR-08) | S2 | NFR-1, AC-24 | A 16-digit merchant name is stored and returned in history | design | fix-now (option A, PR-08 fix round) | fixed | build (PR-08 fix round) | | 2026-11-05 |
 | BUG-006 | reviewer (PR-08) | S3 | AC-20 | Non-binding JSON body gives 500 (Development) / empty 400 instead of ProblemDetails | plan | fix-now (PR-09 fix round) | fixed | build (PR-09 fix round) | | 2026-11-05 |
+| BUG-007 | coder (PR-10, axe) | S2 | AC-37, NFR-6 | Scrollable table container is not keyboard-focusable (axe scrollable-region-focusable, serious) | code | fix-now (PR-10, released DataTable files) | approved | build (PR-10) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -83,3 +84,14 @@ Fix: `ThrowOnBadRequest = true` (route handler options) in `Program.cs` and map 
 Fix in PR-09's fix round (PR-09 owns `CardLabExceptionHandler`; `src/CardLab.Api/Program.cs`, owned by merged PR-00b, released to PR-09). Orchestrator under the human's standing instruction.
 ### Resolution
 PR-09 fix round (#13): `ThrowOnBadRequest = true` + `BadHttpRequestException` → ProblemDetails 400 without the message; tests on both endpoints; checks in reviews/PR-09.review.md.
+
+## BUG-007
+**Repro:** Playwright T-E-5 axe check on `/cards/:id` at 1024 px (and T-E-6's final axe call at 1280 px in CI) reports `scrollable-region-focusable` (serious).
+**Expected / actual:** zero critical/serious axe violations (AC-37) / one serious violation.
+**Evidence:** PR-10 coder report; `web/src/components/DataTable.tsx` renders `<div class="scroll">` with `overflow-x:auto` and no tabindex.
+### Triage (orchestrator assessment pass)
+Root cause visible in code (PR-02 primitive). Fix: the scroll container gets `tabIndex={0}`, `role="region"` and `aria-label` = the table caption; a component test asserts it. Effort tiny; fix-worth high (blocks CI e2e and AC-37).
+### Decision (orchestrator, 2026-11-05)
+Fix now in PR-10: `web/src/components/DataTable.tsx` and `web/src/components/components.test.tsx` (PR-02, merged) released to PR-10 so its CI goes green in one PR. Orchestrator under the human's standing instruction (autopilot: fix in code).
+### Resolution
+PR-10.
