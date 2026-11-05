@@ -11,6 +11,8 @@ builder.AddCardLabInfrastructure();
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<CardLabExceptionHandler>();
 builder.Services.AddOpenApi();
+// Unbindable bodies throw BadHttpRequestException so CardLabExceptionHandler answers a ProblemDetails 400 in every environment.
+builder.Services.Configure<RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
 
 var app = builder.Build();
 
