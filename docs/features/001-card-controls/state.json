@@ -138,7 +138,7 @@
         "PR-05",
         "PR-06"
       ],
-      "status": "review",
+      "status": "changes",
       "branch": "pr/001-card-controls/09-admin-api",
       "url": "https://github.com/cardlab-sim/cardlab/pull/13"
     },
@@ -262,6 +262,10 @@
     {
       "at": "2026-11-05T16:10Z",
       "event": "PR-08 review APPROVE WITH FIXES; BUG-005 (merchant PAN, option A) and BUG-006 (binding errors \u2192 PR-09) decided by orchestrator under standing instruction"
+    },
+    {
+      "at": "2026-11-05T16:30Z",
+      "event": "PR-09 review CHANGES (health commit format B-1, COEP header); BUG-006 and Program.cs release folded into PR-09 fix round"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

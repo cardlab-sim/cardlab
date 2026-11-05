@@ -27,7 +27,7 @@ Option A, because it uses the fallback the design already specifies, changes onl
 ### Resolution
 PR-03 fix round: deploy.yml stops setting `CardLab__Commit`; settings step after the package step; azure-setup.md says `CardLab__Commit` must stay unset on demo. Verification: see reviews/PR-03.review.md *Fixes verified*.
 
-Fixed in PR-03 (#4, squash 114bc15); checks in reviews/PR-03.review.md *Fixes verified*. Verified status waits for the validator's deploy evidence (T-C-2).
+Fixed in PR-03 (#4, squash 114bc15); checks in reviews/PR-03.review.md *Fixes verified*. Verified status waits for the validator's deploy evidence (T-C-2). PR-09 review B-1 (2026-11-05): health must strip the informational version to the part after '+', or the deploy wait never matches; fixed in PR-09's fix round.
 
 ## BUG-002
 **Repro:** in any worktree, `npm run build --prefix web` (part of the `build` gate), then `dotnet test tests/CardLab.Integration.Tests` → every `WebApplicationFactory` test (e.g. SeederTests) fails with `System.IO.DirectoryNotFoundException: ...\src\CardLab.Api\wwwroot\`. Deleting `web/dist` and `src/CardLab.Api/obj|bin` makes them pass (orchestrator: 2 failed → 14 passed).
@@ -71,7 +71,7 @@ Option A: `TransactionRules` rejects a merchant containing a run of 13 or more c
 ### Decision (orchestrator, 2026-11-05)
 Option A, because option B would break the approved NFR-1 ("no card numbers anywhere"); A is the smallest change that keeps it. Design erratum for §9/§10; no Gate 2 reopen. `TransactionRules.cs` and `TransactionRulesTests.cs` (PR-04, merged) released to PR-08's fix round. Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
 ### Resolution
-PR-08 fix round.
+PR-08 fix round. (PR-09 review M-2 found the same gap independently; covered here.)
 
 ## BUG-006
 **Repro:** `POST /api/authorisations` with `{"cardNumber": 9999000100000001, ...}` (number, not string) → 500 on the Development host, empty-body 400 in Production; the admin limit PUT has the same gap.
