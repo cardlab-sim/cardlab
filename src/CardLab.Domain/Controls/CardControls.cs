@@ -8,7 +8,8 @@ namespace CardLab.Domain.Controls;
 /// </summary>
 /// <remarks>
 /// Audit value format: status as enum name (<c>"Active"</c>, <c>"Frozen"</c>); limit as
-/// <c>"{Category}/{Period}/{Money}"</c>, e.g. <c>"Fuel/Day/50.00"</c>./// </remarks>
+/// <c>"{Category}/{Period}/{Money}"</c>, e.g. <c>"Fuel/Day/50.00"</c>.
+/// </remarks>
 public static class CardControls
 {
     /// <summary>Freezes an active card.</summary>
