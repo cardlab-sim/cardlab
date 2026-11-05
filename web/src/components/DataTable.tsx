@@ -27,7 +27,9 @@ export function DataTable<T>({ caption, columns, rows, rowKey, emptyText }: Data
   const cellClass = (numeric: boolean | undefined): string | undefined =>
     numeric ? styles['numeric'] : undefined;
   return (
-    <div className={styles['scroll']}>
+    // A scrollable region must be keyboard reachable (WCAG 2.1.1, axe scrollable-region-focusable; BUG-007).
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+    <div className={styles['scroll']} tabIndex={0} role="region" aria-label={caption}>
       <table className={styles['table']}>
         <caption className={styles['caption']}>{caption}</caption>
         <thead>
