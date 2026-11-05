@@ -3,8 +3,8 @@ using System.Text;
 using CardLab.Domain.Ports;
 using CardLab.Infrastructure.Lookup;
 using CardLab.Infrastructure.Options;
-using TestSeed = CardLab.TestKit.Seed;
 using Microsoft.Extensions.Options;
+using TestSeed = CardLab.TestKit.Seed;
 
 namespace CardLab.Integration.Tests.Lookup;
 

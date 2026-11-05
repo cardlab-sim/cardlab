@@ -15,7 +15,8 @@ public sealed class SeededAdminActor : ICurrentActor
     public SeededAdminActor(IOptions<SeedOptions> options) => _options = options;
 
     /// <inheritdoc />
-    public Actor Current {
+    public Actor Current
+    {
         get
         {
             var seed = _options.Value;
