@@ -2,7 +2,7 @@
   "feature": "001-card-controls",
   "title": "Card controls: freeze/unfreeze and per-category spend limits",
   "lane": "L",
-  "phase": "build",
+  "phase": "validate",
   "base_branch": "main",
   "feature_branch": "feat/001-card-controls",
   "gates": {
@@ -187,15 +187,14 @@
         "PR-10",
         "PR-11"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/13-fix-feature-e2e",
       "url": "https://github.com/cardlab-sim/cardlab/pull/16"
     }
   ],
   "bugs_open": [
     "BUG-001",
-    "BUG-009",
-    "BUG-010"
+    "BUG-008"
   ],
   "resume": null,
   "history": [
@@ -342,6 +341,10 @@
     {
       "at": "2026-11-06T00:10Z",
       "event": "PR-13 pr-light APPROVE WITH FIXES; BUG-010 (focus lost after actions) decided by orchestrator under standing instruction, folded into PR-13"
+    },
+    {
+      "at": "2026-11-06T00:50Z",
+      "event": "PR-13 fixes verified (focus mutation on both browsers), merged (#16); BUG-009, BUG-010 fixed; all feature-review findings addressed; phase validate"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
