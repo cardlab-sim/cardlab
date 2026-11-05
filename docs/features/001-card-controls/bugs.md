@@ -7,6 +7,7 @@
 | BUG-001 | reviewer (PR-03) | S3 | AC-27, AC-34 | Deploy health wait trusts a configured commit, not the deployed build | design | fix-now (option A) | fixed | build (PR-03 fix round) | | 2026-11-05 |
 | BUG-002 | coder (PR-06), reproduced by orchestrator | S2 | AC-34, R-9 | Host tests throw DirectoryNotFoundException for wwwroot after a web build | plan (skeleton PR-00) | fix-now (skeleton delta PR-00b) | fixed | build (PR-00b before wave 3) | | 2026-11-05 |
 | BUG-003 | reviewer (PR-07) | S3 | AC-23 | FakeApiClient writes audit values in a format the API never returns | test-harness | fix-now (fold into PR-07 fix round) | fixed | build (PR-07 fix round) | | 2026-11-05 |
+| BUG-004 | reviewer (PR-04) | S3 | AC-20 | Timestamps outside the calendar range or in non-ISO text pass validation | design | fix-now (PR-04 fix round) | approved | build (PR-04 fix round) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -47,3 +48,14 @@ Test-harness layer; brief PR-07 also lacked the §6 value format. Fix: fake emit
 Fix now inside PR-07's fix round: `web/src/api/fakeApiClient.ts` and `web/src/api/fakeApiClient.test.ts` released to PR-07 (PR-02 is merged; no other open PR owns them). Orchestrator under the human's standing instruction.
 ### Resolution
 PR-07 fix round (#7): fake emits the §6 format, audit formatter never throws, new API-format audit test. Verified via reviews/PR-07.review.md *Fixes verified*; E2E (PR-10) will exercise the real API.
+
+## BUG-004
+**Repro:** `POST /api/authorisations` with `timestamp: "9999-12-31T12:00:00Z"` passes `TransactionRules.Validate` and `PeriodCalendar.RangeContaining` throws `ArgumentOutOfRangeException` (would be a 500, not `invalid_request`); `"04/11/2026 10:00:00 +00:00"` is accepted and read as 11 April.
+**Expected / actual:** malformed or out-of-range timestamps decline with `invalid_request` (AC-20) / they crash or are misread.
+**Evidence:** reviews/PR-04.review.md F-1 and F-5 (`upstream:design`).
+### Triage (reviewer)
+Design §9 lists "bad timestamp" without defining it. Option A: timestamps must be strict ISO-8601 with an explicit offset (`yyyy-MM-ddTHH:mm:ss[.fff](Z|±hh:mm)`) and fall in [2000-01-01T00:00Z, 2100-01-01T00:00Z); anything else is a `timestamp` problem.
+### Decision (orchestrator, 2026-11-05)
+Option A (the reviewer's recommendation), recorded as a design erratum for §9; no Gate 2 reopen. Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended".
+### Resolution
+PR-04 fix round.
