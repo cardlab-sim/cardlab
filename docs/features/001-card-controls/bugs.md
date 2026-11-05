@@ -6,7 +6,7 @@
 |-----|----------|----------|------|-------|------------------|----------|--------|-----------|-------|---------|
 | BUG-001 | reviewer (PR-03) | S3 | AC-27, AC-34 | Deploy health wait trusts a configured commit, not the deployed build | design | fix-now (option A) | fixed | build (PR-03 fix round) | | 2026-11-05 |
 | BUG-002 | coder (PR-06), reproduced by orchestrator | S2 | AC-34, R-9 | Host tests throw DirectoryNotFoundException for wwwroot after a web build | plan (skeleton PR-00) | fix-now (skeleton delta PR-00b) | fixed | build (PR-00b before wave 3) | | 2026-11-05 |
-| BUG-003 | reviewer (PR-07) | S3 | AC-23 | FakeApiClient writes audit values in a format the API never returns | test-harness | fix-now (fold into PR-07 fix round) | approved | build (PR-07 fix round) | | 2026-11-05 |
+| BUG-003 | reviewer (PR-07) | S3 | AC-23 | FakeApiClient writes audit values in a format the API never returns | test-harness | fix-now (fold into PR-07 fix round) | fixed | build (PR-07 fix round) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -46,4 +46,4 @@ Test-harness layer; brief PR-07 also lacked the §6 value format. Fix: fake emit
 ### Decision (orchestrator, 2026-11-05)
 Fix now inside PR-07's fix round: `web/src/api/fakeApiClient.ts` and `web/src/api/fakeApiClient.test.ts` released to PR-07 (PR-02 is merged; no other open PR owns them). Orchestrator under the human's standing instruction.
 ### Resolution
-PR-07 fix round.
+PR-07 fix round (#7): fake emits the §6 format, audit formatter never throws, new API-format audit test. Verified via reviews/PR-07.review.md *Fixes verified*; E2E (PR-10) will exercise the real API.
