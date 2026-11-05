@@ -31,6 +31,17 @@
       "url": "https://github.com/cardlab-sim/cardlab/pull/2"
     },
     {
+      "id": "PR-00b",
+      "title": "Host starts with or without the built SPA (BUG-002)",
+      "wave": 2,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "coding",
+      "branch": "pr/001-card-controls/00b-wwwroot",
+      "url": ""
+    },
+    {
       "id": "PR-01",
       "title": "Test harness and domain vocabulary (Money, wire names)",
       "wave": 1,
@@ -70,9 +81,9 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/001-card-controls/04-decision-core",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/9"
     },
     {
       "id": "PR-05",
@@ -81,9 +92,9 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "coding",
+      "status": "changes",
       "branch": "pr/001-card-controls/05-card-controls",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/8"
     },
     {
       "id": "PR-06",
@@ -92,9 +103,9 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/001-card-controls/06-sql-store",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/10"
     },
     {
       "id": "PR-07",
@@ -103,9 +114,9 @@
       "depends_on": [
         "PR-02"
       ],
-      "status": "coding",
+      "status": "changes",
       "branch": "pr/001-card-controls/07-card-detail",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/7"
     },
     {
       "id": "PR-08",
@@ -153,12 +164,14 @@
         "PR-09"
       ],
       "status": "planned",
-      "branch": "pr/001-card-controls/11-cross-path",
+      "branch": "pr/001-card-controls/11-cross-path-checks",
       "url": ""
     }
   ],
   "bugs_open": [
-    "BUG-001"
+    "BUG-001",
+    "BUG-002",
+    "BUG-003"
   ],
   "resume": null,
   "history": [
@@ -213,6 +226,10 @@
     {
       "at": "2026-11-05T11:30Z",
       "event": "PR-01 fixes verified (no-lock mutation), merged (#6); wave 1 complete; PR-04, PR-05, PR-06 dispatched"
+    },
+    {
+      "at": "2026-11-05T12:30Z",
+      "event": "PR-05 and PR-07 reviews CHANGES; BUG-002 (skeleton wwwroot, S2) \u2192 PR-00b; BUG-003 (fake audit format) folded into PR-07; brief amends PR-05/06/07/08/09/10"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
