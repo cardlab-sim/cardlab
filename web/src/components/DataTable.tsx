@@ -22,12 +22,15 @@ export interface DataTableProps<T> {
   emptyText: string;
 }
 
-/** Semantic `<table>` (thead/th scope="col"/tbody) inside an `overflow-x: auto` container (§4.1 table rule). */
+/** Semantic `<table>` (thead/th scope="col"/tbody) inside an `overflow-x: auto` container (§4.1 table rule). The container is a keyboard-focusable
+ * `region` named by the caption, so a scrolled table stays reachable without a mouse (BUG-007). */
 export function DataTable<T>({ caption, columns, rows, rowKey, emptyText }: DataTableProps<T>) {
   const cellClass = (numeric: boolean | undefined): string | undefined =>
     numeric ? styles['numeric'] : undefined;
   return (
-    <div className={styles['scroll']}>
+    // A scrollable region must be keyboard reachable (WCAG 2.1.1, axe scrollable-region-focusable; BUG-007).
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+    <div className={styles['scroll']} tabIndex={0} role="region" aria-label={caption}>
       <table className={styles['table']}>
         <caption className={styles['caption']}>{caption}</caption>
         <thead>

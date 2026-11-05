@@ -110,6 +110,22 @@ describe('primitives', () => {
     expect(screen.queryByText('Nothing here')).toBeNull();
   });
 
+  // BUG-007: a horizontally scrollable table container must be keyboard reachable and named (axe scrollable-region-focusable)
+  test('DataTable scroll container is a focusable region named by the caption', () => {
+    render(
+      <DataTable
+        caption="Cards"
+        columns={[{ header: 'Name', cell: (r: { n: string }) => r.n }]}
+        rows={[{ n: 'Ops van' }]}
+        rowKey={(r) => r.n}
+        emptyText="Nothing here"
+      />,
+    );
+    const region = screen.getByRole('region', { name: 'Cards' });
+    expect(region).toHaveAttribute('tabindex', '0');
+    expect(within(region).getByRole('table', { name: 'Cards' })).toBeInTheDocument();
+  });
+
   test('T-W-6 app shell has header identity, a skip link first, and main content', () => {
     render(
       <MemoryRouter>
