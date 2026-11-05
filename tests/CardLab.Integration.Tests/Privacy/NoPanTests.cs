@@ -1,4 +1,6 @@
+using System.Net;
 using System.Text;
+using CardLab.Api.Contracts;
 using CardLab.Domain.Authorisation;
 using CardLab.Integration.Tests.Harness;
 using CardLab.TestKit;
@@ -26,34 +28,44 @@ public sealed class NoPanTests : IClassFixture<ApiFactory>
         var client = _factory.CreateApiClient();
         var id = (await _factory.Database.CardIdAsync(TestSeed.OpsVan.Name)).Value;
         var before = await _factory.Database.CountTransactionsAsync();
+        _factory.Logs.Clear();
         var bodies = new List<(string Where, string Raw)>();
-        void Record(string where, string raw) => bodies.Add((where, raw));
+        ApiResponse<T> Record<T>(string where, ApiResponse<T> response)
+        {
+            bodies.Add((where, response.Raw));
+            return response;
+        }
 
-        Record("freeze", (await client.FreezeAsync(id)).Raw);
-        Record("authorise frozen", (await client.AuthoriseAsync(Request("5.00"))).Raw);
-        Record("unfreeze", (await client.UnfreezeAsync(id)).Raw);
-        Record("set limit", (await client.SetLimitAsync(id, "fuel", "day", "50.00")).Raw);
-        Record("change limit", (await client.SetLimitAsync(id, "fuel", "day", "30.00")).Raw);
-        Record("authorise approved", (await client.AuthoriseAsync(Request("20.00"))).Raw);
-        Record("authorise limit_exceeded", (await client.AuthoriseAsync(Request("20.00"))).Raw);
-        Record("simulate", (await client.SimulatePurchaseAsync(id, new SimulatedPurchase("1.00", "fuel", "Shell", "2026-11-04T10:00:00Z"))).Raw);
-        Record("remove limit", (await client.RemoveLimitAsync(id, "fuel", "day")).Raw);
-        Record("unknown card", (await client.AuthoriseAsync(Request("5.00") with { CardNumber = TestSeed.UnknownCardNumber })).Raw);
+        static void AssertDecision(ApiResponse<DecisionDto> response, string reason)
+        {
+            Assert.Equal(reason, response.Body?.Reason);
+        }
+
+        Assert.Equal("frozen", Record("freeze", await client.FreezeAsync(id)).Body?.Status);
+        AssertDecision(Record("authorise frozen", await client.AuthoriseAsync(Request("5.00"))), "card_frozen");
+        Assert.Equal("active", Record("unfreeze", await client.UnfreezeAsync(id)).Body?.Status);
+        Assert.Equal(HttpStatusCode.OK, Record("set limit", await client.SetLimitAsync(id, "fuel", "day", "50.00")).Status);
+        Assert.Equal(HttpStatusCode.OK, Record("change limit", await client.SetLimitAsync(id, "fuel", "day", "30.00")).Status);
+        AssertDecision(Record("authorise approved", await client.AuthoriseAsync(Request("20.00"))), "approved");
+        AssertDecision(Record("authorise limit_exceeded", await client.AuthoriseAsync(Request("20.00"))), "limit_exceeded");
+        AssertDecision(Record("simulate", await client.SimulatePurchaseAsync(id, new SimulatedPurchase("1.00", "fuel", "Shell", "2026-11-04T10:00:00Z"))), "approved");
+        Assert.Equal(HttpStatusCode.NoContent, Record("remove limit", await client.RemoveLimitAsync(id, "fuel", "day")).Status);
+        AssertDecision(Record("unknown card", await client.AuthoriseAsync(Request("5.00") with { CardNumber = TestSeed.UnknownCardNumber })), "card_not_found");
         var storedBeforeMalformed = await _factory.Database.CountTransactionsAsync();
-        Record("pan in category", (await client.AuthoriseAsync(Request("5.00", category: TestSeed.OpsVan.CardNumber))).Raw);
-        Record("pan in merchant", (await client.AuthoriseAsync(Request("5.00", merchant: TestSeed.OpsVan.CardNumber))).Raw);
-        Record("spaced pan in merchant", (await client.AuthoriseAsync(Request("5.00", merchant: "9999 0001 0000 0001"))).Raw);
-        Record("13-digit merchant", (await client.AuthoriseAsync(Request("5.00", merchant: "1234567890123"))).Raw);
-        Record("pan in simulate category", (await client.SimulatePurchaseAsync(id, new SimulatedPurchase("5.00", TestSeed.OpsVan.CardNumber, "Shell", "2026-11-04T10:00:00Z"))).Raw);
-        Record("malformed json", await PostMalformedJsonAsync(client));
+        AssertDecision(Record("pan in category", await client.AuthoriseAsync(Request("5.00", category: TestSeed.OpsVan.CardNumber))), "invalid_request");
+        AssertDecision(Record("pan in merchant", await client.AuthoriseAsync(Request("5.00", merchant: TestSeed.OpsVan.CardNumber))), "invalid_request");
+        AssertDecision(Record("spaced pan in merchant", await client.AuthoriseAsync(Request("5.00", merchant: "9999 0001 0000 0001"))), "invalid_request");
+        AssertDecision(Record("13-digit merchant", await client.AuthoriseAsync(Request("5.00", merchant: "1234567890123"))), "invalid_request");
+        AssertDecision(Record("pan in simulate category", await client.SimulatePurchaseAsync(id, new SimulatedPurchase("5.00", TestSeed.OpsVan.CardNumber, "Shell", "2026-11-04T10:00:00Z"))), "invalid_request");
+        bodies.Add(("malformed json", await PostMalformedJsonAsync(client)));
         Assert.Equal(storedBeforeMalformed, await _factory.Database.CountTransactionsAsync());
         Assert.True(storedBeforeMalformed > before);
 
         var list = await client.ListCardsAsync();
-        Record("list cards", list.Raw);
-        Record("get card", (await client.GetCardAsync(id)).Raw);
-        Record("transactions", (await client.ListTransactionsAsync(id)).Raw);
-        Record("audit", (await client.ListAuditAsync(id)).Raw);
+        Record("list cards", list);
+        Record("get card", await client.GetCardAsync(id));
+        Record("transactions", await client.ListTransactionsAsync(id));
+        Record("audit", await client.ListAuditAsync(id));
 
         foreach (var (where, raw) in bodies)
         {
@@ -61,7 +73,8 @@ public sealed class NoPanTests : IClassFixture<ApiFactory>
         }
 
         _factory.Logs.AssertNoPan();
-        Assert.NotEmpty(_factory.Logs.Records);
+        Assert.Equal(10, _factory.Logs.All("AuthorisationDecided").Count);
+        Assert.Equal(5, _factory.Logs.All("ControlChanged").Count);
         PanScanner.AssertNoPan(await _factory.Database.DumpAllRowsAsync(), "stored rows");
         foreach (var card in TestSeed.Cards)
         {
@@ -70,6 +83,7 @@ public sealed class NoPanTests : IClassFixture<ApiFactory>
 
         Assert.Contains("\"lastFour\":\"0001\"", bodies.Single(b => b.Where == "get card").Raw);
         Assert.DoesNotContain("1234567890123", string.Join(' ', bodies.Select(b => b.Raw)));
+        Assert.DoesNotContain("9999 0001 0000 0001", string.Join(' ', bodies.Select(b => b.Raw)));
         Assert.DoesNotContain("1234567890123", await _factory.Database.DumpAllRowsAsync());
     }
 

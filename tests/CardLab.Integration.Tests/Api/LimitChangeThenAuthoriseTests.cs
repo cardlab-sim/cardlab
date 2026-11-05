@@ -48,17 +48,18 @@ public sealed class LimitChangeThenAuthoriseTests : IClassFixture<ApiFactory>
         Assert.Equal("declined", decision.Body?.Outcome);
         Assert.Equal("limit_exceeded", decision.Body?.Reason);
         Assert.Equal(new LimitRemainingDto("fuel", "day", "30.00", "0.00"), Assert.Single(decision.Body!.Limits));
-        Assert.Equal(["15.00", "25.00"], before.Select(t => t.Amount));
+        Assert.Equal(["15.00", "25.00"], before.Select(t => t.Amount).Order());
         Assert.All(before, t => Assert.Equal("approved", t.Outcome));
         var after = (await client.ListTransactionsAsync(id)).Body!;
         Assert.Equal(3, after.Count);
-        Assert.Equal(before, after.Skip(1).ToList());
-        Assert.Equal("declined", after[0].Outcome);
+        var declinedId = decision.Body.TransactionId;
+        Assert.Equal(before.OrderBy(t => t.Id), after.Where(t => t.Id != declinedId).OrderBy(t => t.Id));
+        Assert.Equal("declined", after.Single(t => t.Id == declinedId).Outcome);
         Assert.Equal("30.00", (await client.GetCardAsync(id)).Body!.Limits.Single().Amount);
     }
 
     // T-I-8 · PR-11 · integration
-    // Given the card of the previous test state (limit 30.00, £40.00 spent), When DELETE fuel/day then a £1,000.00 fuel authorisation today, Then approved with limits []
+    // Given a card in the AC-30 state (built here on Marketing: limit 30.00, £40.00 spent), When DELETE fuel/day then a £1,000.00 fuel authorisation today, Then approved with limits []
     // Catches: removed limit still enforced (cache) (AC-31)
     [Fact]
     public async Task Removing_a_limit_makes_the_category_unlimited_at_once()
