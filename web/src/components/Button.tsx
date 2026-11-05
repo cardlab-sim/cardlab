@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes } from 'react';
-import { notImplemented } from '../notImplemented';
+import styles from './Button.module.css';
 
 /** Props of Button: a native `<button>` plus a visual variant and a pending state. */
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -11,10 +11,27 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   pendingLabel?: string;
 }
 
-/**
- * Native button primitive (§4.1): ≥ 44 px tall, visible 2 px focus ring, tokens only, `type="button"` unless set.
- * Implemented in PR-02 (with Button.module.css).
- */
-export function Button(props: ButtonProps) {
-  return notImplemented('PR-02', props);
+/** Native button primitive (§4.1): ≥ 44 px tall, visible 2 px focus ring, tokens only, `type="button"` unless set. */
+export function Button({
+  variant = 'primary',
+  pending = false,
+  pendingLabel = 'Working…',
+  type = 'button',
+  disabled,
+  className,
+  children,
+  ...rest
+}: ButtonProps) {
+  const classes = [styles['button'], styles[variant], className].filter(Boolean).join(' ');
+  return (
+    <button
+      {...rest}
+      type={type}
+      className={classes}
+      disabled={pending || disabled}
+      aria-busy={pending ? true : undefined}
+    >
+      {pending ? pendingLabel : children}
+    </button>
+  );
 }
