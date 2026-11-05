@@ -5,19 +5,23 @@ import styles from './Button.module.css';
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** primary (default) | secondary | destructive. */
   variant?: 'primary' | 'secondary' | 'destructive';
-  /** While true: disabled, `aria-busy="true"`, label replaced by `pendingLabel` (Submit Feedback rule). */
+  /** While true: `aria-disabled` (keeps focus), clicks ignored, `aria-busy="true"`, label replaced by `pendingLabel` (Submit Feedback rule). */
   pending?: boolean;
   /** Text shown while pending, e.g. "Saving…". Default "Working…". */
   pendingLabel?: string;
 }
 
-/** Native button primitive (§4.1): ≥ 44 px tall, visible 2 px focus ring, tokens only, `type="button"` unless set. */
+/**
+ * Native button primitive (§4.1): ≥ 44 px tall, visible 2 px focus ring, tokens only, `type="button"` unless set.
+ * While pending it stays focusable (`aria-disabled`, not native `disabled`) and ignores clicks and form submits (BUG-010).
+ */
 export function Button({
   variant = 'primary',
   pending = false,
   pendingLabel = 'Working…',
   type = 'button',
   disabled,
+  onClick,
   className,
   children,
   ...rest
@@ -28,7 +32,15 @@ export function Button({
       {...rest}
       type={type}
       className={classes}
-      disabled={pending || disabled}
+      disabled={disabled}
+      aria-disabled={pending ? true : undefined}
+      onClick={(event) => {
+        if (pending) {
+          event.preventDefault();
+          return;
+        }
+        onClick?.(event);
+      }}
       aria-busy={pending ? true : undefined}
     >
       {pending ? pendingLabel : children}

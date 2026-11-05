@@ -126,14 +126,13 @@ jobs:
           npm ci --prefix web
           npm run build --prefix web
       - name: Publish the host (with the SPA as wwwroot)
-        run: dotnet publish src/CardLab.Api -c Release -o publish
+        run: dotnet publish src/CardLab.Api -c Release -o publish -p:SourceRevisionId=${{ github.sha }}
       - name: Start the host
         env:
           ASPNETCORE_URLS: http://localhost:5080
           ASPNETCORE_ENVIRONMENT: Production
           ConnectionStrings__CardLab: Server=localhost,1433;Database=CardLab;User Id=sa;Password=Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!;TrustServerCertificate=True
           CardLab__TestEndpoints: 'true'
-          CardLab__Commit: ${{ github.sha }}
         run: |
           # The committed development key protects only fictional card numbers (DEC-8).
           export CardLab__LookupKey="$(jq -r .CardLab.LookupKey src/CardLab.Api/appsettings.Development.json)"
@@ -145,10 +144,12 @@ jobs:
             sleep 2
           done
           echo "::error::host did not become healthy"; cat host.log; exit 1
+      - name: Health reports the published commit (BUG-001 chain)
+        run: test "$(curl -fsS http://localhost:5080/api/health | jq -r .commit)" = "${{ github.sha }}"
       - run: npm ci --prefix tests/e2e
-      - run: npx --prefix tests/e2e playwright install --with-deps chromium
-      - name: Playwright (project local)
-        run: npm run e2e --prefix tests/e2e -- --project local
+      - run: npx --prefix tests/e2e playwright install --with-deps chromium firefox
+      - name: Playwright (projects local and local-firefox)
+        run: npm run e2e --prefix tests/e2e -- --project local --project local-firefox
       - name: Upload the Playwright report
         if: failure()
         uses: actions/upload-artifact@v4

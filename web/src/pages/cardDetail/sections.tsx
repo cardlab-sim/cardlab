@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useApi } from '../../api/ApiContext';
 import { ApiError } from '../../api/apiClient';
 import type {
@@ -121,6 +121,8 @@ export function LimitsSection({
   const [removeFailed, setRemoveFailed] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // The Remove button disappears with its row, so focus moves to the success notice (BUG-010, §4.1).
+  const focusDoneNext = useRef(false);
 
   const save = async (): Promise<void> => {
     const trimmed = amount.trim();
@@ -151,6 +153,7 @@ export function LimitsSection({
       await api.removeLimit(cardId, limit.category, limit.period);
       await onChanged();
       setDone(`Limit removed: ${limitText(limit.category, limit.period)}`);
+      focusDoneNext.current = true;
     } catch {
       setRemoveFailed(true);
     } finally {
@@ -182,7 +185,19 @@ export function LimitsSection({
   return (
     <section aria-labelledby="limits-heading" className={styles['section']}>
       <h2 id="limits-heading">Spend limits</h2>
-      {done !== null && <Notice tone="success">{done}</Notice>}
+      {done !== null && (
+        <div
+          tabIndex={-1}
+          ref={(element) => {
+            if (element && focusDoneNext.current) {
+              focusDoneNext.current = false;
+              element.focus();
+            }
+          }}
+        >
+          <Notice tone="success">{done}</Notice>
+        </div>
+      )}
       {removeFailed && (
         <Notice tone="error" title="Could not remove the limit">
           Something went wrong. Please try again.

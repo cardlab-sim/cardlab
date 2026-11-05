@@ -86,7 +86,7 @@ describe('CardDetailPage', () => {
     await user.click(simulate.getByRole('button', { name: 'Submit' }));
 
     const pending = simulate.getByRole('button', { name: 'Simulating…' });
-    expect(pending).toBeDisabled();
+    expect(pending).toHaveAttribute('aria-disabled', 'true');
 
     release();
     const result = await simulate.findByRole('status');
@@ -331,7 +331,10 @@ describe('CardDetailPage', () => {
 
     const release = fake.hold();
     await user.click(limits.getByRole('button', { name: 'Remove Fuel day limit' }));
-    expect(limits.getByRole('button', { name: 'Removing…' })).toBeDisabled();
+    expect(limits.getByRole('button', { name: 'Removing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
 
     release();
     expect(await limits.findByRole('status')).toHaveTextContent('Limit removed: Fuel day');
@@ -363,7 +366,10 @@ describe('CardDetailPage', () => {
     await user.click(await screen.findByRole('button', { name: 'Freeze' }));
 
     await screen.findByRole('button', { name: 'Freezing…' });
-    expect(screen.getByRole('button', { name: 'Freezing…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Freezing…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     gated.release();
     expect(await screen.findByRole('button', { name: 'Unfreeze' })).toBeEnabled();
   });
