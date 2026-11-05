@@ -1,4 +1,3 @@
-using System.Reflection;
 using CardLab.Api.Contracts;
 using CardLab.Infrastructure;
 using CardLab.Infrastructure.Options;
@@ -29,7 +28,7 @@ public static class HealthEndpoints
     {
         var commit = BuildInfo.Resolve(
             options.Value.Commit,
-            Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+            BuildInfo.InformationalVersion);
         return await probe.CanConnectAsync(ct)
             ? TypedResults.Ok(new HealthDto(commit, "ok"))
             : TypedResults.Json(new HealthDto(commit, "unreachable"), statusCode: StatusCodes.Status503ServiceUnavailable);

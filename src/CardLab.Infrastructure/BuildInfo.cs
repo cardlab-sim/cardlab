@@ -12,7 +12,11 @@ public static class BuildInfo
     public static string Commit(IConfiguration configuration) =>
         Resolve(
             configuration["CardLab:Commit"],
-            Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+            InformationalVersion);
+
+    /// <summary>The entry assembly's informational version, e.g. <c>1.0.0+&lt;sha&gt;</c>, or null.</summary>
+    public static string? InformationalVersion =>
+        Assembly.GetEntryAssembly()?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
 
     /// <summary>Commit: the configured value; else the part after the last '+' of the informational version; else "unknown".</summary>
     /// <param name="configured">The configured commit, possibly empty.</param>

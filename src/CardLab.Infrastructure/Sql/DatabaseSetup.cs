@@ -33,7 +33,16 @@ public static class DatabaseSetup
     /// <param name="services">Root service provider (a scope is created inside).</param>
     /// <param name="ct">Cancellation.</param>
     /// <returns>A task that completes when the database is ready.</returns>
-    public static async Task InitialiseDatabaseAsync(this IServiceProvider services, CancellationToken ct = default)
+    public static Task InitialiseDatabaseAsync(this IServiceProvider services, CancellationToken ct = default) =>
+        InitialiseDatabaseAsync(services, RetryWindow, RetryDelay, ct);
+
+    /// <summary>The retry loop of <see cref="InitialiseDatabaseAsync(IServiceProvider, CancellationToken)"/> with injectable timing (tests).</summary>
+    /// <param name="services">Root service provider.</param>
+    /// <param name="retryWindow">Total time during which a <see cref="SqlException"/> is retried.</param>
+    /// <param name="retryDelay">Delay between attempts.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>A task that completes when the database is ready.</returns>
+    internal static async Task InitialiseDatabaseAsync(IServiceProvider services, TimeSpan retryWindow, TimeSpan retryDelay, CancellationToken ct)
     {
         var logger = services.GetService<ILoggerFactory>()?.CreateLogger(typeof(DatabaseSetup).FullName!) ?? NullLogger.Instance;
         var clock = Stopwatch.StartNew();
@@ -44,10 +53,10 @@ public static class DatabaseSetup
                 await MigrateAndSeedAsync(services, ct);
                 return;
             }
-            catch (SqlException) when (clock.Elapsed + RetryDelay < RetryWindow)
+            catch (SqlException) when (!ct.IsCancellationRequested && clock.Elapsed + retryDelay < retryWindow)
             {
                 LogAttemptFailed(logger, null);
-                await Task.Delay(RetryDelay, ct);
+                await Task.Delay(retryDelay, ct);
             }
         }
     }
