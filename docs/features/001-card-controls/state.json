@@ -37,9 +37,9 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "coding",
+      "status": "merged",
       "branch": "pr/001-card-controls/00b-wwwroot",
-      "url": ""
+      "url": "https://github.com/cardlab-sim/cardlab/pull/11"
     },
     {
       "id": "PR-01",
@@ -92,7 +92,7 @@
       "depends_on": [
         "PR-01"
       ],
-      "status": "changes",
+      "status": "merged",
       "branch": "pr/001-card-controls/05-card-controls",
       "url": "https://github.com/cardlab-sim/cardlab/pull/8"
     },
@@ -230,6 +230,10 @@
     {
       "at": "2026-11-05T12:30Z",
       "event": "PR-05 and PR-07 reviews CHANGES; BUG-002 (skeleton wwwroot, S2) \u2192 PR-00b; BUG-003 (fake audit format) folded into PR-07; brief amends PR-05/06/07/08/09/10"
+    },
+    {
+      "at": "2026-11-05T13:00Z",
+      "event": "PR-05 fixes verified (constant-unfreeze mutation), merged (#8); PR-00b merged (#11, wwwroot/.gitkeep, repro before/after by coder); BUG-002 fixed"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",

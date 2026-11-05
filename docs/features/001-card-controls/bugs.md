@@ -5,7 +5,7 @@
 | BUG | Found by | Severity | AC/R | Title | Root-cause layer | Decision | Status | Resume at | Issue | Updated |
 |-----|----------|----------|------|-------|------------------|----------|--------|-----------|-------|---------|
 | BUG-001 | reviewer (PR-03) | S3 | AC-27, AC-34 | Deploy health wait trusts a configured commit, not the deployed build | design | fix-now (option A) | fixed | build (PR-03 fix round) | | 2026-11-05 |
-| BUG-002 | coder (PR-06), reproduced by orchestrator | S2 | AC-34, R-9 | Host tests throw DirectoryNotFoundException for wwwroot after a web build | plan (skeleton PR-00) | fix-now (skeleton delta PR-00b) | approved | build (PR-00b before wave 3) | | 2026-11-05 |
+| BUG-002 | coder (PR-06), reproduced by orchestrator | S2 | AC-34, R-9 | Host tests throw DirectoryNotFoundException for wwwroot after a web build | plan (skeleton PR-00) | fix-now (skeleton delta PR-00b) | fixed | build (PR-00b before wave 3) | | 2026-11-05 |
 | BUG-003 | reviewer (PR-07) | S3 | AC-23 | FakeApiClient writes audit values in a format the API never returns | test-harness | fix-now (fold into PR-07 fix round) | approved | build (PR-07 fix round) | | 2026-11-05 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
@@ -35,7 +35,7 @@ Root cause in the PR-00 skeleton wiring (static web assets/content root expects 
 ### Decision (orchestrator, 2026-11-05)
 Option A as PR-00b before wave 3. Orchestrator under the human's standing instruction: "make all decisions in requirements and tech design including as recommended" (autopilot: smallest blast radius, fix in code).
 ### Resolution
-PR-00b.
+PR-00b (#11, squash 1da512e): committed `src/CardLab.Api/wwwroot/.gitkeep` so a physical web root always exists. Coder repro on the PR-06 tests: before, SeederTests 2 failed with `DirectoryNotFoundException`; after, 2 passed with and without `web/dist`; publish still ships `wwwroot/index.html`. Orchestrator re-checks during PR-08/09 host runs.
 
 ## BUG-003
 **Repro:** `web/src/api/fakeApiClient.ts` (PR-02) records audit `oldValue/newValue` as `"50.00"` and `"active"`; design §6 and PR-05/PR-09 return `"Fuel/Day/50.00"` and `"Active"`/`"Frozen"`. PR-07's audit list formats with `formatMoney`, which throws on the real format (review B1).
