@@ -6,7 +6,6 @@ using Microsoft.Extensions.Options;
 namespace CardLab.Infrastructure.Identity;
 
 /// <summary>The seeded admin as the actor of every control change (no login in this feature; a later auth feature replaces this class only).</summary>
-/// <remarks>Implemented in PR-06.</remarks>
 public sealed class SeededAdminActor : ICurrentActor
 {
     private readonly IOptions<SeedOptions> _options;
@@ -16,5 +15,12 @@ public sealed class SeededAdminActor : ICurrentActor
     public SeededAdminActor(IOptions<SeedOptions> options) => _options = options;
 
     /// <inheritdoc />
-    public Actor Current => throw new NotImplementedException("PR-06");
+    public Actor Current
+    {
+        get
+        {
+            var seed = _options.Value;
+            return new Actor(seed.AdminId, seed.AdminName);
+        }
+    }
 }

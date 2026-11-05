@@ -1,4 +1,6 @@
 using CardLab.Domain.Ports;
+using CardLab.Infrastructure.Model;
+using CardLab.Infrastructure.Sql;
 using CardLab.Integration.Tests.Harness;
 using CardLab.TestKit.Contracts;
 
@@ -14,10 +16,31 @@ public sealed class SqlCardStoreContractTests : CardStoreContractTests, IClassFi
     public SqlCardStoreContractTests(SqlTestDatabase database) => _database = database;
 
     /// <inheritdoc />
-    protected override Task<ICardStore> CreateStoreAsync(IReadOnlyList<StoreSeedCard> cards) => throw new NotImplementedException("PR-06");
+    protected override async Task<ICardStore> CreateStoreAsync(IReadOnlyList<StoreSeedCard> cards)
+    {
+        await using (var db = _database.CreateDbContext())
+        {
+            // Card names are unique per account and every default-built card is "Test card", so each call gets a fresh
+            // account and the cards keep exactly the names they were seeded with.
+            var account = new BusinessAccountRow { Id = Guid.NewGuid(), Name = $"Contract {Guid.NewGuid():N}", TimeZoneId = "Europe/London" };
+            db.BusinessAccounts.Add(account);
+            db.Cards.AddRange(cards.Select(c => new CardRow
+            {
+                Id = c.Id.Value,
+                AccountId = account.Id,
+                Name = c.Name,
+                CardholderName = c.CardholderName,
+                LastFour = c.LastFour,
+                LookupHash = c.Lookup.ToBytes(),
+                Status = c.Status.ToString(),
+            }));
+            await db.SaveChangesAsync();
+        }
 
-    /// <summary>PR-06 implements this: a new SqlCardStore on a new DbContext over the class database.</summary>
-    /// <param name="seeded">A store returned by <see cref="CreateStoreAsync"/>.</param>
-    /// <returns>A store over the same data.</returns>
-    protected override Task<ICardStore> OpenStoreAsync(ICardStore seeded) => throw new NotImplementedException("PR-06");
+        return new SqlCardStore(_database.CreateDbContext());
+    }
+
+    /// <inheritdoc />
+    protected override Task<ICardStore> OpenStoreAsync(ICardStore seeded) =>
+        Task.FromResult<ICardStore>(new SqlCardStore(_database.CreateDbContext()));
 }

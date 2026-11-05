@@ -278,6 +278,28 @@ public abstract class CardStoreContractTests
         Assert.All(audit, a => Assert.Equal(card.Id, a.Event.Card.Id));
     }
 
+    // T-U-21 / T-I-12 · PR-06 review M-2 · contract
+    // Given a card, When one unit of work calls SetStatus, reads the state, then calls SetStatus twice more, Then the unit completes and the last status is stored
+    // Catches: a writer that cannot set the status more than once per unit of work (adapter drift from the fake)
+    [Fact]
+    public async Task Sets_status_repeatedly_in_one_unit_of_work()
+    {
+        var card = new CardBuilder().Build();
+        var store = await CreateStoreAsync([card]);
+
+        var seen = await store.WithCardLockAsync(card.Id, async w =>
+        {
+            w.SetStatus(CardStatus.Frozen);
+            var midway = (await w.GetStateAsync())!.Status;
+            w.SetStatus(CardStatus.Active);
+            w.SetStatus(CardStatus.Frozen);
+            return midway;
+        });
+
+        Assert.Equal(CardStatus.Frozen, seen);
+        Assert.Equal(CardStatus.Frozen, (await store.GetCardAsync(card.Id))!.Status);
+    }
+
     // T-U-21 / T-I-12 · PR-01 · contract
     // Given a card, When 10 concurrent WithCardLockAsync calls each read the transaction count and append one transaction, Then every work saw a distinct count 0..9 (serialised) and 10 rows exist
     // Catches: missing per-card lock (R-12, DEC-4)
