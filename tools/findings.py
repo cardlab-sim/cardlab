@@ -109,6 +109,37 @@ def save_review_state(repo, pr, sha, keys):
         gh("api", "-X", "POST", f"repos/{repo}/issues/{pr}/comments", "-f", f"body={body}")
 
 
+def render(rec, f, inline=True):
+    """Markdown for one finding. The suggestion becomes GitHub's one-click 'Commit suggestion' when inline."""
+    sev = rec["severity"]
+    head = f"**[money] {SEV_WORD.get(sev, sev)} ({sev})**"
+    pri = f.get("primary_requirement") or {}
+    others = [r for r in rec["requirement_ids"] if r != pri.get("id")]
+    if pri.get("id"):
+        head += f" · breaks **{pri['id']}**" + (f": \"{pri['quote']}\"" if pri.get("quote") else "")
+    if others:
+        head += " · also " + ", ".join(others[:4]) + (f" (+{len(others) - 4} more)" if len(others) > 4 else "")
+    if not pri.get("id") and not others:
+        head += " · no requirement cited"
+    head += f" · suspected layer: {rec['suspected_layer']}"
+    nl = "\n"
+    parts = [head, f"**{rec['title']}**", f.get("summary") or f.get("detail", "")]
+    impact = [i for i in (f.get("impact") or []) if i.strip()]
+    if impact:
+        parts.append("**Impact**" + nl + nl.join("- " + i for i in impact))
+    sug = (f.get("suggestion") or "").rstrip(nl)
+    if sug:
+        fence = "suggestion" if inline else "csharp"
+        title = "**Suggested fix** (one click: *Commit suggestion*)" if inline else "**Suggested fix**"
+        parts.append(title + nl + "```" + fence + nl + sug + nl + "```")
+    blk = " A blocker keeps blocking until it is fixed or dismissed." if sev == "S1" else ""
+    parts.append("<details><summary>How to respond</summary>" + nl + nl
+                 + "- `/fixed` after pushing the fix. Checked: the line changed and the re-review no longer raises it." + nl
+                 + "- `/dismiss <reason>` if it's wrong or not worth fixing. The reason is recorded." + nl
+                 + "- `/bug` to log it for triage." + blk + nl + "</details>")
+    return (nl + nl).join(p for p in parts if p) + nl + nl + "<!-- finding " + json.dumps(rec) + " -->"
+
+
 def cmd_post():
     repo, pr, sha = env("REPO"), int(env("PR")), env("HEAD_SHA")
     raw = os.environ.get("FINDINGS", "").strip()
@@ -124,27 +155,26 @@ def cmd_post():
             skipped += 1
             continue
         rec = {"id": f"F{pr}-{sha[:7]}-{i}", "key": key, "severity": sev, "path": f.get("path"),
-               "line": f.get("line"), "title": f.get("title"), "requirement_ids": f.get("requirement_ids", []),
+               "line": f.get("line"), "start_line": f.get("start_line"), "title": f.get("title"), "requirement_ids": f.get("requirement_ids", []),
                "suspected_layer": f.get("suspected_layer"), "reviewer": "money", "sha": sha,
                "run": os.environ.get("RUN_URL", "")}
-        reqs = ", ".join(rec["requirement_ids"]) or "no requirement cited"
-        body = (f"**[money] {SEV_WORD.get(sev, sev)} ({sev})** · {reqs} · suspected layer: {rec['suspected_layer']}\n\n"
-                f"**{rec['title']}**\n\n{f.get('detail', '')}\n\n"
-                f"Reply on this thread with one of:\n"
-                f"- `/fixed` after you've pushed the fix (checked: the commented line must have changed)\n"
-                f"- `/dismiss <reason>` if it's wrong or not worth fixing (the reason is recorded)\n"
-                f"- `/bug` to log it as a bug for triage" + (" (a blocker still blocks until fixed or dismissed)" if sev == "S1" else "")
-                + f"\n\n<!-- finding {json.dumps(rec)} -->")
+        body = render(rec, f)
         payload = {"body": body, "commit_id": sha, "path": rec["path"]}
         if isinstance(rec["line"], int) and rec["line"] > 0:
             payload.update(line=rec["line"], side="RIGHT")
+            sl = rec.get("start_line")
+            if isinstance(sl, int) and 0 < sl < rec["line"]:
+                payload.update(start_line=sl, start_side="RIGHT")
         else:
             payload["subject_type"] = "file"
         try:
             gh("api", "-X", "POST", f"repos/{repo}/pulls/{pr}/comments", "--input", "-", stdin=json.dumps(payload))
         except RuntimeError as e:  # line not in the diff: fall back to a file-level comment
             print(f"inline post failed ({e}); posting as file-level comment")
-            payload.pop("line", None); payload.pop("side", None); payload["subject_type"] = "file"
+            for k in ("line", "side", "start_line", "start_side"):
+                payload.pop(k, None)
+            payload["subject_type"] = "file"
+            payload["body"] = render(rec, f, inline=False)
             gh("api", "-X", "POST", f"repos/{repo}/pulls/{pr}/comments", "--input", "-", stdin=json.dumps(payload))
         posted.append(rec)
     with open("findings.json", "w", encoding="utf-8") as fh:
