@@ -1,15 +1,18 @@
 using CardLab.Domain.Application;
 using CardLab.Domain.Ports;
+using CardLab.Infrastructure.FakeBank;
 using CardLab.Infrastructure.Identity;
 using CardLab.Infrastructure.Lookup;
 using CardLab.Infrastructure.Model;
 using CardLab.Infrastructure.Options;
+using CardLab.Infrastructure.Payments;
 using CardLab.Infrastructure.Sql;
 using CardLab.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 
 namespace CardLab.Infrastructure;
 
@@ -28,6 +31,8 @@ public static class DependencyInjection
         services.Configure<CardLabOptions>(builder.Configuration.GetSection(CardLabOptions.Section));
         services.Configure<LookupOptions>(builder.Configuration.GetSection(LookupOptions.Section));
         services.Configure<SeedOptions>(builder.Configuration.GetSection(SeedOptions.Section));
+        services.Configure<PaymentOptions>(builder.Configuration.GetSection(PaymentOptions.Section));
+        services.AddSingleton(sp => sp.GetRequiredService<IOptions<PaymentOptions>>().Value);
 
         services.AddDbContext<CardLabDbContext>((sp, options) =>
         {
@@ -44,6 +49,15 @@ public static class DependencyInjection
         services.AddScoped<TestDataReset>();
         services.AddScoped<AuthorisationService>();
         services.AddScoped<CardControlsService>();
+
+        // 002 payments (design §4, §5): fake bank shares the scoped DbContext (DEC-6); one instance serves both ports.
+        services.AddScoped<SqlFakeBank>();
+        services.AddScoped<ICurrentAccountBank>(sp => sp.GetRequiredService<SqlFakeBank>());
+        services.AddScoped<IFakeBankSteering>(sp => sp.GetRequiredService<SqlFakeBank>());
+        services.AddSingleton<IPaymentReferences, SystemPaymentReferences>();
+        services.AddSingleton<InFlightPayments>();
+        services.AddScoped<PaymentService>();
+        services.AddScoped<CardholderViewService>();
         return builder;
     }
 }

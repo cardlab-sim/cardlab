@@ -1,0 +1,6 @@
+/* 002 cardholder pages (§4.1, DEC-11): single column; tokens only. Filled in by PR-03. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}

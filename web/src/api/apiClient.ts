@@ -1,19 +1,28 @@
 import type {
+  ActivityEntry,
   AuditEntry,
   CardDetail,
   CardStatus,
   CardSummary,
+  CardholderView,
   Category,
   Decision,
+  FakeBank,
   Limit,
+  PaymentListItem,
+  PaymentRecord,
   Period,
   ProblemDetails,
+  Quote,
+  Receipt,
   SimulatePurchaseInput,
+  SteeringInput,
   Transaction,
 } from './types';
 
 /**
- * The SPA's port to the admin API (design §5, DEC-20): one method per admin endpoint of §7.
+ * The SPA's port to the API (design §5, DEC-20): one method per admin endpoint of §7, plus the 002 cardholder,
+ * fake-bank and payment-record endpoints (002 design §5 web/src/api).
  * Health, the processor endpoint and test reset are not part of the SPA.
  * Complete in PR-00; implemented by HttpApiClient and FakeApiClient (PR-02).
  */
@@ -46,6 +55,44 @@ export interface ApiClient {
    * @throws ApiError for any other status.
    */
   simulatePurchase(id: string, input: SimulatePurchaseInput): Promise<Decision>;
+
+  // ---- 002 full balance payment (design §7). Implemented by HttpApiClient and FakeApiClient in PR-03.
+
+  /**
+   * `GET /api/cardholder/cards/{id}` (pure read; the SPA then calls checkPayment when a payment is pending, DEC-13).
+   * @throws ApiError 404 for an unknown card.
+   */
+  getCardholderView(id: string): Promise<CardholderView>;
+  /**
+   * `POST /api/cardholder/cards/{id}/quotes`: mints the reference shown on the review screen.
+   * @throws ApiError 409 with `problem.code` nothing_to_pay | above_limit | payment_pending and `problem.message`.
+   */
+  createQuote(id: string): Promise<Quote>;
+  /**
+   * `POST /api/cardholder/cards/{id}/payments/{reference}/confirm`.
+   * @throws ApiError 409 with `problem.code` balance_changed | quote_refused | payment_pending and `problem.message`; 404.
+   */
+  confirmPayment(id: string, reference: string): Promise<Receipt>;
+  /** `POST /api/cardholder/cards/{id}/payments/{reference}/check` (W-10 message when unanswered). */
+  checkPayment(id: string, reference: string): Promise<Receipt>;
+  /** `GET /api/cardholder/cards/{id}/payments/{reference}` (receipt reload). */
+  getReceipt(id: string, reference: string): Promise<Receipt>;
+  /** `GET /api/fake-bank`. */
+  getFakeBank(): Promise<FakeBank>;
+  /**
+   * `PUT /api/fake-bank/steering`; absent fields keep their value.
+   * @throws ApiError 400 for an unknown value.
+   */
+  setFakeBank(steering: SteeringInput): Promise<FakeBank>;
+  /** `GET /api/cards/{id}/activity`: purchases and payments, newest first. */
+  listActivity(id: string): Promise<ActivityEntry[]>;
+  /** `GET /api/cards/{id}/payments`: every reference, newest first. */
+  listPaymentRecords(id: string): Promise<PaymentListItem[]>;
+  /**
+   * `GET /api/cards/{id}/payments/{reference}` (AC-20).
+   * @throws ApiError 404 for an unknown or another card's reference.
+   */
+  getPaymentRecord(id: string, reference: string): Promise<PaymentRecord>;
 }
 
 /** A failed API call: HTTP status plus the ProblemDetails body when there was one. */

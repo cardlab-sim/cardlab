@@ -34,6 +34,8 @@ if (app.Environment.IsDevelopment())
 app.MapCardEndpoints();
 app.MapAuthorisationEndpoints();
 app.MapHealthEndpoint();
+app.MapCardholderEndpoints();
+app.MapFakeBankEndpoints();
 if (app.Configuration.GetValue<bool>("CardLab:TestEndpoints"))
 {
     app.MapTestEndpoints();

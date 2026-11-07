@@ -31,3 +31,19 @@
   color: var(--color-muted-foreground);
   background: var(--color-muted);
 }
+
+/* 002 payment states (§4.1): text carries the meaning; colour only reinforces it. */
+.pending {
+  color: var(--color-status-pending);
+  background: var(--color-status-pending-bg);
+}
+
+.completed {
+  color: var(--color-status-approved);
+  background: var(--color-status-approved-bg);
+}
+
+.failed {
+  color: var(--color-status-declined);
+  background: var(--color-status-declined-bg);
+}

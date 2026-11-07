@@ -88,6 +88,12 @@ public readonly record struct Money : IComparable<Money>
     /// <returns>Negative, zero or positive as for <see cref="decimal.CompareTo(decimal)"/>.</returns>
     public int CompareTo(Money other) => Amount.CompareTo(other.Amount);
 
+    /// <summary>Display text for customer-facing wording (002 DEC-10, NFR-5): <c>£1,234.56</c>, <c>£0.00</c>,
+    /// <c>£1,000,000.00</c>; pound sign, comma thousands separators, exactly two decimals, culture-independent.</summary>
+    /// <returns>The display text.</returns>
+    /// <remarks>Implemented in 002 PR-01. High-risk path.</remarks>
+    public string ToDisplay() => throw new NotImplementedException("PR-01");
+
     /// <summary>Invariant two-decimal text, e.g. <c>"1234.56"</c>, <c>"0.00"</c> (the wire format).</summary>
     /// <returns>The amount with exactly two decimals and no thousands separator.</returns>
     public override string ToString() => Amount.ToString("0.00", CultureInfo.InvariantCulture);

@@ -5,6 +5,7 @@ using CardLab.Domain.Cards;
 using CardLab.Domain.Common;
 using CardLab.Domain.Controls;
 using CardLab.Domain.Limits;
+using CardLab.Domain.Payments;
 using CardLab.Domain.Periods;
 using CardLab.Domain.Ports;
 using CardLab.TestKit.Contracts;
@@ -17,6 +18,9 @@ namespace CardLab.TestKit.Fakes;
 /// <see cref="CardStoreContractTests"/> (T-U-21) so it cannot drift from <c>SqlCardStore</c>. Implemented in PR-01.
 /// </summary>
 /// <remarks>
+/// 002 (PR-02): also implements the payment reads and <see cref="ICardWriter.Payments"/> with the same copy-on-commit
+/// semantics, enforcing "one pending payment per card" and "one payment per reference" on commit like the SQL unique
+/// indexes; must pass <c>PaymentStoreContractTests</c> (T-U-23).
 /// Ids assigned by <see cref="ICardWriter.AppendTransaction"/> and <see cref="ICardWriter.AppendAudit"/> come from a
 /// counter (deterministic, never random). Sums see committed rows; do not rely on sums including rows appended in
 /// the same unit of work (SQL does not). The lock wait is capped at 5 s like the SQL adapter and then throws
@@ -64,6 +68,17 @@ public sealed class InMemoryCardStore : ICardStore
             }
         }
     }
+
+    /// <summary>002: payments across all cards (any state).</summary>
+    public int PaymentCount => throw new NotImplementedException("PR-02");
+
+    /// <summary>002: quotes (references) across all cards.</summary>
+    public int QuoteCount => throw new NotImplementedException("PR-02");
+
+    /// <summary>002: sets the linked account returned by <see cref="GetLinkedAccountAsync"/> (none by default).</summary>
+    /// <param name="account">The account, e.g. from <c>LinkedAccountBuilder</c>.</param>
+    /// <returns>This store.</returns>
+    public InMemoryCardStore WithLinkedAccount(LinkedAccount account) => throw new NotImplementedException("PR-02");
 
     /// <inheritdoc />
     public Task<IReadOnlyList<CardSummary>> ListCardsAsync(CancellationToken ct = default)
@@ -159,6 +174,21 @@ public sealed class InMemoryCardStore : ICardStore
         }
     }
 
+    /// <inheritdoc />
+    public Task<LinkedAccount?> GetLinkedAccountAsync(CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+
+    /// <inheritdoc />
+    public Task<CardBalance?> GetBalanceAsync(CardId id, CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+
+    /// <inheritdoc />
+    public Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference reference, CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+
     private Guid NextId(byte marker)
     {
         var n = Interlocked.Increment(ref idCounter);
@@ -213,6 +243,8 @@ public sealed class InMemoryCardStore : ICardStore
 
     private sealed class Writer(InMemoryCardStore store, CardData? card) : ICardWriter
     {
+        public IPaymentWriter Payments => throw new NotImplementedException("PR-02");
+
         public Task<CardState?> GetStateAsync(CancellationToken ct = default) =>
             Task.FromResult(card is null ? null : new CardState(new CardRef(card.Id, card.LastFour), card.Status, card.Limits.ToList()));
 

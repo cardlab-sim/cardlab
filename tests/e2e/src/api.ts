@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext } from '@playwright/test';
+import { notImplemented } from './notImplemented';
 
 /** Decision body subset used by the specs. */
 export interface DecisionBody {
@@ -51,6 +52,26 @@ export class Api {
       data: { amount },
     });
     expect(response.ok(), `PUT limit ${category}/${period}`).toBe(true);
+  }
+
+  /** 002: PUT /api/fake-bank/steering {nextDebitOutcome} (wire value, e.g. 'timeout_debit_applied'); expects 200. PR-08. */
+  async setBankOutcome(outcome: string): Promise<void> {
+    notImplemented('PR-08', outcome);
+  }
+
+  /** 002: PUT /api/fake-bank/steering {nextStatusCheck} ('answers' | 'does_not_answer'); expects 200. PR-08. */
+  async setStatusCheck(check: string): Promise<void> {
+    notImplemented('PR-08', check);
+  }
+
+  /** 002: POST /api/cards/{id}/simulate-purchase (category fuel, merchant "E2E purchase"); expects outcome approved. PR-08. */
+  async simulatePurchase(cardId: string, amount: string): Promise<void> {
+    notImplemented('PR-08', cardId, amount);
+  }
+
+  /** 002: GET /api/cardholder/cards/{id}; returns the parsed body and the raw text (for privacy scans). PR-08. */
+  async cardholderView(cardId: string): Promise<{ body: unknown; raw: string }> {
+    return notImplemented('PR-08', cardId);
   }
 
   async authorise(

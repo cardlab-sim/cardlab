@@ -5,6 +5,7 @@ using CardLab.Domain.Cards;
 using CardLab.Domain.Common;
 using CardLab.Domain.Controls;
 using CardLab.Domain.Limits;
+using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 using CardLab.Infrastructure.Model;
 using Microsoft.Data.SqlClient;
@@ -118,6 +119,26 @@ public sealed class SqlCardStore : ICardStore
                 a.OldValue,
                 a.NewValue))).ToList();
     }
+
+    /// <inheritdoc />
+    /// <remarks>Implemented in 002 PR-05 (reads <c>LinkedAccount</c>).</remarks>
+    public Task<LinkedAccount?> GetLinkedAccountAsync(CancellationToken ct = default) => throw new NotImplementedException("PR-05");
+
+    /// <inheritdoc />
+    /// <remarks>Implemented in 002 PR-05: two indexed SUMs (<c>IX_Transaction_Spend</c> approved rows; <c>IX_Payment_Completed</c>).</remarks>
+    public Task<CardBalance?> GetBalanceAsync(CardId id, CancellationToken ct = default) => throw new NotImplementedException("PR-05");
+
+    /// <inheritdoc />
+    /// <remarks>Implemented in 002 PR-05.</remarks>
+    public Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference reference, CancellationToken ct = default) => throw new NotImplementedException("PR-05");
+
+    /// <inheritdoc />
+    /// <remarks>Implemented in 002 PR-05.</remarks>
+    public Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default) => throw new NotImplementedException("PR-05");
+
+    /// <inheritdoc />
+    /// <remarks>Implemented in 002 PR-05. Never joins fake-bank (<c>Bank*</c>) tables (DEC-2).</remarks>
+    public Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default) => throw new NotImplementedException("PR-05");
 
     private static TransactionRecord ToRecord(TransactionRow t)
     {

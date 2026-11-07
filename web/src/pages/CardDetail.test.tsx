@@ -13,6 +13,7 @@ const opsVan: CardDetail = {
   lastFour: '0001',
   status: 'active',
   limits: [{ category: 'fuel', period: 'day', amount: '50.00' }],
+  balanceOwed: '0.00',
 };
 
 function renderDetail(fake: FakeApiClient) {
@@ -448,3 +449,15 @@ class GatedCardClient extends FakeApiClient {
     return snapshot;
   }
 }
+
+describe('CardDetailPage (002)', () => {
+  // T-W-8 · PR-07 · web unit
+  // Given a card with balanceOwed "150.50", a purchase and a completed payment, When rendered, Then the heading shows "Balance owed £150.50"; the Activity table (caption "Transaction history") lists the payment with a Payment type badge, Completed state badge and a link to its record, and the purchase with its merchant, category, outcome and reason; the Payments section lists every reference with status, state and origin badges
+  // Catches: the admin unable to see the balance or tell payments from purchases (AC-1, AC-2, R-13, DEC-12)
+  test.todo('T-W-8 shows balance, activity and payments');
+
+  // T-W-8 · PR-07 · web unit
+  // Given the payments list contains a pending payment, When rendered, Then checkPayment is called once for it and the page re-reads card, activity and payments
+  // Catches: admin detail not resolving pending payments on open (AC-34, R-11, DEC-13)
+  test.todo('T-W-8 auto-checks a pending payment on open');
+});

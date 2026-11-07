@@ -97,4 +97,12 @@ public sealed class NoPanTests : IClassFixture<ApiFactory>
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
         return await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
     }
+
+    // T-I-13 · PR-08 · integration
+    // Given J-1..J-3 of 002 run through the cardholder, fake-bank and admin record endpoints, When every raw response body, every captured log record and Database.DumpAllRowsAsync() are scanned with PanScanner.AssertNoFullNumbers, Then no full card number or "51907731" appears, last fours 0001 and 7731 do appear, and every payment record names actor kind cardholder with the card's cardholder, never the admin
+    // Catches: full card or account numbers leaking, or the admin recorded as actor (AC-23, NFR-3, R-16)
+    [Fact(Skip = "todo")]
+    public void No_full_numbers_and_cardholder_actor_after_payment_journeys()
+    {
+    }
 }

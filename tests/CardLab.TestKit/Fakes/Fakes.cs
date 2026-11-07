@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CardLab.Domain.Controls;
+using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 using CardLab.TestKit.Builders;
 using Microsoft.Extensions.Logging;
@@ -132,4 +133,17 @@ public sealed class CapturingLogger<T> : ILogger<T>
         {
         }
     }
+}
+
+/// <summary>
+/// 002: sequential references <c>PAY-00000001</c>, <c>PAY-00000002</c>, … (design §15.2); deterministic, thread-safe.
+/// Implemented in PR-02.
+/// </summary>
+public sealed class FakePaymentReferences : IPaymentReferences
+{
+    /// <summary>References issued so far, in order.</summary>
+    public IReadOnlyList<PaymentReference> Issued => throw new NotImplementedException("PR-02");
+
+    /// <inheritdoc />
+    public PaymentReference Next() => throw new NotImplementedException("PR-02");
 }
