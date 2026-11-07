@@ -71,7 +71,7 @@
         "PR-01",
         "PR-02"
       ],
-      "status": "coding",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/04-application",
       "url": "https://github.com/cardlab-sim/cardlab/pull/39"
     },
@@ -126,8 +126,6 @@
     }
   ],
   "bugs_open": [
-    "BUG-002",
-    "BUG-003",
     "BUG-004"
   ],
   "resume": null,

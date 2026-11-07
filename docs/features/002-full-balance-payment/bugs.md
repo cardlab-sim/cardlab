@@ -7,8 +7,8 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 |-----|----------|----------|------|-------|------------------|----------|--------|-----------|-------|---------|
 | BUG-001 | reviewer (PR-02, F3) | S3 | AC-3 | Store contract P-1 expects the test's own linked account id, which the shared SQL test database cannot return | plan | fix-now (option A) | verified | build (PR-02 fix round) | | 2026-11-07 |
 
-| BUG-002 | reviewer (PR-04, F4) | S3 | NFR-2, R-9 | Client disconnect cancels the bank call (budget linked to request token), contrary to design §13 | design | fix-now (option A: code matches design) | in-progress | build (PR-04 fix round) | | 2026-11-07 |
-| BUG-003 | reviewer (PR-04, F3) | S4 | R-9 | Status check awaiting an in-flight confirm is undocumented and unbounded | design | fix-now (option A: record + cap at 10 s) | in-progress | build (PR-04 fix round) | | 2026-11-07 |
+| BUG-002 | reviewer (PR-04, F4) | S3 | NFR-2, R-9 | Client disconnect cancels the bank call (budget linked to request token), contrary to design §13 | design | fix-now (option A: code matches design) | fixed | build (PR-04 fix round) | | 2026-11-07 |
+| BUG-003 | reviewer (PR-04, F3) | S4 | R-9 | Status check awaiting an in-flight confirm is undocumented and unbounded | design | fix-now (option A: record + cap at 10 s) | fixed | build (PR-04 fix round) | | 2026-11-07 |
 | BUG-004 | reviewer (PR-05, F4) | S2 | R-15 | Steered "time out, not received" failure is not marked simulated | design | fix-now (option A: amend design + code) | in-progress | build (PR-05 fix round) | | 2026-11-07 |
 | BUG-005 | reviewer (PR-05, F8) | S4 | DEC-15 | Origin stored as enum name, design text said deploy_smoke | design | fix-now (amend design text) | fixed | — | | 2026-11-07 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
@@ -37,7 +37,7 @@ design: §13 text promises what the linked budget cannot do. Options (a) reword 
 ### Decision (human, 2026-11-07)
 "A. Code matches design (Recommended)": unlink the bank budget from the request token. Design §13 erratum states it explicitly; PR-04 brief amended.
 ### Resolution
-…
+PR-04 (#39, head 4052ef1): unlinked bank budget; `Client_disconnect_never_cancels_the_debit_and_the_payment_settles`. Orchestrator verified (reviews/PR-04.review.md). Moves to verified after validation (T-I timeout/idempotency).
 
 ## BUG-003
 **Repro:** PR-04 `PaymentService.cs:176-194`: `CheckStatusAsync` awaits an in-flight confirm before asking the bank (coder addition; correct, closes an R-9 hole).
@@ -48,7 +48,7 @@ design: keep the behaviour, record it, decide on a bound.
 ### Decision (human, 2026-11-07)
 "A. Record + cap at 10 s (Recommended)": DEC-5 / Flow 2 erratum; on expiry `StatusCheckUnanswered`, W-10, no bank call.
 ### Resolution
-…
+PR-04 (#39, head 4052ef1): check wait capped by its own 10 s budget; removing the cap fails `Check_wait_on_an_in_flight_confirm_is_bounded_by_the_check_budget`. Orchestrator verified.
 
 ## BUG-004
 **Repro:** fake bank steered to *time out, not received* → nothing recorded → status check answers `NotReceived(Simulated: false)` → payment Failed, not marked simulated.
@@ -70,4 +70,4 @@ design text only.
 ### Decision (human, 2026-11-07)
 "Amend design text (Recommended)": stored as enum name, wire `deploy_smoke`. No code change.
 ### Resolution
-Design DEC-15 / §6 / §4 text, design digest and ADR-007 amended 2026-11-07. Check: `grep -n "Origin = deploy_smoke\|cardholder_view/deploy_smoke" 02-tech-design.md` → no hits.
+Design DEC-15 / §6 / §4 text, design digest and ADR-007 amended 2026-11-07. Check: `grep -n "Origin = deploy_smoke" 02-tech-design.md` → no hits.
