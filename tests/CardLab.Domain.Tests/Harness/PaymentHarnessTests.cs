@@ -1,5 +1,6 @@
 using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
+using CardLab.TestKit;
 using CardLab.TestKit.Builders;
 using CardLab.TestKit.Fakes;
 using Xunit;
@@ -112,8 +113,22 @@ public sealed class PaymentHarnessTests
     // T-U-37 · PR-02 · unit
     // Given text with "51907731", a 16-digit card number, the BankAccountRef GUID and "25000.00", When FindAccountNumbers / AssertNoFullNumbers, Then only the account number is found by FindAccountNumbers, and AssertNoFullNumbers throws for the account number or the card number (message shows last fours only) but not for the GUID or amounts
     // Catches: a scanner too weak to catch the account number, or one that flags GUIDs (NFR-3, AC-23)
-    [Fact(Skip = "todo")]
+    [Fact]
     public void PanScanner_finds_the_seeded_account_number()
     {
+        var guid = Seed.BankAccountRef.ToString();
+        var text = $"account 51907731 card 9999000100000001 ref {guid} balance 25000.00";
+
+        var accountNumbers = PanScanner.FindAccountNumbers(text);
+        var onAccount = Assert.ThrowsAny<Exception>(() => PanScanner.AssertNoFullNumbers("debit from 51907731 failed", "log"));
+        var onCard = Assert.ThrowsAny<Exception>(() => PanScanner.AssertNoFullNumbers("card 9999000100000001", "log"));
+
+        Assert.Equal(["51907731"], accountNumbers);
+        Assert.Contains("...7731", onAccount.Message);
+        Assert.DoesNotContain("51907731", onAccount.Message);
+        Assert.Contains("...0001", onCard.Message);
+        Assert.DoesNotContain("9999000100000001", onCard.Message);
+        PanScanner.AssertNoFullNumbers($"ref {guid} balance 25000.00 ending 7731", "log");
+        Assert.Empty(PanScanner.FindAccountNumbers(null));
     }
 }

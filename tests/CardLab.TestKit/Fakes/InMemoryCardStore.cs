@@ -34,6 +34,7 @@ public sealed class InMemoryCardStore : ICardStore
     private readonly Dictionary<CardId, CardData> cards = [];
     private readonly ConcurrentDictionary<CardId, SemaphoreSlim> locks = new();
     private long idCounter;
+    private LinkedAccount? linkedAccount;
 
     /// <summary>Creates a store holding the given cards (no limits, transactions or audit).</summary>
     /// <param name="cards">Cards to seed, e.g. from <c>CardBuilder</c>.</param>
@@ -70,15 +71,41 @@ public sealed class InMemoryCardStore : ICardStore
     }
 
     /// <summary>002: payments across all cards (any state).</summary>
-    public int PaymentCount => throw new NotImplementedException("PR-02");
+    public int PaymentCount
+    {
+        get
+        {
+            lock (gate)
+            {
+                return cards.Values.Sum(c => c.Payments.Count);
+            }
+        }
+    }
 
     /// <summary>002: quotes (references) across all cards.</summary>
-    public int QuoteCount => throw new NotImplementedException("PR-02");
+    public int QuoteCount
+    {
+        get
+        {
+            lock (gate)
+            {
+                return cards.Values.Sum(c => c.Quotes.Count);
+            }
+        }
+    }
 
     /// <summary>002: sets the linked account returned by <see cref="GetLinkedAccountAsync"/> (none by default).</summary>
     /// <param name="account">The account, e.g. from <c>LinkedAccountBuilder</c>.</param>
     /// <returns>This store.</returns>
-    public InMemoryCardStore WithLinkedAccount(LinkedAccount account) => throw new NotImplementedException("PR-02");
+    public InMemoryCardStore WithLinkedAccount(LinkedAccount account)
+    {
+        lock (gate)
+        {
+            linkedAccount = account;
+        }
+
+        return this;
+    }
 
     /// <inheritdoc />
     public Task<IReadOnlyList<CardSummary>> ListCardsAsync(CancellationToken ct = default)
@@ -138,6 +165,7 @@ public sealed class InMemoryCardStore : ICardStore
             {
                 lock (gate)
                 {
+                    EnforcePaymentUniqueness(working);
                     cards[id] = working;
                 }
             }
@@ -175,19 +203,101 @@ public sealed class InMemoryCardStore : ICardStore
     }
 
     /// <inheritdoc />
-    public Task<LinkedAccount?> GetLinkedAccountAsync(CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+    public Task<LinkedAccount?> GetLinkedAccountAsync(CancellationToken ct = default)
+    {
+        lock (gate)
+        {
+            return Task.FromResult(linkedAccount);
+        }
+    }
 
     /// <inheritdoc />
-    public Task<CardBalance?> GetBalanceAsync(CardId id, CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+    public Task<CardBalance?> GetBalanceAsync(CardId id, CancellationToken ct = default)
+    {
+        lock (gate)
+        {
+            if (!cards.TryGetValue(id, out var c))
+            {
+                return Task.FromResult<CardBalance?>(null);
+            }
+
+            var purchases = c.ApprovedPurchases();
+            var completed = c.CompletedPayments();
+            return Task.FromResult<CardBalance?>(new CardBalance(purchases, completed, purchases - completed));
+        }
+    }
 
     /// <inheritdoc />
-    public Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference reference, CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+    public Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference reference, CancellationToken ct = default)
+    {
+        lock (gate)
+        {
+            var record = cards.Values
+                .Select(c => c.Quotes.Any(q => q.Quote.Reference == reference) ? c.RecordOf(reference) : null)
+                .FirstOrDefault(r => r is not null);
+            return Task.FromResult(record);
+        }
+    }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+    public Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default)
+    {
+        lock (gate)
+        {
+            IReadOnlyList<PaymentRecord> result = cards.TryGetValue(id, out var c)
+                ? Enumerable.Reverse(c.Quotes).OrderByDescending(q => q.Quote.CreatedAtUtc).Select(q => c.RecordOf(q.Quote.Reference)).ToList()
+                : [];
+            return Task.FromResult(result);
+        }
+    }
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default) => throw new NotImplementedException("PR-02");
+    public Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default)
+    {
+        lock (gate)
+        {
+            if (!cards.TryGetValue(id, out var c))
+            {
+                return Task.FromResult<IReadOnlyList<ActivityEntry>>([]);
+            }
+
+            var purchases = c.Transactions.Select(t => new ActivityEntry(
+                t.DecidedAtUtc, ActivityKind.Purchase, t.Amount, t.Merchant, t.Outcome, t.Reason, t.Category, null, null, null));
+            var payments = c.Payments.Select(p => new ActivityEntry(
+                p.CreatedAtUtc,
+                ActivityKind.Payment,
+                p.Amount,
+                $"Payment {p.Reference}",
+                null,
+                null,
+                null,
+                p.State,
+                p.Reference,
+                c.Quotes.First(q => q.Quote.Reference == p.Reference).Quote.Origin));
+            IReadOnlyList<ActivityEntry> merged = Enumerable.Reverse(purchases.Concat(payments).ToList()).OrderByDescending(a => a.At).Take(take).ToList();
+            return Task.FromResult(merged);
+        }
+    }
+
+    // Mirrors the SQL unique indexes (Payment.Reference; UX_Payment_OnePending): checked on commit, so a violating
+    // unit of work stores nothing. Caller holds the gate.
+    private void EnforcePaymentUniqueness(CardData working)
+    {
+        if (working.Payments.Count(p => p.State == PaymentState.Pending) > 1)
+        {
+            throw new InvalidOperationException("A card may have only one pending payment.");
+        }
+
+        foreach (var payment in working.Payments)
+        {
+            var duplicated = working.Payments.Count(p => p.Reference == payment.Reference) > 1
+                || cards.Values.Any(c => c.Id != working.Id && c.Payments.Any(p => p.Reference == payment.Reference));
+            if (duplicated)
+            {
+                throw new InvalidOperationException("A reference may have only one payment.");
+            }
+        }
+    }
 
     private Guid NextId(byte marker)
     {
@@ -218,6 +328,9 @@ public sealed class InMemoryCardStore : ICardStore
             Limits = [.. other.Limits];
             Transactions = [.. other.Transactions];
             Audit = [.. other.Audit];
+            Quotes = [.. other.Quotes];
+            Payments = [.. other.Payments];
+            Events = [.. other.Events];
         }
 
         public CardId Id { get; }
@@ -238,12 +351,38 @@ public sealed class InMemoryCardStore : ICardStore
 
         public List<AuditRecord> Audit { get; } = [];
 
+        public List<StoredQuote> Quotes { get; } = [];
+
+        public List<PaymentSnapshot> Payments { get; } = [];
+
+        public List<PaymentEvent> Events { get; } = [];
+
+        public Money ApprovedPurchases() =>
+            Transactions.Where(t => t.Outcome == Outcome.Approved).Aggregate(Money.Zero, (sum, t) => sum + t.Amount);
+
+        public Money CompletedPayments() =>
+            Payments.Where(p => p.State == PaymentState.Completed).Aggregate(Money.Zero, (sum, p) => sum + p.Amount);
+
+        public PaymentRecord RecordOf(PaymentReference reference)
+        {
+            var stored = Quotes.First(q => q.Quote.Reference == reference);
+            return new PaymentRecord(
+                stored.Quote,
+                stored.Status,
+                stored.RefusalReason,
+                stored.BalanceAtRefusal,
+                Payments.FirstOrDefault(p => p.Reference == reference),
+                Events.Where(e => e.Reference == reference).ToList());
+        }
+
         public CardData Copy() => new(this);
     }
 
+    private sealed record StoredQuote(Quote Quote, QuoteStatus Status, string? RefusalReason, Money? BalanceAtRefusal);
+
     private sealed class Writer(InMemoryCardStore store, CardData? card) : ICardWriter
     {
-        public IPaymentWriter Payments => throw new NotImplementedException("PR-02");
+        public IPaymentWriter Payments => new PaymentWriter(store, Existing());
 
         public Task<CardState?> GetStateAsync(CancellationToken ct = default) =>
             Task.FromResult(card is null ? null : new CardState(new CardRef(card.Id, card.LastFour), card.Status, card.Limits.ToList()));
@@ -306,5 +445,46 @@ public sealed class InMemoryCardStore : ICardStore
 
         private CardData Existing() =>
             card ?? throw new InvalidOperationException("No card has the locked id; only GetStateAsync is meaningful.");
+    }
+
+    private sealed class PaymentWriter(InMemoryCardStore store, CardData card) : IPaymentWriter
+    {
+        public Task<Money> SumApprovedPurchasesAsync(CancellationToken ct = default) => Task.FromResult(card.ApprovedPurchases());
+
+        public Task<Money> SumCompletedPaymentsAsync(CancellationToken ct = default) => Task.FromResult(card.CompletedPayments());
+
+        public Task<QuoteRecord?> GetQuoteAsync(PaymentReference reference, CancellationToken ct = default)
+        {
+            var stored = card.Quotes.FirstOrDefault(q => q.Quote.Reference == reference);
+            return Task.FromResult(stored is null
+                ? null
+                : new QuoteRecord(stored.Quote, stored.Status, card.Payments.FirstOrDefault(p => p.Reference == reference)));
+        }
+
+        public Task<PaymentSnapshot?> GetPendingPaymentAsync(CancellationToken ct = default) =>
+            Task.FromResult(card.Payments.FirstOrDefault(p => p.State == PaymentState.Pending));
+
+        public void AppendQuote(Quote quote) => card.Quotes.Add(new StoredQuote(quote, QuoteStatus.Open, null, null));
+
+        public void SetQuoteStatus(PaymentReference reference, QuoteStatus status, string? refusalReason, Money? balanceAtRefusal, DateTimeOffset atUtc)
+        {
+            var index = card.Quotes.FindIndex(q => q.Quote.Reference == reference);
+            card.Quotes[index] = card.Quotes[index] with { Status = status, RefusalReason = refusalReason, BalanceAtRefusal = balanceAtRefusal };
+        }
+
+        public PaymentId CreatePayment(NewPayment payment)
+        {
+            var id = new PaymentId(store.NextId(0x9A));
+            card.Payments.Add(new PaymentSnapshot(id, payment.Reference, PaymentState.Pending, payment.Amount, payment.CreatedAtUtc, null));
+            return id;
+        }
+
+        public void SettlePayment(PaymentId id, Settlement settlement)
+        {
+            var index = card.Payments.FindIndex(p => p.Id == id);
+            card.Payments[index] = card.Payments[index] with { State = settlement.State, Settlement = settlement };
+        }
+
+        public void AppendEvent(PaymentEvent paymentEvent) => card.Events.Add(paymentEvent);
     }
 }
