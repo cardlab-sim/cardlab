@@ -118,7 +118,7 @@
         "PR-04",
         "PR-05"
       ],
-      "status": "review",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/07-admin-visibility",
       "url": "https://github.com/cardlab-sim/cardlab/pull/42"
     },
@@ -137,7 +137,8 @@
     }
   ],
   "bugs_open": [
-    "BUG-006"
+    "BUG-006",
+    "BUG-007"
   ],
   "resume": null,
   "history": [

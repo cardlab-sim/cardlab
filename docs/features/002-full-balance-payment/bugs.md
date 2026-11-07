@@ -12,6 +12,7 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 | BUG-004 | reviewer (PR-05, F4) | S2 | R-15 | Steered "time out, not received" failure is not marked simulated | design | fix-now (option A: amend design + code) | fixed | build (PR-05 fix round) | | 2026-11-07 |
 | BUG-005 | reviewer (PR-05, F8) | S4 | DEC-15 | Origin stored as enum name, design text said deploy_smoke | design | fix-now (amend design text) | fixed | — | | 2026-11-07 |
 | BUG-006 | orchestrator (feature CI run 42410267102) | S4 | AC-10 | Disconnect test flaky: in-flight registry entry removed after the confirm returns | code | fix-now (option A) | in-progress | build (PR-04f, wave 3) | | 2026-11-07 |
+| BUG-007 | reviewer (PR-07, F5) | S4 | R-1 | Shared web FakeApiClient doesn't feed simulated purchases into activity/balance; PR-07 test-local ActivityFake duplicates it with inconsistent data | test-harness | | triaged | | | 2026-11-07 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
      Decision: fix-now (option A/B) | defer | wont-fix, with the human's words in the section below
@@ -81,5 +82,16 @@ Design DEC-15 / §6 / §4 text, design digest and ADR-007 amended 2026-11-07. Ch
 code (PR-04): race in the test-visible registry cleanup; production impact nil (a check finding the stale entry awaits a completed task, then re-reads state).
 ### Decision (human, 2026-11-07)
 "A. Small fix PR now (Recommended)": brief prs/PR-04-fix-BUG-006.md, wave 3.
+### Resolution
+…
+
+## BUG-007
+**Repro:** `web/src/pages/CardDetail.test.tsx:604-638` (`ActivityFake`, `paymentsOverride`) subclasses the shared `FakeApiClient` (`web/src/api/fakeApiClient.ts`, PR-03) because `simulatePurchase` never reaches `listActivity` or the balance and `origin` is hard-coded.
+**Expected / actual:** one consistent shared fake; actually T-W-8 asserts "Balance owed £20.00" beside £32.50 of approved purchases (`:462`), rows concatenated, not time-ordered.
+**Evidence:** reviews/PR-07.review.md F5.
+### Triage (reviewer)
+test-harness: follow-up change to the shared fake (not owned by PR-07); then drop `ActivityFake`.
+### Decision (human, date)
+…
 ### Resolution
 …
