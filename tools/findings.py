@@ -27,6 +27,12 @@ import sys
 SEV_WORD = {"S1": "BLOCKER", "S2": "MAJOR", "S3": "MINOR", "S4": "COSMETIC"}
 MARK_RE = re.compile(r"<!-- (finding|decision|review-state) (\{.*?\}) -->", re.S)
 HUMAN_ASSOC = {"OWNER", "MEMBER", "COLLABORATOR"}
+# Markers count only when the workflow wrote them; anyone can type a hidden marker into a comment.
+BOT_LOGINS = {"github-actions", "github-actions[bot]"}
+
+
+def by_bot(comment):
+    return ((comment.get("author") or comment.get("user") or {}).get("login") or "") in BOT_LOGINS
 
 
 def env(name, default=None):
@@ -68,11 +74,11 @@ def threads(repo, pr):
         cs = t["comments"]["nodes"]
         if not cs:
             continue
-        f = markers(cs[0]["body"], "finding")
+        f = markers(cs[0]["body"], "finding") if by_bot(cs[0]) else []
         if f:
             out.append({"id": t["id"], "resolved": t["isResolved"], "outdated": t["isOutdated"],
                         "root_id": cs[0]["databaseId"], "finding": f[0],
-                        "decisions": [d for c in cs[1:] for d in markers(c["body"], "decision")]})
+                        "decisions": [d for c in cs[1:] if by_bot(c) for d in markers(c["body"], "decision")]})
     return out
 
 
@@ -92,6 +98,8 @@ def set_status(repo, sha, pr):
 def review_state(repo, pr):
     """The PR-level comment holding the latest money review: which commit, which finding keys it raised."""
     for c in gh_json("api", f"repos/{repo}/issues/{pr}/comments", "--paginate") or []:
+        if not by_bot(c):
+            continue
         m = markers(c["body"], "review-state")
         if m:
             return c["id"], m[0]
@@ -100,7 +108,7 @@ def review_state(repo, pr):
 
 def save_review_state(repo, pr, sha, keys):
     cid, _ = review_state(repo, pr)
-    state = {"sha": sha, "keys": sorted(keys)}
+    state = {"sha": sha, "keys": sorted(k for k, _ in keys), "files": sorted({fs for _, fs in keys})}
     body = (f"Money review state: last run on `{sha[:7]}` raised {len(keys)} finding(s). "
             f"Maintained by tools/findings.py; do not edit.\n\n<!-- review-state {json.dumps(state)} -->")
     if cid:
@@ -145,12 +153,13 @@ def cmd_post():
     raw = os.environ.get("FINDINGS", "").strip()
     data = json.loads(raw) if raw else {"findings": []}
     existing = {finding_key(t["finding"].get("path"), t["finding"].get("line"), t["finding"].get("severity"))
-                for t in threads(repo, pr)}
+                for t in threads(repo, pr)
+                if not any(d.get("outcome") in ("fixed", "dismissed") for d in t["decisions"])}
     posted, skipped, run_keys = [], 0, set()
     for i, f in enumerate(data.get("findings", []), 1):
         sev = f.get("severity", "S3")
         key = finding_key(f.get("path"), f.get("line"), sev)
-        run_keys.add(key)
+        run_keys.add((key, f"{f.get('path')}|{sev}"))
         if key in existing:
             skipped += 1
             continue
@@ -220,9 +229,9 @@ def cmd_triage():
             reply(repo, pr, t["root_id"], f"@{user}: the money review hasn't run on your latest commit yet "
                   f"(`{sha[:7]}`). Wait for it to finish, then reply `/fixed` again.")
             return
-        if finding_key(f.get("path"), f.get("line"), f.get("severity")) in st.get("keys", []):
+        if f"{f.get('path')}|{f.get('severity')}" in st.get("files", []):
             reply(repo, pr, t["root_id"], f"@{user}: not recorded as fixed. The money review on `{sha[:7]}` raised "
-                  "this finding again. Fix it, or reply `/dismiss <reason>`.")
+                  "a finding of this severity in this file again. Fix it, or reply `/dismiss <reason>`.")
             return
         reply(repo, pr, t["root_id"], f"Recorded: **fixed** by @{user}. Checked: the line changed, and the money "
               f"review on `{sha[:7]}` no longer raises it.", {**base, "outcome": "fixed"})
