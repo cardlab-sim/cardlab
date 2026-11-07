@@ -16,7 +16,6 @@ docs/features/**                 @dj-niobium
 docs/sdlc/**                     @dj-niobium
 
 # the enforcement scripts (findings, tiers) are controls too
-tools/** 
-                        @dj-niobium
+tools/**                         @dj-niobium
 # compliance docs
 /docs/compliance/                         @dj-niobium
