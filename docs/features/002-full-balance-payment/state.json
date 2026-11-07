@@ -131,8 +131,19 @@
         "PR-06",
         "PR-07"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/08-e2e",
+      "url": null
+    },
+    {
+      "id": "PR-03f",
+      "title": "Fix BUG-007: shared web fake client feeds simulated purchases into activity and balance",
+      "wave": 4,
+      "depends_on": [
+        "PR-07"
+      ],
+      "status": "coding",
+      "branch": "pr/002-full-balance-payment/03f-fix-bug-007",
       "url": null
     }
   ],
