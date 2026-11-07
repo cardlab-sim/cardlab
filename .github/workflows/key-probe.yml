@@ -5,19 +5,18 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Key shape and raw API call
-        env: { K: "${{ secrets.ANTHROPIC_API_KEY }}" }
-        run: |
-          echo "key length: ${#K}"
-          printf '%s' "$K" | tail -c 2 | od -c | head -1 | sed 's/[A-Za-z0-9]/x/g'
-          for m in claude-sonnet-5-5 claude-opus-5-5; do
-            echo "== $m"
-            curl -s https://api.anthropic.com/v1/messages -H "x-api-key: $K" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" \
-              -d "{\"model\":\"$m\",\"max_tokens\":5,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}" | head -c 300; echo
-          done
-      - name: Same CLI as the action
+      - uses: actions/checkout@v4
+      - name: Install the action's CLI version
+        run: curl -fsSL https://claude.ai/install.sh | bash -s 2.1.319 >/dev/null 2>&1; ~/.local/bin/claude --version
+      - name: A plain Sonnet
         env: { ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}" }
-        run: |
-          curl -fsSL https://claude.ai/install.sh | bash -s 2.1.319 >/dev/null 2>&1 || true
-          ~/.local/bin/claude --version || true
-          ~/.local/bin/claude -p "say ok" --model claude-sonnet-5-5 --output-format json 2>&1 | head -c 1500 || true
+        run: ~/.local/bin/claude -p "say ok" --model claude-sonnet-5-5 --output-format json 2>&1 | grep -oE '"(result|error|total_cost_usd)":[^,]*' || true
+      - name: B plain Opus
+        env: { ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}" }
+        run: ~/.local/bin/claude -p "say ok" --model claude-opus-5-5 --output-format json 2>&1 | grep -oE '"(result|error|total_cost_usd)":[^,]*' || true
+      - name: C action args, Opus
+        env: { ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}" }
+        run: ~/.local/bin/claude -p "say ok" --allowedTools "Bash(git diff *),Bash(git log *)" --model claude-opus-5-5 --max-turns 30 --setting-sources user,project,local --output-format json 2>&1 | grep -oE '"(result|error|total_cost_usd)":[^,]*' || true
+      - name: D Opus, effort high
+        env: { ANTHROPIC_API_KEY: "${{ secrets.ANTHROPIC_API_KEY }}", CLAUDE_CODE_EFFORT_LEVEL: "high" }
+        run: ~/.local/bin/claude -p "say ok" --model claude-opus-5-5 --output-format json 2>&1 | grep -oE '"(result|error|total_cost_usd)":[^,]*' || true
