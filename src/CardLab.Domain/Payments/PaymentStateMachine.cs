@@ -23,5 +23,26 @@ public static class PaymentStateMachine
     /// <param name="current">Current state.</param>
     /// <param name="outcome">What the bank said.</param>
     /// <returns>The transition, or an error message for a terminal state.</returns>
-    public static Result<Transition, string> Apply(PaymentState current, BankOutcome outcome) => throw new NotImplementedException("PR-01");
+    public static Result<Transition, string> Apply(PaymentState current, BankOutcome outcome)
+    {
+        switch (current)
+        {
+            case PaymentState.Completed:
+                return Result<Transition, string>.Fail("payment already completed");
+            case PaymentState.Failed:
+                return Result<Transition, string>.Fail("payment already failed");
+            case not PaymentState.Pending:
+                throw new ArgumentOutOfRangeException(nameof(current), current, "Unknown payment state.");
+        }
+
+        var transition = outcome switch
+        {
+            BankOutcome.Completed completed => new Transition(current, PaymentState.Completed, null, completed.DebitedAtUtc),
+            BankOutcome.Refused refused => new Transition(current, PaymentState.Failed, refused.Reason, null),
+            BankOutcome.NotReceived => new Transition(current, PaymentState.Failed, FailureReason.NotReceived, null),
+            BankOutcome.Unknown => new Transition(current, PaymentState.Pending, null, null),
+            _ => throw new ArgumentOutOfRangeException(nameof(outcome), outcome, "Unknown bank outcome."),
+        };
+        return Result<Transition, string>.Ok(transition);
+    }
 }

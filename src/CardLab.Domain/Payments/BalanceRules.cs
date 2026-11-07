@@ -12,7 +12,7 @@ public static class BalanceRules
     /// <param name="approvedPurchases">Sum of approved purchase amounts on the card.</param>
     /// <param name="completedPayments">Sum of completed payment amounts on the card.</param>
     /// <returns><c>max(£0.00, approvedPurchases − completedPayments)</c>.</returns>
-    public static Money Owed(Money approvedPurchases, Money completedPayments) => throw new NotImplementedException("PR-01");
+    public static Money Owed(Money approvedPurchases, Money completedPayments) => approvedPurchases - completedPayments;
 
     /// <summary>Whether a full-balance payment may start, checked in this order (design §5):
     /// £0.00 → <see cref="PayAvailability.NothingToPay"/>; above £1,000,000.00 → <see cref="PayAvailability.AboveLimit"/>;
@@ -20,5 +20,18 @@ public static class BalanceRules
     /// <param name="owed">Current balance owed.</param>
     /// <param name="hasPendingPayment">True when the card has a payment in state Pending.</param>
     /// <returns>The availability; £1,000,000.00 exactly is Available (R-17 bounds are inclusive).</returns>
-    public static PayAvailability Availability(Money owed, bool hasPendingPayment) => throw new NotImplementedException("PR-01");
+    public static PayAvailability Availability(Money owed, bool hasPendingPayment)
+    {
+        if (owed == Money.Zero)
+        {
+            return PayAvailability.NothingToPay;
+        }
+
+        if (!MoneyBounds.IsValidTransactionAmount(owed))
+        {
+            return PayAvailability.AboveLimit;
+        }
+
+        return hasPendingPayment ? PayAvailability.PaymentPending : PayAvailability.Available;
+    }
 }

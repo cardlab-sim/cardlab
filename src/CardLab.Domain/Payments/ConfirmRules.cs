@@ -49,6 +49,25 @@ public static class ConfirmRules
     /// <param name="otherPending">A pending payment on the card for a different reference, or null.</param>
     /// <param name="currentOwed">Balance owed now (computed inside the lock).</param>
     /// <returns>The decision.</returns>
-    public static ConfirmDecision Decide(Quote quote, QuoteStatus status, PaymentState? paymentForQuote, PendingPaymentRef? otherPending, Money currentOwed) =>
-        throw new NotImplementedException("PR-01");
+    public static ConfirmDecision Decide(Quote quote, QuoteStatus status, PaymentState? paymentForQuote, PendingPaymentRef? otherPending, Money currentOwed)
+    {
+        if (paymentForQuote is not null)
+        {
+            return new ConfirmDecision.Repeat();
+        }
+
+        if (status == QuoteStatus.Refused)
+        {
+            return new ConfirmDecision.RefuseAlreadyRefused(currentOwed);
+        }
+
+        if (otherPending is not null)
+        {
+            return new ConfirmDecision.RefusePendingExists(otherPending.Reference, otherPending.Amount);
+        }
+
+        return currentOwed != quote.Amount
+            ? new ConfirmDecision.RefuseBalanceChanged(currentOwed)
+            : new ConfirmDecision.Create();
+    }
 }

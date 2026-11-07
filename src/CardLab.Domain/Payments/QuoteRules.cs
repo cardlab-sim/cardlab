@@ -31,5 +31,23 @@ public static class QuoteRules
         Money owed,
         PaymentActor actor,
         PaymentOrigin origin,
-        DateTimeOffset nowUtc) => throw new NotImplementedException("PR-01");
+        DateTimeOffset nowUtc)
+    {
+        var fromLabel = WordingV1.Label(account.DisplayName, account.LastFour);
+        var toLabel = WordingV1.Label(cardName + " card", card.LastFour);
+        return new Quote(
+            reference,
+            card.Id,
+            PaymentKind.Full,
+            owed,
+            Money.Zero,
+            owed,
+            fromLabel,
+            toLabel,
+            actor,
+            account.AuthorityBasis,
+            nowUtc,
+            WordingV1.ReviewScreen(owed, fromLabel, toLabel),
+            origin);
+    }
 }
