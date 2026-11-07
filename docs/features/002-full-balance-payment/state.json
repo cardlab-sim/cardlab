@@ -159,10 +159,12 @@
       "url": "https://github.com/cardlab-sim/cardlab/pull/46"
     }
   ],
-  "bugs_open": [
-    "BUG-009"
-  ],
-  "resume": null,
+  "bugs_open": [],
+  "resume": {
+    "phase": "build",
+    "step": "feature review",
+    "reason": "All 12 PRs merged (2026-11-07); full feature review (sdlc:reviewer mode feature) was started but the session ended before it reported. Re-run it, then validation."
+  },
   "history": [
     {
       "at": "2026-11-07T00:00Z",
@@ -187,6 +189,10 @@
     {
       "at": "2026-11-07T22:00Z",
       "event": "design erratum BUG-009 (activity shown time = processor timestamp, order by decision time, as 001); Gate 2 stays approved"
+    },
+    {
+      "at": "2026-11-07T23:00Z",
+      "event": "all PRs merged (8 planned + skeleton + PR-03f, PR-04f, PR-07f); BUG-001..009 fixed (3 verified); session paused before feature review result"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"
