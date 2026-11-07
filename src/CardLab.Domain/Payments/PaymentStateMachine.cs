@@ -31,6 +31,8 @@ public static class PaymentStateMachine
                 return Result<Transition, string>.Fail("payment already completed");
             case PaymentState.Failed:
                 return Result<Transition, string>.Fail("payment already failed");
+            case not PaymentState.Pending:
+                throw new ArgumentOutOfRangeException(nameof(current), current, "Unknown payment state.");
         }
 
         var transition = outcome switch

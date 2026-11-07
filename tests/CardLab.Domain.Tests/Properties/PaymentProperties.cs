@@ -43,8 +43,9 @@ public sealed class PaymentProperties
 
     // T-P-2 · PR-01 · property
     // Given any ConfirmScript (quotes, confirms with repeated references, purchases in between, settlements) run against a pure model driven by ConfirmRules.Decide and PaymentStateMachine.Apply, When it completes, Then each reference has at most one payment
-    // Catches: a repeated confirm creating a second payment (AC-25, R-7)
-    [Property(Arbitrary = [typeof(CardLabArbitraries), typeof(PaymentArbitraries)])]
+    // and completed payments never exceed approved purchases (no balance is paid twice through two references)
+    // Catches: a repeated confirm creating a second payment, or a stale quote paying a balance already settled (AC-25, R-5, R-7)
+    [Property(Arbitrary = [typeof(CardLabArbitraries), typeof(PaymentArbitraries)], MaxTest = 1000)]
     public bool At_most_one_payment_per_reference(ConfirmScript script)
     {
         var model = new PaymentModel();
@@ -53,13 +54,13 @@ public sealed class PaymentProperties
             model.Apply(step);
         }
 
-        return model.CreatesPerReference.Values.All(count => count <= 1);
+        return model.CreatesPerReference.Values.All(count => count <= 1) && !model.Overpaid;
     }
 
     // T-P-3 · PR-01 · property
     // Given the same model and any ConfirmScript, When each step is applied, Then the card never has more than one pending payment
     // Catches: two payments in flight on one card (AC-25, R-8)
-    [Property(Arbitrary = [typeof(CardLabArbitraries), typeof(PaymentArbitraries)])]
+    [Property(Arbitrary = [typeof(CardLabArbitraries), typeof(PaymentArbitraries)], MaxTest = 1000)]
     public bool At_most_one_pending_payment_per_card(ConfirmScript script)
     {
         var model = new PaymentModel();
@@ -115,6 +116,8 @@ public sealed class PaymentProperties
         private Money completedPayments = Money.Zero;
 
         public Dictionary<PaymentReference, int> CreatesPerReference { get; } = [];
+
+        public bool Overpaid { get; private set; }
 
         public int PendingCount => payments.Values.Count(p => p.State == PaymentState.Pending);
 
@@ -189,6 +192,7 @@ public sealed class PaymentProperties
                 if (result.Value.To == PaymentState.Completed)
                 {
                     completedPayments += amount;
+                    Overpaid |= completedPayments > approvedPurchases;
                 }
             }
         }

@@ -41,12 +41,15 @@ public sealed class ConfirmRulesTests
             ConfirmRules.Decide(OpenQuote(), QuoteStatus.Confirmed, state, null, TestMoney.Of("170.50")));
     }
 
-    [Fact]
-    public void Refuses_when_the_balance_changed()
+    [Theory]
+    [InlineData("170.50")]
+    [InlineData("100.00")]
+    [InlineData("0.00")]
+    public void Refuses_when_the_balance_went_up_or_down_since_the_quote(string owed)
     {
-        var decision = ConfirmRules.Decide(OpenQuote(), QuoteStatus.Open, null, null, TestMoney.Of("170.50"));
+        var decision = ConfirmRules.Decide(OpenQuote(), QuoteStatus.Open, null, null, TestMoney.Of(owed));
 
-        Assert.Equal(new ConfirmDecision.RefuseBalanceChanged(TestMoney.Of("170.50")), decision);
+        Assert.Equal(new ConfirmDecision.RefuseBalanceChanged(TestMoney.Of(owed)), decision);
     }
 
     [Fact]
