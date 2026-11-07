@@ -131,7 +131,7 @@
         "PR-06",
         "PR-07"
       ],
-      "status": "review",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/08-e2e",
       "url": "https://github.com/cardlab-sim/cardlab/pull/45"
     },
