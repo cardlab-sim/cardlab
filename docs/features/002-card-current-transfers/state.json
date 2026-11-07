@@ -1,0 +1,16 @@
+{
+  "feature": "002-card-current-transfers",
+  "title": "Card and current account transfers: pay the card balance from the current account, draw cash from the card",
+  "lane": "M",
+  "phase": "requirements",
+  "base_branch": "main",
+  "feature_branch": "feat/002-card-current-transfers",
+  "gates": { "requirements": null, "design": null, "plan": null },
+  "discovery": [],
+  "prs": [],
+  "bugs_open": [],
+  "resume": null,
+  "history": [
+    { "at": "2026-11-07T00:00Z", "event": "feature created, lane M (human chose M over recommended L)" }
+  ]
+}
