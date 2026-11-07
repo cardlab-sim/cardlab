@@ -85,6 +85,62 @@ public sealed class PaymentHarnessTests
         Assert.Equal(10, bank.DebitRequests.Count);
     }
 
+    [Fact]
+    public async Task FakeBank_scripts_do_not_touch_a_reference_the_bank_has_seen()
+    {
+        var bank = new FakeBank(new FakeClock(new DateTimeOffset(2026, 11, 7, 10, 0, 0, TimeSpan.Zero)));
+        var first = await bank.RequestDebitAsync(Debit(bank, "PAY-00000001", "100.00"), Ct);
+
+        bank.NextDebit(BankOutcomes.Completed(null, simulated: true));
+        var repeat = await bank.RequestDebitAsync(Debit(bank, "PAY-00000001", "100.00"), Ct);
+
+        Assert.Equal(first, repeat);
+        Assert.Single(bank.Entries);
+        Assert.Equal("24900.00", bank.AvailableBalance.ToString());
+        var next = await bank.RequestDebitAsync(Debit(bank, "PAY-00000002", "10.00"), Ct);
+        Assert.Equal(new BankOutcome.Completed(null, true), next);
+        Assert.Equal("24890.00", bank.AvailableBalance.ToString());
+
+        bank.Hang(debitApplied: true);
+        var repeatAgain = await bank.RequestDebitAsync(Debit(bank, "PAY-00000001", "100.00"), Ct);
+        Assert.Equal(first, repeatAgain);
+        Assert.Equal(2, bank.Entries.Count);
+        await Assert.ThrowsAsync<OperationCanceledException>(() => bank.RequestDebitAsync(Debit(bank, "PAY-00000003", "1.00"), Ct));
+    }
+
+    [Fact]
+    public async Task InMemoryCardStore_enforces_the_quote_key_and_that_a_payment_has_a_quote()
+    {
+        var cardA = new CardBuilder().Build();
+        var cardB = new CardBuilder().Build();
+        var store = new InMemoryCardStore(cardA, cardB);
+        var quote = new QuoteBuilder().ForCard(cardA).Build();
+        await store.WithCardLockAsync(cardA.Id, w =>
+        {
+            w.Payments.AppendQuote(quote);
+            return Task.FromResult(0);
+        }, Ct);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => store.WithCardLockAsync(cardB.Id, w =>
+        {
+            w.Payments.AppendQuote(new QuoteBuilder().ForCard(cardB).Build());
+            return Task.FromResult(0);
+        }, Ct));
+        await Assert.ThrowsAnyAsync<Exception>(() => store.WithCardLockAsync(cardA.Id, w =>
+        {
+            w.Payments.AppendQuote(quote);
+            return Task.FromResult(0);
+        }, Ct));
+        await Assert.ThrowsAnyAsync<Exception>(() => store.WithCardLockAsync(cardB.Id, w =>
+        {
+            w.Payments.CreatePayment(new PaymentBuilder().WithId(Guid.NewGuid()).BuildNew());
+            return Task.FromResult(0);
+        }, Ct));
+
+        Assert.Equal(1, store.QuoteCount);
+        Assert.Equal(0, store.PaymentCount);
+    }
+
     private static DebitRequest Debit(FakeBank bank, string reference, string amount) =>
         new(bank.Account, new PaymentReference(reference), TestMoney.Of(amount), $"CardLab card payment {reference}");
 

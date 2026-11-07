@@ -2,6 +2,7 @@ using CardLab.Domain;
 using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 using CardLab.TestKit.Builders;
+using CardLab.TestKit.Fakes;
 using Xunit;
 
 namespace CardLab.TestKit.Contracts;
@@ -14,6 +15,18 @@ namespace CardLab.TestKit.Contracts;
 /// </summary>
 public abstract class CurrentAccountBankContractTests
 {
+    private static readonly DateTimeOffset T0 = new(2026, 11, 7, 10, 0, 0, TimeSpan.Zero);
+    private static int nextBlock;
+
+    // xUnit creates one instance per test: each test gets its own block of references and its own account key, so cases
+    // never collide on keys in a database shared by the whole class (counters, never random).
+    private readonly int block = Interlocked.Increment(ref nextBlock);
+
+    /// <summary>
+    /// The clock the bank under test must post and debit by (fresh per test, starts at 2026-11-07T10:00Z). Implementations
+    /// of <see cref="CreateBankAsync"/> pass it to the bank; tests advance it to separate debit times.
+    /// </summary>
+    protected FakeClock Clock { get; } = new(T0);
     /// <summary>Creates a bank holding one account with no entries.</summary>
     /// <param name="account">Account key (fresh per test).</param>
     /// <param name="lastFour">Last four digits.</param>
@@ -48,13 +61,13 @@ public abstract class CurrentAccountBankContractTests
         var account = NewAccount();
         var bank = await CreateBankAsync(account, "7731", TestMoney.Of("25000.00"));
 
-        var outcome = await bank.RequestDebitAsync(Debit(account, "PAY-00000001", "150.50"));
+        var outcome = await bank.RequestDebitAsync(Debit(account, Ref(1).Value, "150.50"));
 
         var completed = Assert.IsType<BankOutcome.Completed>(outcome);
         Assert.False(completed.Simulated);
         Assert.Equal("24849.50", (await bank.GetAccountAsync(account)).AvailableBalance.ToString());
         var entry = Assert.Single(await bank.ListRecentEntriesAsync(account, 10));
-        Assert.Equal(("PAY-00000001", "150.50"), (entry.Reference.Value, entry.Amount.ToString()));
+        Assert.Equal((Ref(1).Value, "150.50"), (entry.Reference.Value, entry.Amount.ToString()));
     }
 
     // T-U-24 / T-I-15 · PR-02 · contract
@@ -66,14 +79,16 @@ public abstract class CurrentAccountBankContractTests
     {
         var account = NewAccount();
         var bank = await CreateBankAsync(account, "7731", TestMoney.Of("25000.00"));
-        var request = Debit(account, "PAY-00000001", "150.50");
+        var request = Debit(account, Ref(1).Value, "150.50");
         var first = await bank.RequestDebitAsync(request);
+        Clock.Advance(TimeSpan.FromMinutes(1));
 
         var second = await bank.RequestDebitAsync(request);
 
         var firstCompleted = Assert.IsType<BankOutcome.Completed>(first);
         var secondCompleted = Assert.IsType<BankOutcome.Completed>(second);
-        Assert.Equal(Millis(firstCompleted.DebitedAtUtc), Millis(secondCompleted.DebitedAtUtc));
+        Assert.Equal((DateTimeOffset?)T0, Millis(firstCompleted.DebitedAtUtc));
+        Assert.Equal((DateTimeOffset?)T0, Millis(secondCompleted.DebitedAtUtc));
         Assert.Single(await bank.ListRecentEntriesAsync(account, 10));
         Assert.Equal("24849.50", (await bank.GetAccountAsync(account)).AvailableBalance.ToString());
     }
@@ -88,8 +103,8 @@ public abstract class CurrentAccountBankContractTests
         var account = NewAccount();
         var bank = await CreateBankAsync(account, "7731", TestMoney.Of("25000.00"));
 
-        var outcome = await bank.RequestDebitAsync(Debit(account, "PAY-00000001", "25000.01"));
-        var status = await bank.GetDebitStatusAsync(account, new PaymentReference("PAY-00000001"));
+        var outcome = await bank.RequestDebitAsync(Debit(account, Ref(1).Value, "25000.01"));
+        var status = await bank.GetDebitStatusAsync(account, Ref(1));
 
         var refused = Assert.IsType<BankOutcome.Refused>(outcome);
         Assert.Equal(FailureReason.InsufficientFunds, refused.Reason);
@@ -107,13 +122,13 @@ public abstract class CurrentAccountBankContractTests
     {
         var account = NewAccount();
         var bank = await CreateBankAsync(account, "7731", TestMoney.Of("25000.00"));
-        await bank.RequestDebitAsync(Debit(account, "PAY-00000001", "150.50"));
+        await bank.RequestDebitAsync(Debit(account, Ref(1).Value, "150.50"));
 
-        var known = await bank.GetDebitStatusAsync(account, new PaymentReference("PAY-00000001"));
-        var unknown = await bank.GetDebitStatusAsync(account, new PaymentReference("PAY-00000002"));
+        var known = await bank.GetDebitStatusAsync(account, Ref(1));
+        var unknown = await bank.GetDebitStatusAsync(account, Ref(2));
 
         var completed = Assert.IsType<BankOutcome.Completed>(known);
-        Assert.NotNull(completed.DebitedAtUtc);
+        Assert.Equal((DateTimeOffset?)T0, Millis(completed.DebitedAtUtc));
         Assert.IsType<BankOutcome.NotReceived>(unknown);
     }
 
@@ -128,20 +143,21 @@ public abstract class CurrentAccountBankContractTests
         var bank = await CreateBankAsync(account, "7731", TestMoney.Of("25000.00"));
         for (var i = 1; i <= 12; i++)
         {
-            await bank.RequestDebitAsync(Debit(account, $"PAY-{i:D8}", "1.00"));
-
-            // The only wait in the suite: SQL stores datetime2(3), so debits must be at least a millisecond apart.
-            await Task.Delay(5);
+            await bank.RequestDebitAsync(Debit(account, Ref(i).Value, "1.00"));
+            Clock.Advance(TimeSpan.FromSeconds(1));
         }
 
         var entries = await bank.ListRecentEntriesAsync(account, 10);
 
         Assert.Equal(
-            ["PAY-00000012", "PAY-00000011", "PAY-00000010", "PAY-00000009", "PAY-00000008", "PAY-00000007", "PAY-00000006", "PAY-00000005", "PAY-00000004", "PAY-00000003"],
+            [Ref(12).Value, Ref(11).Value, Ref(10).Value, Ref(9).Value, Ref(8).Value, Ref(7).Value, Ref(6).Value, Ref(5).Value, Ref(4).Value, Ref(3).Value],
             entries.Select(e => e.Reference.Value));
+        Assert.Equal(T0.AddSeconds(11), entries[0].PostedAtUtc);
     }
 
-    private static BankAccountRef NewAccount() => new(Guid.NewGuid());
+    private PaymentReference Ref(int n) => new($"PAY-{block:D5}{n:D3}");
+
+    private BankAccountRef NewAccount() => new(new Guid(block, 0xBA, 0xBA, 0, 0, 0, 0, 0, 0, 0, 0));
 
     private static DebitRequest Debit(BankAccountRef account, string reference, string amount) =>
         new(account, new PaymentReference(reference), TestMoney.Of(amount), $"CardLab card payment {reference}");

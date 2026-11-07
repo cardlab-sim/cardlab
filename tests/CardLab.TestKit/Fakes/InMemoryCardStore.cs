@@ -19,11 +19,11 @@ namespace CardLab.TestKit.Fakes;
 /// </summary>
 /// <remarks>
 /// 002 (PR-02): also implements the payment reads and <see cref="ICardWriter.Payments"/> with the same copy-on-commit
-/// semantics, enforcing "one pending payment per card" and "one payment per reference" on commit like the SQL unique
-/// indexes; must pass <c>PaymentStoreContractTests</c> (T-U-23).
+/// semantics, enforcing on commit like the SQL constraints: one pending payment per card, one payment per reference,
+/// one quote per reference across cards, and a payment needs a quote; must pass <c>PaymentStoreContractTests</c> (T-U-23).
 /// Ids assigned by <see cref="ICardWriter.AppendTransaction"/> and <see cref="ICardWriter.AppendAudit"/> come from a
-/// counter (deterministic, never random). Sums see committed rows; do not rely on sums including rows appended in
-/// the same unit of work (SQL does not). The lock wait is capped at 5 s like the SQL adapter and then throws
+/// counter (deterministic, never random). Payment reads and sums inside a unit of work see that unit's own writes
+/// here; SQL does not. Never rely on it. The lock wait is capped at 5 s like the SQL adapter and then throws
 /// <see cref="CardLockTimeoutException"/>.
 /// </remarks>
 public sealed class InMemoryCardStore : ICardStore
@@ -279,10 +279,25 @@ public sealed class InMemoryCardStore : ICardStore
         }
     }
 
-    // Mirrors the SQL unique indexes (Payment.Reference; UX_Payment_OnePending): checked on commit, so a violating
-    // unit of work stores nothing. Caller holds the gate.
+    // Mirrors the SQL constraints (PaymentQuote primary key, Payment.Reference foreign key and unique index,
+    // UX_Payment_OnePending): checked on commit, so a violating unit of work stores nothing. Caller holds the gate.
     private void EnforcePaymentUniqueness(CardData working)
     {
+        foreach (var stored in working.Quotes)
+        {
+            var duplicated = working.Quotes.Count(q => q.Quote.Reference == stored.Quote.Reference) > 1
+                || cards.Values.Any(c => c.Id != working.Id && c.Quotes.Any(q => q.Quote.Reference == stored.Quote.Reference));
+            if (duplicated)
+            {
+                throw new InvalidOperationException("A reference may have only one quote.");
+            }
+        }
+
+        if (working.Payments.Any(p => working.Quotes.All(q => q.Quote.Reference != p.Reference)))
+        {
+            throw new InvalidOperationException("A payment needs a quote for its reference.");
+        }
+
         if (working.Payments.Count(p => p.State == PaymentState.Pending) > 1)
         {
             throw new InvalidOperationException("A card may have only one pending payment.");

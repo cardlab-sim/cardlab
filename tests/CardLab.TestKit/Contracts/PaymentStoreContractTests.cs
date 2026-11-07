@@ -18,6 +18,11 @@ namespace CardLab.TestKit.Contracts;
 public abstract class PaymentStoreContractTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 11, 7, 10, 0, 0, TimeSpan.Zero);
+    private static int nextBlock;
+
+    // xUnit creates one instance per test: each test gets its own block of references and its own account id, so
+    // cases never collide on keys in a database shared by the whole class (counters, never random).
+    private readonly int block = Interlocked.Increment(ref nextBlock);
 
     /// <summary>Creates a store containing (at least) the given cards with no transactions or payments, and the given linked account.</summary>
     /// <param name="cards">Cards to seed (use <c>CardBuilder</c>).</param>
@@ -31,22 +36,22 @@ public abstract class PaymentStoreContractTests
     protected abstract Task<ICardStore> OpenStoreAsync(ICardStore seeded);
 
     // T-U-23 / T-I-16 · PR-02 · contract
-    // Given a store created with the seeded linked account, When GetLinkedAccountAsync, Then the same id, display name, last four 7731, bank ref and authority basis
+    // Given a store created with the seeded linked account, When GetLinkedAccountAsync, Then a non-empty id, display name, last four 7731, bank ref and authority basis
     // Catches: the adapter losing the account or its authority text (R-2)
     /// <summary>Contract P-1.</summary>
     [Fact]
     public async Task Reads_the_linked_account()
     {
-        var account = new LinkedAccountBuilder().Build();
-        var store = await CreateStoreAsync([new CardBuilder().Build()], account);
+        var store = await CreateStoreAsync([new CardBuilder().Build()], NewAccount());
 
         var read = await store.GetLinkedAccountAsync();
 
-        Assert.Equal(account.Id, read!.Id);
-        Assert.Equal(account.DisplayName, read.DisplayName);
+        // Only fields every LinkedAccount row in a shared database has (the builder defaults equal the seed).
+        Assert.NotEqual(Guid.Empty, read!.Id);
+        Assert.Equal(Seed.LinkedAccountName, read.DisplayName);
         Assert.Equal("7731", read.LastFour);
-        Assert.Equal(account.BankRef, read.BankRef);
-        Assert.Equal(account.AuthorityBasis, read.AuthorityBasis);
+        Assert.Equal(new BankAccountRef(Seed.BankAccountRef), read.BankRef);
+        Assert.Equal(Seed.AuthorityBasis, read.AuthorityBasis);
     }
 
     // T-U-23 / T-I-16 · PR-02 · contract
@@ -57,7 +62,7 @@ public abstract class PaymentStoreContractTests
     public async Task Balance_sums_approved_purchases_and_completed_payments()
     {
         var card = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().Build());
+        var store = await CreateStoreAsync([card], NewAccount());
         await store.WithCardLockAsync(card.Id, w =>
         {
             w.AppendTransaction(new TransactionBuilder().Amount("120.00").At(T0).Build());
@@ -65,9 +70,9 @@ public abstract class PaymentStoreContractTests
             w.AppendTransaction(new TransactionBuilder().Amount("500.00").At(T0.AddMinutes(2)).Declined(Reason.LimitExceeded).Build());
             return Task.FromResult(0);
         });
-        await PayAsync(store, card, "PAY-00000001", "100.00", T0, p => p.Completed("150.50", "50.50"));
-        await PayAsync(store, card, "PAY-00000002", "10.00", T0.AddMinutes(10), p => p.Failed(FailureReason.InsufficientFunds, "50.50"));
-        await PayAsync(store, card, "PAY-00000003", "5.00", T0.AddMinutes(20), null);
+        await PayAsync(store, card, Ref(1).Value, "100.00", T0, p => p.Completed("150.50", "50.50"));
+        await PayAsync(store, card, Ref(2).Value, "10.00", T0.AddMinutes(10), p => p.Failed(FailureReason.InsufficientFunds, "50.50"));
+        await PayAsync(store, card, Ref(3).Value, "5.00", T0.AddMinutes(20), null);
 
         var balance = await store.GetBalanceAsync(card.Id);
         var (purchases, completed) = await store.WithCardLockAsync(card.Id, async w =>
@@ -88,8 +93,8 @@ public abstract class PaymentStoreContractTests
     {
         var card = new CardBuilder().Build();
         var other = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card, other], new LinkedAccountBuilder().Build());
-        var quote = new QuoteBuilder().ForCard(card).WithAmount("170.50").WithOrigin(PaymentOrigin.DeploySmoke).At(T0).Build();
+        var store = await CreateStoreAsync([card, other], NewAccount());
+        var quote = new QuoteBuilder().ForCard(card).WithReference(Ref(1).Value).WithAmount("170.50").WithOrigin(PaymentOrigin.DeploySmoke).At(T0).Build();
         await store.WithCardLockAsync(card.Id, w =>
         {
             w.Payments.AppendQuote(quote);
@@ -118,8 +123,8 @@ public abstract class PaymentStoreContractTests
     public async Task Refusal_changes_only_status_columns()
     {
         var card = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().Build());
-        var quote = new QuoteBuilder().ForCard(card).At(T0).Build();
+        var store = await CreateStoreAsync([card], NewAccount());
+        var quote = new QuoteBuilder().ForCard(card).WithReference(Ref(1).Value).At(T0).Build();
         await AppendQuoteAsync(store, card, quote);
 
         await store.WithCardLockAsync(card.Id, w =>
@@ -144,8 +149,8 @@ public abstract class PaymentStoreContractTests
     public async Task Created_payment_is_pending_and_linked_to_its_quote()
     {
         var card = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().Build());
-        var quote = new QuoteBuilder().ForCard(card).At(T0).Build();
+        var store = await CreateStoreAsync([card], NewAccount());
+        var quote = new QuoteBuilder().ForCard(card).WithReference(Ref(1).Value).At(T0).Build();
         var created = new PaymentBuilder().ForQuote(quote).CreatedAt(T0.AddMinutes(1));
         await AppendQuoteAsync(store, card, quote);
 
@@ -154,7 +159,7 @@ public abstract class PaymentStoreContractTests
             (await w.Payments.GetPendingPaymentAsync(), (await w.Payments.GetQuoteAsync(quote.Reference))!.Payment));
 
         Assert.Equal(id, pending!.Id);
-        Assert.Equal(("PAY-00000001", PaymentState.Pending, "150.50", T0.AddMinutes(1)), (pending.Reference.Value, pending.State, pending.Amount.ToString(), pending.CreatedAtUtc));
+        Assert.Equal((Ref(1).Value, PaymentState.Pending, "150.50", T0.AddMinutes(1)), (pending.Reference.Value, pending.State, pending.Amount.ToString(), pending.CreatedAtUtc));
         Assert.Null(pending.Settlement);
         Assert.Equal(pending, linked);
     }
@@ -167,9 +172,9 @@ public abstract class PaymentStoreContractTests
     public async Task Rejects_a_second_pending_payment_on_a_card()
     {
         var card = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().Build());
-        await PayAsync(store, card, "PAY-00000001", "150.50", T0, null);
-        var second = new QuoteBuilder().ForCard(card).WithReference("PAY-00000002").At(T0.AddMinutes(5)).Build();
+        var store = await CreateStoreAsync([card], NewAccount());
+        await PayAsync(store, card, Ref(1).Value, "150.50", T0, null);
+        var second = new QuoteBuilder().ForCard(card).WithReference(Ref(2).Value).At(T0.AddMinutes(5)).Build();
 
         await Assert.ThrowsAnyAsync<Exception>(() => store.WithCardLockAsync(card.Id, w =>
         {
@@ -179,7 +184,7 @@ public abstract class PaymentStoreContractTests
         }));
 
         Assert.Null(await store.GetPaymentRecordAsync(second.Reference));
-        Assert.Equal(["PAY-00000001"], (await store.ListPaymentRecordsAsync(card.Id)).Select(r => r.Quote.Reference.Value));
+        Assert.Equal([Ref(1).Value], (await store.ListPaymentRecordsAsync(card.Id)).Select(r => r.Quote.Reference.Value));
     }
 
     // T-U-23 / T-I-16 · PR-02 · contract
@@ -190,9 +195,9 @@ public abstract class PaymentStoreContractTests
     public async Task Rejects_a_second_payment_for_one_reference()
     {
         var card = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().Build());
-        await PayAsync(store, card, "PAY-00000001", "150.50", T0, p => p.Completed());
-        var again = new PaymentBuilder().ForQuote(new QuoteBuilder().ForCard(card).Build()).CreatedAt(T0.AddMinutes(5));
+        var store = await CreateStoreAsync([card], NewAccount());
+        await PayAsync(store, card, Ref(1).Value, "150.50", T0, p => p.Completed());
+        var again = new PaymentBuilder().ForQuote(new QuoteBuilder().ForCard(card).WithReference(Ref(1).Value).Build()).CreatedAt(T0.AddMinutes(5));
 
         await Assert.ThrowsAnyAsync<Exception>(() => store.WithCardLockAsync(card.Id, w =>
         {
@@ -212,7 +217,7 @@ public abstract class PaymentStoreContractTests
     public async Task Settlement_is_stored_and_counted_only_when_completed()
     {
         var card = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().Build());
+        var store = await CreateStoreAsync([card], NewAccount());
         var settlement = new Settlement(
             PaymentState.Completed,
             null,
@@ -222,7 +227,7 @@ public abstract class PaymentStoreContractTests
             TestMoney.Of("150.50"),
             TestMoney.Of("0.00"),
             true);
-        var id = await PayAsync(store, card, "PAY-00000001", "150.50", T0, null);
+        var id = await PayAsync(store, card, Ref(1).Value, "150.50", T0, null);
 
         await store.WithCardLockAsync(card.Id, w =>
         {
@@ -230,16 +235,16 @@ public abstract class PaymentStoreContractTests
             return Task.FromResult(0);
         });
         var (snapshot, pending, completed) = await store.WithCardLockAsync(card.Id, async w =>
-            ((await w.Payments.GetQuoteAsync(new PaymentReference("PAY-00000001")))!.Payment, await w.Payments.GetPendingPaymentAsync(), await w.Payments.SumCompletedPaymentsAsync()));
+            ((await w.Payments.GetQuoteAsync(Ref(1)))!.Payment, await w.Payments.GetPendingPaymentAsync(), await w.Payments.SumCompletedPaymentsAsync()));
 
         Assert.Equal(PaymentState.Completed, snapshot!.State);
         Assert.Equal(settlement, snapshot.Settlement);
         Assert.Null(pending);
         Assert.Equal("150.50", completed.ToString());
 
-        await PayAsync(store, card, "PAY-00000002", "20.00", T0.AddMinutes(10), p => p.Failed(FailureReason.AccountUnavailable, "20.00"));
+        await PayAsync(store, card, Ref(2).Value, "20.00", T0.AddMinutes(10), p => p.Failed(FailureReason.AccountUnavailable, "20.00"));
         var afterFailure = await store.WithCardLockAsync(card.Id, w => w.Payments.SumCompletedPaymentsAsync());
-        var failed = (await store.GetPaymentRecordAsync(new PaymentReference("PAY-00000002")))!.Payment;
+        var failed = (await store.GetPaymentRecordAsync(Ref(2)))!.Payment;
         Assert.Equal("150.50", afterFailure.ToString());
         Assert.Equal((PaymentState.Failed, FailureReason.AccountUnavailable), (failed!.State, failed.Settlement!.Reason));
     }
@@ -252,17 +257,17 @@ public abstract class PaymentStoreContractTests
     public async Task Records_list_every_reference_with_events_in_order()
     {
         var card = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().Build());
-        await AppendQuoteAsync(store, card, new QuoteBuilder().ForCard(card).WithReference("PAY-00000001").At(T0).Build());
-        var refused = new QuoteBuilder().ForCard(card).WithReference("PAY-00000002").At(T0.AddMinutes(1)).Build();
+        var store = await CreateStoreAsync([card], NewAccount());
+        await AppendQuoteAsync(store, card, new QuoteBuilder().ForCard(card).WithReference(Ref(1).Value).At(T0).Build());
+        var refused = new QuoteBuilder().ForCard(card).WithReference(Ref(2).Value).At(T0.AddMinutes(1)).Build();
         await AppendQuoteAsync(store, card, refused);
         await store.WithCardLockAsync(card.Id, w =>
         {
             w.Payments.SetQuoteStatus(refused.Reference, QuoteStatus.Refused, "balance_changed", TestMoney.Of("170.50"), T0.AddMinutes(2));
             return Task.FromResult(0);
         });
-        var id = await PayAsync(store, card, "PAY-00000003", "150.50", T0.AddMinutes(3), null);
-        var third = new PaymentReference("PAY-00000003");
+        var id = await PayAsync(store, card, Ref(3).Value, "150.50", T0.AddMinutes(3), null);
+        var third = Ref(3);
         await store.WithCardLockAsync(card.Id, w =>
         {
             w.Payments.AppendEvent(new PaymentEvent(third, id, T0.AddMinutes(4), PaymentEventKind.ConfirmCreated, null, PaymentState.Pending, null, false));
@@ -274,8 +279,8 @@ public abstract class PaymentStoreContractTests
         var records = await store.ListPaymentRecordsAsync(card.Id);
         var record = await store.GetPaymentRecordAsync(third);
 
-        Assert.Equal(["PAY-00000003", "PAY-00000002", "PAY-00000001"], records.Select(r => r.Quote.Reference.Value));
-        Assert.Equal([QuoteStatus.Open, QuoteStatus.Refused, QuoteStatus.Open], records.Select(r => r.Status).Reverse());
+        Assert.Equal([Ref(3).Value, Ref(2).Value, Ref(1).Value], records.Select(r => r.Quote.Reference.Value));
+        Assert.Equal([QuoteStatus.Open, QuoteStatus.Refused, QuoteStatus.Open], records.Select(r => r.Status));
         Assert.Equal(
             [
                 (PaymentEventKind.ConfirmCreated, (PaymentState?)null, (PaymentState?)PaymentState.Pending, (string?)null, false, T0.AddMinutes(4)),
@@ -296,23 +301,23 @@ public abstract class PaymentStoreContractTests
     public async Task Activity_merges_purchases_and_payments_newest_first()
     {
         var card = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().Build());
+        var store = await CreateStoreAsync([card], NewAccount());
         await store.WithCardLockAsync(card.Id, w =>
         {
             w.AppendTransaction(new TransactionBuilder().Amount("10.00").At(T0.AddMinutes(1)).Build());
             w.AppendTransaction(new TransactionBuilder().Amount("20.00").At(T0.AddMinutes(5)).Declined(Reason.LimitExceeded).Build());
             return Task.FromResult(0);
         });
-        await PayAsync(store, card, "PAY-00000001", "150.50", T0.AddMinutes(3), p => p.Completed());
-        await PayAsync(store, card, "PAY-00000002", "150.50", T0.AddMinutes(7), null);
-        await AppendQuoteAsync(store, card, new QuoteBuilder().ForCard(card).WithReference("PAY-00000003").At(T0.AddMinutes(8)).Build());
+        await PayAsync(store, card, Ref(1).Value, "150.50", T0.AddMinutes(3), p => p.Completed());
+        await PayAsync(store, card, Ref(2).Value, "150.50", T0.AddMinutes(7), null);
+        await AppendQuoteAsync(store, card, new QuoteBuilder().ForCard(card).WithReference(Ref(3).Value).At(T0.AddMinutes(8)).Build());
 
         var all = await store.ListActivityAsync(card.Id, 10);
         var newestTwo = await store.ListActivityAsync(card.Id, 2);
 
-        var payment2 = new ActivityEntry(T0.AddMinutes(7).AddSeconds(30), ActivityKind.Payment, TestMoney.Of("150.50"), "Payment PAY-00000002", null, null, null, PaymentState.Pending, new PaymentReference("PAY-00000002"), PaymentOrigin.CardholderView);
+        var payment2 = new ActivityEntry(T0.AddMinutes(7).AddSeconds(30), ActivityKind.Payment, TestMoney.Of("150.50"), $"Payment {Ref(2)}", null, null, null, PaymentState.Pending, Ref(2), PaymentOrigin.CardholderView);
         var declined = new ActivityEntry(T0.AddMinutes(5), ActivityKind.Purchase, TestMoney.Of("20.00"), "Test Fuel Ltd", Outcome.Declined, Reason.LimitExceeded, Category.Fuel, null, null, null);
-        var payment1 = new ActivityEntry(T0.AddMinutes(3).AddSeconds(30), ActivityKind.Payment, TestMoney.Of("150.50"), "Payment PAY-00000001", null, null, null, PaymentState.Completed, new PaymentReference("PAY-00000001"), PaymentOrigin.CardholderView);
+        var payment1 = new ActivityEntry(T0.AddMinutes(3).AddSeconds(30), ActivityKind.Payment, TestMoney.Of("150.50"), $"Payment {Ref(1)}", null, null, null, PaymentState.Completed, Ref(1), PaymentOrigin.CardholderView);
         var approved = new ActivityEntry(T0.AddMinutes(1), ActivityKind.Purchase, TestMoney.Of("10.00"), "Test Fuel Ltd", Outcome.Approved, Reason.Approved, Category.Fuel, null, null, null);
         Assert.Equal([payment2, declined, payment1, approved], all);
         Assert.Equal([payment2, declined], newestTwo);
@@ -326,8 +331,8 @@ public abstract class PaymentStoreContractTests
     public async Task Payment_writes_are_discarded_when_the_work_throws()
     {
         var card = new CardBuilder().Build();
-        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().Build());
-        var quote = new QuoteBuilder().ForCard(card).At(T0).Build();
+        var store = await CreateStoreAsync([card], NewAccount());
+        var quote = new QuoteBuilder().ForCard(card).WithReference(Ref(1).Value).At(T0).Build();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => store.WithCardLockAsync<int>(card.Id, w =>
         {
@@ -342,6 +347,10 @@ public abstract class PaymentStoreContractTests
         Assert.Empty(await store.ListActivityAsync(card.Id, 10));
         Assert.Null(await store.WithCardLockAsync(card.Id, w => w.Payments.GetPendingPaymentAsync()));
     }
+
+    private PaymentReference Ref(int n) => new($"PAY-{block:D5}{n:D3}");
+
+    private LinkedAccount NewAccount() => new LinkedAccountBuilder().WithId(new Guid(block, 0x1A, 0x1A, 0, 0, 0, 0, 0, 0, 0, 0)).Build();
 
     private static Task AppendQuoteAsync(ICardStore store, StoreSeedCard card, Quote quote) =>
         store.WithCardLockAsync(card.Id, w =>

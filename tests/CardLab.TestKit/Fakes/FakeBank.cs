@@ -8,7 +8,7 @@ namespace CardLab.TestKit.Fakes;
 /// <summary>
 /// Scriptable in-memory <see cref="ICurrentAccountBank"/> for unit tests (design §15.2). Natural behaviour matches the
 /// port contract (idempotent on reference; refuses above the available balance; status by reference) and it must pass
-/// <c>CurrentAccountBankContractTests</c> (T-U-24). Scripts are one-shot and override the natural behaviour once.
+/// <c>CurrentAccountBankContractTests</c> (T-U-24). Scripts are one-shot (except <see cref="HoldDebitsUntil"/>) and override the natural behaviour once; a reference the bank has already seen returns its recorded outcome and leaves the scripts unconsumed (design §8 Flow 6).
 /// </summary>
 /// <remarks>
 /// PLANNER-DECISION: <see cref="Hang"/> throws <see cref="OperationCanceledException"/> immediately (it stands for "the
@@ -154,6 +154,7 @@ public sealed class FakeBank : ICurrentAccountBank
 
     /// <summary>Gate for AC-10: debit calls wait for <paramref name="release"/> before answering.</summary>
     /// <param name="release">Completes when the held debits may answer.</param>
+    /// <remarks>Stays in force until replaced (pass <see cref="Task.CompletedTask"/> to clear).</remarks>
     public void HoldDebitsUntil(Task release)
     {
         lock (gate)
@@ -235,6 +236,11 @@ public sealed class FakeBank : ICurrentAccountBank
             throw error;
         }
 
+        if (recorded.TryGetValue(request.Reference, out var seen))
+        {
+            return seen;
+        }
+
         if (hang is { } applied)
         {
             hang = null;
@@ -258,11 +264,6 @@ public sealed class FakeBank : ICurrentAccountBank
 
             recorded[request.Reference] = scripted;
             return scripted;
-        }
-
-        if (recorded.TryGetValue(request.Reference, out var seen))
-        {
-            return seen;
         }
 
         BankOutcome outcome;
