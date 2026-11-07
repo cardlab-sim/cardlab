@@ -64,7 +64,7 @@ Ports:
 Application (`CardLab.Domain.Application`):
 - `PaymentService`: `QuoteAsync`, `ConfirmAsync`, `CheckStatusAsync`, `GetReceiptAsync` → `Result<Receipt|Quote, PaymentError>`; `Receipt(Reference, State, Amount, Fee, Time, FromLabel, ToLabel, Reason?, Message, BalanceOwed, Repeated)` + origin; `PaymentError` = CardNotFound, ReferenceNotFound, NothingToPay, AboveLimit, PaymentPending, BalanceChanged, QuoteRefused.
 - `CardholderViewService.GetAsync(CardId) → CardholderView` (card, balance, availability + message, pending receipt, linked account + available balance, ≤ 10 card activity, ≤ 10 account entries).
-- `InFlightPayments.GetOrAdd(reference, factory)` singleton.
+- `InFlightPayments.GetOrAdd(reference, factory)`, `TryGet`, `Complete`/`Fail` (remove the entry before completing; BUG-006) singleton.
 
 Infrastructure / host / web:
 - `SqlPaymentWriter` (inside `SqlCardStore.WithCardLockAsync`); `SqlFakeBank : ICurrentAccountBank` with `IFakeBankSteering` (`Steering(NextDebitOutcome?, NextStatusCheck?)`; `NextDebitOutcome` = Complete, RefuseInsufficientFunds, RefuseAccountUnavailable, TimeoutDebitApplied, TimeoutNotReceived); `SystemPaymentReferences`; migration `AddPayments`; `Seeder` + `TestDataReset` extended.

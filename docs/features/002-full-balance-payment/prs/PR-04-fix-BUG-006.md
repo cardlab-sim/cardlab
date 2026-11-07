@@ -32,13 +32,13 @@ finds the task while it runs; joiners get the same outcome). Do not weaken the t
 
 (Regression only; behaviour unchanged.)
 
-## Owned files
-| File | Change |
-|------|--------|
-| src/CardLab.Domain/Application/InFlightPayments.cs | remove the entry before completion is observable |
-| src/CardLab.Domain/Application/PaymentService.cs | call the removal at the right point if needed |
-| tests/CardLab.Domain.Tests/Application/InFlightPaymentsTests.cs | regression test |
-| tests/CardLab.Domain.Tests/Application/PaymentServiceTests.cs | only if a helper is needed; keep line-382 assertion |
+## Files you own (edit only these)
+| File | Status in skeleton | What to do |
+|------|--------------------|------------|
+| src/CardLab.Domain/Application/InFlightPayments.cs | complete (PR-04) | remove the entry before completion is observable |
+| src/CardLab.Domain/Application/PaymentService.cs | complete (PR-04) | call the removal at the right point if needed |
+| tests/CardLab.Domain.Tests/Application/InFlightPaymentsTests.cs | complete (PR-04) | regression test |
+| tests/CardLab.Domain.Tests/Application/PaymentServiceTests.cs | complete (PR-04) | only if a helper is needed; keep line-382 assertion |
 
 ## Tests
 | # | Test | File | Then | Catches |

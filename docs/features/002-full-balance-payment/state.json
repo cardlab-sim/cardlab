@@ -82,9 +82,9 @@
       "depends_on": [
         "PR-04"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/002-full-balance-payment/04f-fix-bug-006",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/41"
     },
     {
       "id": "PR-05",
@@ -105,9 +105,9 @@
         "PR-04",
         "PR-05"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/002-full-balance-payment/06-cardholder-api",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/43"
     },
     {
       "id": "PR-07",
@@ -118,9 +118,9 @@
         "PR-04",
         "PR-05"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/002-full-balance-payment/07-admin-visibility",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/42"
     },
     {
       "id": "PR-08",
