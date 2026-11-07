@@ -1,0 +1,16 @@
+{
+  "feature": "002-full-balance-payment",
+  "title": "CL-3 slice 1: pay the full card balance from the linked current account",
+  "lane": "M",
+  "phase": "requirements",
+  "base_branch": "main",
+  "feature_branch": "feat/002-full-balance-payment",
+  "gates": { "requirements": null, "design": null, "plan": null },
+  "discovery": [],
+  "prs": [],
+  "bugs_open": [],
+  "resume": null,
+  "history": [
+    { "at": "2026-11-07T00:00Z", "event": "feature created (CL-3 slice 1); lane M chosen by human; human blind estimate M" }
+  ]
+}
