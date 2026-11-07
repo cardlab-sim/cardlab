@@ -136,6 +136,11 @@ need a different consistency scope than the card.
 `confirm_repeated` event, then awaits the registry task if present, else returns the stored
 receipt. **We give up:** correctness of the "same outcome" guarantee across two hosts (we have
 one). **Revisit if:** the app scales out (then C, or a bank callback).
+**Erratum (BUG-003, human, 2026-11-07):** a status check of a reference whose confirm is in flight on
+this host awaits that confirm first and never asks the bank while the debit call is open (otherwise
+a check could read `NotReceived`, settle `Failed`, and then the debit lands: R-9). The wait is
+bounded by the check's own 10 s budget; on expiry the check appends `StatusCheckUnanswered`, stays
+`Pending` and returns W-10 without calling the bank.
 
 ### DEC-6 Fake bank placement and how it "does not answer" (Q-4, human, round 1)
 | Criterion | A: `CardLab.Infrastructure.FakeBank`, own tables in the same database and DbContext; timeout mode = the call never returns and the service's 10 s budget cancels it (Recommended) | B: same placement; timeout mode returns "unknown" at once (no real wait) | C: separate project and DbContext; file- or memory-backed ledger |
@@ -244,12 +249,13 @@ it leaves a pending payment on the demo). **Chosen:** yes, with the records mark
 permanent payment and compliance record on `demo` that no person made; it must never be mistaken
 for real use). Marking (DEC-15): the smoke steers the fake bank to *complete* explicitly, so the
 bank outcome carries `Simulated = true`, and it sends the request header
-`X-CardLab-Origin: deploy-smoke`, stored as `Origin = deploy_smoke` on the quote and shown on the
+`X-CardLab-Origin: deploy-smoke`, stored as `Origin = DeploySmoke` (enum name; wire name `deploy_smoke`) on the quote and shown on the
 record page, the admin Payments list and the activity rows as an "origin: smoke" badge.
 **We give up:** nothing. **Revisit if:** quota pressure.
 
 ### DEC-15 Origin marker on the record (human's condition on Q-12, round 2)
-`PaymentQuote.Origin varchar(20)`: `cardholder_view` (default) or `deploy_smoke`. Set from the
+`PaymentQuote.Origin varchar(20)`: enum name `CardholderView` (default) or `DeploySmoke`, like every
+other enum column (wire names `cardholder_view` / `deploy_smoke`; erratum BUG-005, 2026-11-07). Set from the
 request header `X-CardLab-Origin` on `POST .../quotes` only when its value is exactly
 `deploy-smoke`; any other value or absence → `cardholder_view` (no free text is stored). Copied into
 `Receipt`, `PaymentRecord`, the Payments list and `ActivityEntry` so every surface can label it.
@@ -393,11 +399,11 @@ never joined with card tables in any query (DEC-2).
 | Table | Columns | Keys / indexes / rules |
 |---|---|---|
 | `LinkedAccount` | `Id`, `AccountId` FK BusinessAccount, `DisplayName nvarchar(200)`, `LastFour char(4)`, `BankAccountRef uniqueidentifier`, `AuthorityBasis nvarchar(400)` | PK; unique `AccountId` (one per business, R-2). The full account number is never stored (NFR-3): the seed derives `LastFour` and discards the rest |
-| `PaymentQuote` | `Reference varchar(12)` PK, `CardId` FK, `LinkedAccountId` FK, `Kind varchar(10)`, `Amount`, `Fee`, `Total`, `FromLabel nvarchar(200)`, `ToLabel nvarchar(200)`, `WordingVersion varchar(10)`, `Heading nvarchar(100)`, `RenderedLines nvarchar(2000)` (W-1 lines joined with `\n`), `ButtonLabel nvarchar(100)`, `ActorKind varchar(12)`, `ActorId`, `ActorName nvarchar(200)`, `AuthorityBasis nvarchar(400)`, `Origin varchar(20)` (cardholder_view/deploy_smoke, DEC-15), `CreatedAtUtc`, `Status varchar(10)` (Open/Confirmed/Refused), `RefusedAtUtc null`, `RefusalReason varchar(30) null`, `BalanceAtRefusal decimal null` | PK Reference; index `(CardId, CreatedAtUtc DESC)`. Only `Status`, `RefusedAtUtc`, `RefusalReason`, `BalanceAtRefusal` ever change (R-14 "shown-and-accepted part never changed") |
+| `PaymentQuote` | `Reference varchar(12)` PK, `CardId` FK, `LinkedAccountId` FK, `Kind varchar(10)`, `Amount`, `Fee`, `Total`, `FromLabel nvarchar(200)`, `ToLabel nvarchar(200)`, `WordingVersion varchar(10)`, `Heading nvarchar(100)`, `RenderedLines nvarchar(2000)` (W-1 lines joined with `\n`), `ButtonLabel nvarchar(100)`, `ActorKind varchar(12)`, `ActorId`, `ActorName nvarchar(200)`, `AuthorityBasis nvarchar(400)`, `Origin varchar(20)` (enum name CardholderView/DeploySmoke; wire cardholder_view/deploy_smoke; DEC-15), `CreatedAtUtc`, `Status varchar(10)` (Open/Confirmed/Refused), `RefusedAtUtc null`, `RefusalReason varchar(30) null`, `BalanceAtRefusal decimal null` | PK Reference; index `(CardId, CreatedAtUtc DESC)`. Only `Status`, `RefusedAtUtc`, `RefusalReason`, `BalanceAtRefusal` ever change (R-14 "shown-and-accepted part never changed") |
 | `Payment` | `Id` PK, `Reference` FK unique → PaymentQuote, `CardId` FK, `Kind`, `Amount`, `Fee`, `State varchar(10)`, `CreatedAtUtc` (acceptance time), `SettledAtUtc null`, `EffectiveAtUtc null`, `BankDebitedAtUtc null`, `FailureReason varchar(30) null`, `BalanceBefore decimal null`, `BalanceAfter decimal null`, `Simulated bit` | PK; unique `Reference` (R-7: at most one payment per reference); **filtered unique index `UX_Payment_OnePending (CardId) WHERE State = 'Pending'`** (R-8 enforced by the database as well as the rules); index `(CardId, CreatedAtUtc DESC)`; `IX_Payment_Completed (CardId, State) INCLUDE (Amount)` for the balance sum |
 | `PaymentEvent` | `Id` PK, `Reference` FK, `PaymentId null`, `AtUtc`, `Kind varchar(30)`, `FromState varchar(10) null`, `ToState varchar(10) null`, `Detail nvarchar(400) null`, `Simulated bit` | append-only; index `(Reference, AtUtc)` |
 | `BankAccount` (fake bank) | `Id` PK (= `BankAccountRef`), `LastFour char(4)`, `AvailableBalance decimal(12,2)` | one row seeded (£25,000.00) |
-| `BankDebitRequest` (fake bank) | `Reference varchar(12)` PK, `AccountId` FK BankAccount, `Amount`, `Outcome varchar(30)` (Completed/RefusedInsufficientFunds/RefusedAccountUnavailable), `ReceivedAtUtc`, `DebitedAtUtc null`, `Simulated bit` | the bank's memory of every request it received; a repeated request with a known reference returns this row (idempotent) |
+| `BankDebitRequest` (fake bank) | `Reference varchar(12)` PK, `AccountId` FK BankAccount, `Amount`, `Outcome varchar(30)` (Completed/RefusedInsufficientFunds/RefusedAccountUnavailable/NotReceived, the last only under *time out, not received* steering: BUG-004), `ReceivedAtUtc`, `DebitedAtUtc null`, `Simulated bit` | the bank's memory of every request it received; a repeated request with a known reference returns this row (idempotent) |
 | `BankEntry` (fake bank) | `Id` PK, `AccountId` FK, `Reference varchar(12)` unique, `Amount`, `Narrative nvarchar(200)`, `PostedAtUtc` | the ledger; index `(AccountId, PostedAtUtc DESC)` |
 | `BankSteering` (fake bank) | `Id int` PK (= 1), `NextDebitOutcome varchar(30) null`, `NextStatusCheck varchar(20) null` | one row; read-and-clear inside the bank's own transaction |
 
@@ -465,7 +471,8 @@ them and simply raise the balance that the settlement's `BalanceAfter` reflects 
 **Flow 2: bank does not answer, then status check.** Step 2 throws `OperationCanceledException`
 from the budget token → lock #2 appends `BankUnanswered`, leaves `Pending`, receipt W-5. Later
 `CheckStatusAsync` (manual button or the SPA on load, DEC-13): read the payment (must be
-`Pending`), call `GetDebitStatusAsync` with the budget outside the lock, then lock: `Completed` →
+`Pending`); if its confirm is still in flight on this host, await it within the check's 10 s budget
+(expiry → `StatusCheckUnanswered`, W-10, no bank call; DEC-5 erratum); otherwise call `GetDebitStatusAsync` with the budget outside the lock, then lock: `Completed` →
 settle with `EffectiveAt = DebitedAtUtc ?? now` (AC-34, AC-38); `Refused`/`NotReceived` → settle
 `Failed` with the reason (a `NotReceived` settlement is shown with W-4, the "could not process it
 right now" text, plus a "not received" reason badge; see §9); `Unknown` → append
@@ -491,7 +498,11 @@ got the request) or `Completed` (got it, applied it). Nothing is ever re-sent (R
 known reference → return the recorded outcome; else read-and-clear `BankSteering.NextDebitOutcome`
 (`Simulated = steering != null`); `RefuseInsufficientFunds` if steered or if `Amount >
 AvailableBalance`; `Complete`/`TimeoutDebitApplied` → insert `BankDebitRequest` + `BankEntry`,
-decrement balance, commit; `TimeoutNotReceived` → commit nothing; the two timeout modes then
+decrement balance, commit; `TimeoutNotReceived` → insert `BankDebitRequest` with `Outcome =
+NotReceived`, `Simulated = 1`, `DebitedAtUtc = NULL`, no `BankEntry`, no balance change, commit
+(erratum BUG-004, human, 2026-11-07: R-15 "outcomes produced under a steering setting are marked
+as simulated"); a status check then answers `NotReceived(Simulated: true)` from that row, and with
+no row (a crash before the bank saw it) `NotReceived(Simulated: false)`; the two timeout modes then
 `await Task.Delay(Timeout.Infinite, ct)`.
 
 ## 9. Errors & failure modes
@@ -552,9 +563,10 @@ No new secrets; the fake adapter needs none (NFR-3). No new repo variables or Bi
 - **NFR-2 confirm ≤ 3 s warm when the bank completes:** two short locked transactions (each: two
   indexed `SUM`s, one or two inserts, one update) plus the fake bank's own transaction; expected
   < 200 ms on Azure SQL in-region. Measured on `demo` by the smoke spec (AC-26, T-E-7).
-- **NFR-2 bank budget 10 s:** `CancellationTokenSource.CancelAfter(BankTimeoutSeconds)` linked to the
-  request token; the budget token alone decides "unanswered" (a client disconnect does not mark the
-  payment unanswered: the settlement still runs with `CancellationToken.None` for lock #2).
+- **NFR-2 bank budget 10 s:** `new CancellationTokenSource(BankTimeoutSeconds)`, **not** linked to the
+  request token (erratum BUG-002, human, 2026-11-07); the budget token alone decides "unanswered".
+  A client disconnect after step 1 does not cancel the bank call: steps 2 and 3 run to completion
+  (lock #2 with `CancellationToken.None`), so the payment settles and any joiner gets the real outcome.
 - **NFR-2 review renders ≤ 2 s warm:** the view is one aggregate GET (4 indexed queries + 2 bank
   reads); the quote is one POST. T-I-14 asserts the aggregate endpoint p95 ≤ 300 ms locally with
   1,000 transactions and 200 payments.
@@ -730,6 +742,7 @@ clock.
 ## Change log
 | Date | Change | Reason |
 |------|--------|--------|
+| 2026-11-07 | Errata from build reviews (Gate 2 stays approved; decisions by the human via /sdlc:bugs): BUG-002 §13 bank budget not linked to the request token, a disconnect never cancels the debit; BUG-003 DEC-5 / Flow 2 a check awaits an in-flight confirm within its own 10 s budget; BUG-004 Flow 6 / §6 *time out, not received* records a simulated NotReceived request; BUG-005 DEC-15 / §6 Origin stored as the enum name. | PR-04 / PR-05 reviews (F3, F4; F4, F8) |
 | 2026-11-07 | Round 2 answers: Q-9..Q-12 as recommended → DEC-11..DEC-14 chosen; DEC-15 origin marker added on the human's condition (smoke records distinguishable: `Origin` column, header, badges; requirements note for the gate). Open questions empty; ADR-006, ADR-007 written; designer's size L in estimate.md. Ready for Gate 2. | round 2 answers (human) |
 | 2026-11-07 | Round 1 answers: Q-1..Q-6, Q-8 all as recommended → DEC-3..DEC-9 chosen; human's blind Gate-2 size L recorded in estimate.md. Frontier: Q-9..Q-12. | round 1 answers (human) |
 | 2026-11-07 | Draft from the approved requirements, compliance pre-read and repo scan (001 seams, store, lock, harness, SPA). UI searches run. DEC-1 (inherited decisions), DEC-2 (layout), DEC-10 (server-rendered wording) recorded; DEC-3..DEC-9 proposed; frontier Q-1..Q-8 asked, Q-9..Q-12 queued for round 2. | round 1 |

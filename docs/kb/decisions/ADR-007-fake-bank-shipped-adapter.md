@@ -15,7 +15,7 @@
   answers / does not answer) exposed at `/api/fake-bank` and on the cardholder view's own "Fake
   bank" section, never on the review screen or receipt; steered outcomes carry `Simulated = true`
   into the record. The deploy smoke pays once per deploy on `demo` with the bank steered to
-  *complete* and the header `X-CardLab-Origin: deploy-smoke`, stored as `Origin = deploy_smoke`
+  *complete* and the header `X-CardLab-Origin: deploy-smoke`, stored as `Origin = DeploySmoke` (wire `deploy_smoke`; BUG-005)
   on the quote, so smoke records are never mistaken for a person's.
 - **Alternatives:** returning "unknown" instantly in timeout mode (budget path never exercised);
   a separate project and DbContext (a day more for a boundary review can enforce); in-memory or

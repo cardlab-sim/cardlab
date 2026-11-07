@@ -73,7 +73,7 @@
       ],
       "status": "coding",
       "branch": "pr/002-full-balance-payment/04-application",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/39"
     },
     {
       "id": "PR-05",
@@ -84,7 +84,7 @@
       ],
       "status": "coding",
       "branch": "pr/002-full-balance-payment/05-sql-and-fake-bank",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/40"
     },
     {
       "id": "PR-06",
@@ -126,7 +126,9 @@
     }
   ],
   "bugs_open": [
-    "BUG-001"
+    "BUG-002",
+    "BUG-003",
+    "BUG-004"
   ],
   "resume": null,
   "history": [
@@ -145,6 +147,10 @@
     {
       "at": "2026-11-07T16:30Z",
       "event": "gate plan approved; PR-00 merged (#32); feat/* protection removed by human; phase build"
+    },
+    {
+      "at": "2026-11-07T19:00Z",
+      "event": "design errata BUG-002..BUG-005 (human decisions via /sdlc:bugs); Gate 2 stays approved"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"

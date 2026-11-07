@@ -5,8 +5,12 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 
 | BUG | Found by | Severity | AC/R | Title | Root-cause layer | Decision | Status | Resume at | Issue | Updated |
 |-----|----------|----------|------|-------|------------------|----------|--------|-----------|-------|---------|
-| BUG-001 | reviewer (PR-02, F3) | S3 | AC-3 | Store contract P-1 expects the test's own linked account id, which the shared SQL test database cannot return | plan | fix-now (option A) | fixed | build (PR-02 fix round) | | 2026-11-07 |
+| BUG-001 | reviewer (PR-02, F3) | S3 | AC-3 | Store contract P-1 expects the test's own linked account id, which the shared SQL test database cannot return | plan | fix-now (option A) | verified | build (PR-02 fix round) | | 2026-11-07 |
 
+| BUG-002 | reviewer (PR-04, F4) | S3 | NFR-2, R-9 | Client disconnect cancels the bank call (budget linked to request token), contrary to design §13 | design | fix-now (option A: code matches design) | in-progress | build (PR-04 fix round) | | 2026-11-07 |
+| BUG-003 | reviewer (PR-04, F3) | S4 | R-9 | Status check awaiting an in-flight confirm is undocumented and unbounded | design | fix-now (option A: record + cap at 10 s) | in-progress | build (PR-04 fix round) | | 2026-11-07 |
+| BUG-004 | reviewer (PR-05, F4) | S2 | R-15 | Steered "time out, not received" failure is not marked simulated | design | fix-now (option A: amend design + code) | in-progress | build (PR-05 fix round) | | 2026-11-07 |
+| BUG-005 | reviewer (PR-05, F8) | S4 | DEC-15 | Origin stored as enum name, design text said deploy_smoke | design | fix-now (amend design text) | fixed | — | | 2026-11-07 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
      Decision: fix-now (option A/B) | defer | wont-fix, with the human's words in the section below
@@ -22,4 +26,48 @@ Options: (A) P-1 asserts the fields every row shares (builder defaults = seed: D
 ### Decision (human, 2026-11-07)
 "A. Loosen P-1 (Recommended)": P-1 asserts the fields every linked-account row shares (DisplayName, LastFour 7731, BankRef = Seed.BankAccountRef, AuthorityBasis) plus a non-empty id. The P-1 rule lives in the PR-02-owned stub comment of `PaymentStoreContractTests.cs`, so the PR-02 coder changes comment and test together; no brief text names the id.
 ### Resolution
-PR-02 (#36) fix round, head a03d3ff: P-1 asserts the shared fields plus a non-empty id; reviewer recheck PASSED (mutations: wrong AuthorityBasis or empty BankRef fail P-1, random Id passes). Moves to verified once P-1 passes on SQL in PR-05 (T-I-16).
+PR-02 (#36) fix round, head a03d3ff: P-1 asserts the shared fields plus a non-empty id; reviewer recheck PASSED (mutations: wrong AuthorityBasis or empty BankRef fail P-1, random Id passes). Verified 2026-11-07: P-1 passes unedited on SQL in PR-05 (#40, head 3504f23), Integration.Tests 91 passed / 0 failed (orchestrator fresh run).
+
+## BUG-002
+**Repro:** PR-04 `PaymentService.cs:361-370`: the bank budget is `CreateLinkedTokenSource(ct)` + `CancelAfter`; a client disconnect cancels the debit call.
+**Expected / actual:** design §13 said the settlement still runs after a disconnect; actually the payment stays Pending with no Bank* event until the next check.
+**Evidence:** reviews/PR-04.review.md F4.
+### Triage (reviewer)
+design: §13 text promises what the linked budget cannot do. Options (a) reword §13, (b) unlink the budget.
+### Decision (human, 2026-11-07)
+"A. Code matches design (Recommended)": unlink the bank budget from the request token. Design §13 erratum states it explicitly; PR-04 brief amended.
+### Resolution
+…
+
+## BUG-003
+**Repro:** PR-04 `PaymentService.cs:176-194`: `CheckStatusAsync` awaits an in-flight confirm before asking the bank (coder addition; correct, closes an R-9 hole).
+**Expected / actual:** not in DEC-5 / Flow 2; worst-case wait ~20-35 s, unbudgeted.
+**Evidence:** reviews/PR-04.review.md F3.
+### Triage (reviewer)
+design: keep the behaviour, record it, decide on a bound.
+### Decision (human, 2026-11-07)
+"A. Record + cap at 10 s (Recommended)": DEC-5 / Flow 2 erratum; on expiry `StatusCheckUnanswered`, W-10, no bank call.
+### Resolution
+…
+
+## BUG-004
+**Repro:** fake bank steered to *time out, not received* → nothing recorded → status check answers `NotReceived(Simulated: false)` → payment Failed, not marked simulated.
+**Expected / actual:** R-15: outcomes produced under steering are marked simulated in the payment record.
+**Evidence:** reviews/PR-05.review.md F4 (`SqlFakeBank.cs:100`, `:180-184`); design Flow 6 "commit nothing".
+### Triage (reviewer)
+design: Flow 6 / DEC-6 omitted recording the steered not-received request.
+### Decision (human, 2026-11-07)
+"A. Amend design + code (Recommended)": record `BankDebitRequest` Outcome NotReceived, Simulated = 1, no ledger entry, no balance change; status check returns NotReceived(simulated). Design Flow 6 / §6 erratum.
+### Resolution
+…
+
+## BUG-005
+**Repro:** `SqlPaymentWriter.cs:125` stores `Origin` as the enum name (`DeploySmoke`); design §6 / DEC-15 said `deploy_smoke`.
+**Expected / actual:** docs and data disagree; wire names already `deploy_smoke`.
+**Evidence:** reviews/PR-05.review.md F8.
+### Triage (reviewer)
+design text only.
+### Decision (human, 2026-11-07)
+"Amend design text (Recommended)": stored as enum name, wire `deploy_smoke`. No code change.
+### Resolution
+Design DEC-15 / §6 / §4 text, design digest and ADR-007 amended 2026-11-07. Check: `grep -n "Origin = deploy_smoke\|cardholder_view/deploy_smoke" 02-tech-design.md` → no hits.

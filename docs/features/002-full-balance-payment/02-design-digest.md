@@ -42,7 +42,7 @@ Current design for downstream agents (planner, coders, reviewers, validator). De
 | DEC-12 | Admin history via new `GET /api/cards/{id}/activity` | purchases + payments merged, newest first; `/transactions` unchanged; admin "Transactions" table becomes "Activity" |
 | DEC-13 | Auto status check on open is triggered by the SPA | GET view is pure; SPA calls `POST .../check` when a pending payment is shown, then re-reads; admin card detail does the same |
 | DEC-14 | Deploy smoke pays once on `demo` | `smoke/pay.spec.ts`: simulate purchase on "Ops van", steer fake bank to *complete*, pay full balance with header `X-CardLab-Origin: deploy-smoke`, assert W-2, receipt ≤ 3 s, record origin smoke |
-| DEC-15 | `Origin` marker on the record (requirements decision 37, erratum) | `PaymentQuote.Origin varchar(20)`: `cardholder_view` (default) / `deploy_smoke` only when header value is exactly `deploy-smoke`; copied into `Receipt`, `PaymentRecord`, Payments list, `ActivityEntry`; "origin: smoke" badge |
+| DEC-15 | `Origin` marker on the record (requirements decision 37, erratum) | `PaymentQuote.Origin varchar(20)`: enum name `CardholderView` (default) / `DeploySmoke`, wire `cardholder_view` / `deploy_smoke` (BUG-005) only when header value is exactly `deploy-smoke`; copied into `Receipt`, `PaymentRecord`, Payments list, `ActivityEntry`; "origin: smoke" badge |
 
 ## Interfaces (seams, §5)
 Domain (`src/CardLab.Domain/Payments/`, no I/O):
