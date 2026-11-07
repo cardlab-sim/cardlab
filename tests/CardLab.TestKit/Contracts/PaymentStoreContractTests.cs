@@ -336,14 +336,16 @@ public abstract class PaymentStoreContractTests
         await store.WithCardLockAsync(card.Id, w =>
         {
             w.AppendTransaction(new TransactionBuilder().Amount("10.00").At(T0.AddMinutes(2)).DecidedAt(T0.AddMinutes(5)).Build());
+            w.AppendTransaction(new TransactionBuilder().Amount("20.00").At(T0.AddMinutes(4)).Build());
             return Task.FromResult(0);
         });
 
         var activity = await store.ListActivityAsync(card.Id, 10);
 
-        Assert.Equal([ActivityKind.Purchase, ActivityKind.Payment], activity.Select(a => a.Kind).ToArray());
-        Assert.Equal(T0.AddMinutes(2), activity[0].At);
-        Assert.Equal(T0.AddMinutes(3).AddSeconds(30), activity[1].At);
+        Assert.Equal([ActivityKind.Purchase, ActivityKind.Purchase, ActivityKind.Payment], activity.Select(a => a.Kind).ToArray());
+        Assert.Equal([T0.AddMinutes(2), T0.AddMinutes(4), T0.AddMinutes(3).AddSeconds(30)], activity.Select(a => a.At).ToArray());
+        var newest = await store.ListActivityAsync(card.Id, 1);
+        Assert.Equal(T0.AddMinutes(2), Assert.Single(newest).At);
     }
 
     // T-U-23 / T-I-16 · PR-02 · contract

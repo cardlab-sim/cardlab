@@ -602,6 +602,9 @@ describe('FakeApiClient (002)', () => {
     });
     vi.setSystemTime(new Date('2026-07-01T12:20:00Z'));
     await fake.checkPayment('ops-1', quote.reference);
+    // Added last but decided at 12:01: it must sort below Early by decision time, not stay on top by insertion.
+    vi.setSystemTime(new Date('2026-07-01T12:01:00Z'));
+    fake.addPurchase('ops-1', '5.00');
 
     const activity = await fake.listActivity('ops-1');
 
@@ -609,9 +612,10 @@ describe('FakeApiClient (002)', () => {
       ['Late', '2026-06-01T08:00:00Z'],
       [`Payment ${quote.reference}`, '2026-07-01T12:05:00.000Z'],
       ['Early', '2026-07-01T12:03:00.000Z'],
+      ['Card purchase', '2026-07-01T12:01:00.000Z'],
       ['Card purchase', '2026-07-01T12:00:00.000Z'],
     ]);
-    expect((await fake.getCard('ops-1')).balanceOwed).toBe('175.50');
+    expect((await fake.getCard('ops-1')).balanceOwed).toBe('180.50');
   });
 
   // T-W-10 · PR-03f · web unit (BUG-007)
