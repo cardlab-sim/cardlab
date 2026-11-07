@@ -2,15 +2,29 @@
   "feature": "002-full-balance-payment",
   "title": "CL-3 slice 1: pay the full card balance from the linked current account",
   "lane": "M",
-  "phase": "requirements",
+  "phase": "design",
   "base_branch": "main",
   "feature_branch": "feat/002-full-balance-payment",
-  "gates": { "requirements": null, "design": null, "plan": null },
+  "gates": {
+    "requirements": {
+      "approved_at": "2026-11-07T14:55Z",
+      "note": "Approve"
+    },
+    "design": null,
+    "plan": null
+  },
   "discovery": [],
   "prs": [],
   "bugs_open": [],
   "resume": null,
   "history": [
-    { "at": "2026-11-07T00:00Z", "event": "feature created (CL-3 slice 1); lane M chosen by human; human blind estimate M" }
+    {
+      "at": "2026-11-07T00:00Z",
+      "event": "feature created (CL-3 slice 1); lane M chosen by human; human blind estimate M"
+    },
+    {
+      "at": "2026-11-07T14:55Z",
+      "event": "gate requirements approved (human as PM + compliance partner, risk_class R2)"
+    }
   ]
 }
