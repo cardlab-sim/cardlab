@@ -92,7 +92,7 @@ public readonly record struct Money : IComparable<Money>
     /// <c>£1,000,000.00</c>; pound sign, comma thousands separators, exactly two decimals, culture-independent.</summary>
     /// <returns>The display text.</returns>
     /// <remarks>Implemented in 002 PR-01. High-risk path.</remarks>
-    public string ToDisplay() => throw new NotImplementedException("PR-01");
+    public string ToDisplay() => "£" + Amount.ToString("#,##0.00", CultureInfo.InvariantCulture);
 
     /// <summary>Invariant two-decimal text, e.g. <c>"1234.56"</c>, <c>"0.00"</c> (the wire format).</summary>
     /// <returns>The amount with exactly two decimals and no thousands separator.</returns>
