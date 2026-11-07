@@ -11,10 +11,10 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 | BUG-003 | reviewer (PR-04, F3) | S4 | R-9 | Status check awaiting an in-flight confirm is undocumented and unbounded | design | fix-now (option A: record + cap at 10 s) | fixed | build (PR-04 fix round) | | 2026-11-07 |
 | BUG-004 | reviewer (PR-05, F4) | S2 | R-15 | Steered "time out, not received" failure is not marked simulated | design | fix-now (option A: amend design + code) | fixed | build (PR-05 fix round) | | 2026-11-07 |
 | BUG-005 | reviewer (PR-05, F8) | S4 | DEC-15 | Origin stored as enum name, design text said deploy_smoke | design | fix-now (amend design text) | fixed | — | | 2026-11-07 |
-| BUG-006 | orchestrator (feature CI run 42410267102) | S4 | AC-10 | Disconnect test flaky: in-flight registry entry removed after the confirm returns | code | fix-now (option A) | fixed | build (PR-04f, wave 3) | | 2026-11-07 |
+| BUG-006 | orchestrator (feature CI run 42410267102) | S4 | AC-10 | Disconnect test flaky: in-flight registry entry removed after the confirm returns | code | fix-now (option A) | verified | build (PR-04f, wave 3) | | 2026-11-07 |
 | BUG-007 | reviewer (PR-07, F5) | S4 | R-1 | Shared web FakeApiClient doesn't feed simulated purchases into activity/balance; PR-07 test-local ActivityFake duplicates it with inconsistent data | test-harness | fix-now (small fix PR) | fixed | build (PR-03f, wave 4) | | 2026-11-07 |
 | BUG-008 | reviewer (PR-06, F4) | S4 | AC-9, AC-10 | Repeated/parallel confirm receipt time differs by < 1 ms on the wire (full-tick vs stored ms) | code | fix-now (fold into PR-04f) | fixed | build (PR-04f) | | 2026-11-07 |
-| BUG-009 | coder (PR-08, 001 E2E formatting.spec T-E-6) | S2 | 001 AC-38, R-7 | Admin activity shows a purchase at decision time instead of the processor timestamp (001 regression) | design | fix-now (B: exactly as 001) | in-progress | build (PR-07f, wave 4) | | 2026-11-07 |
+| BUG-009 | coder (PR-08, 001 E2E formatting.spec T-E-6) | S2 | 001 AC-38, R-7 | Admin activity shows a purchase at decision time instead of the processor timestamp (001 regression) | design | fix-now (B: exactly as 001) | fixed | build (PR-07f, wave 4) | | 2026-11-07 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
      Decision: fix-now (option A/B) | defer | wont-fix, with the human's words in the section below
@@ -85,7 +85,7 @@ code (PR-04): race in the test-visible registry cleanup; production impact nil (
 ### Decision (human, 2026-11-07)
 "A. Small fix PR now (Recommended)": brief prs/PR-04-fix-BUG-006.md, wave 3.
 ### Resolution
-PR-04f (#41): `InFlightPayments.Complete`/`Fail` release the entry before completing; swap mutation fails 3/3; 200-repeat stability run 0 failures. Moves to verified when feature CI `backend` is green.
+PR-04f (#41): `InFlightPayments.Complete`/`Fail` release the entry before completing; swap mutation fails 3/3; 200-repeat stability run 0 failures. Verified: feature CI run 42416721004 (head e6729da) `backend` green, unit and integration.
 
 ## BUG-007
 **Repro:** `web/src/pages/CardDetail.test.tsx:604-638` (`ActivityFake`, `paymentsOverride`) subclasses the shared `FakeApiClient` (`web/src/api/fakeApiClient.ts`, PR-03) because `simulatePurchase` never reaches `listActivity` or the balance and `origin` is hard-coded.
@@ -118,4 +118,4 @@ design: §5 named decision time for the activity entry without separating the sh
 ### Decision (human, 2026-11-07)
 First answered "A. Processor time (Recommended)" on an option table that wrongly described A as 001's behaviour. After the orchestrator's correction (001 showed processor time, ordered by decision time), the human chose "B. Exactly as 001 (Recommended)": show purchases at the processor timestamp, order by decision time, payments by confirm time. Design §5 erratum.
 ### Resolution
-…
+PR-07f (#46): SQL and in-memory stores and the web fake show purchases at `OccurredAt`, ordered by `DecidedAtUtc`; contract case on both stores; 001 formatting.spec T-E-6 green on both browsers (orchestrator, isolated port). Moves to verified when feature CI `e2e` is green.

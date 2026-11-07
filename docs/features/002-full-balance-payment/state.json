@@ -154,9 +154,9 @@
         "PR-07",
         "PR-03f"
       ],
-      "status": "coding",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/07f-fix-bug-009",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/46"
     }
   ],
   "bugs_open": [
