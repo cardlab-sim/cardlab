@@ -1,0 +1,35 @@
+# DORA-lite: real GitHub deployment records without a cloud target.
+# Each job that names an environment creates a deployment (time, commit, environment, status),
+# which is what deployment frequency and lead time are computed from.
+# staging: every push to main or a feature branch. production: main only, after a required reviewer approves.
+name: dora-deploy
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dora-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to staging (simulated)
+        run: echo "deployed ${GITHUB_SHA::7} from ${GITHUB_REF_NAME} to staging"
+
+  production:
+    needs: staging
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy to production (simulated, after approval)
+        run: echo "deployed ${GITHUB_SHA::7} to production"
