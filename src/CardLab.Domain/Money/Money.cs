@@ -29,7 +29,7 @@ public readonly record struct Money : IComparable<Money>
     /// <returns>False when <paramref name="value"/> has more than two decimal places or is negative.</returns>
     public static bool TryFromDecimal(decimal value, out Money money)
     {
-        if (value < 0m || decimal.Round(value, 2) != value)
+        if (value < 0m || decimal.Round(value, 1) != value)
         {
             money = Zero;
             return false;
