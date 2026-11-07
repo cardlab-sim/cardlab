@@ -37,9 +37,9 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "planned",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/01-domain-rules",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/35"
     },
     {
       "id": "PR-02",
@@ -48,9 +48,9 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/02-test-harness",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/36"
     },
     {
       "id": "PR-03",
@@ -59,9 +59,9 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/03-cardholder-web",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/37"
     },
     {
       "id": "PR-04",
@@ -72,7 +72,7 @@
         "PR-02"
       ],
       "status": "planned",
-      "branch": "pr/002-full-balance-payment/04-app-services",
+      "branch": "pr/002-full-balance-payment/04-application",
       "url": null
     },
     {
@@ -83,7 +83,7 @@
         "PR-02"
       ],
       "status": "planned",
-      "branch": "pr/002-full-balance-payment/05-sql-store-fake-bank",
+      "branch": "pr/002-full-balance-payment/05-sql-and-fake-bank",
       "url": null
     },
     {
@@ -121,11 +121,13 @@
         "PR-07"
       ],
       "status": "planned",
-      "branch": "pr/002-full-balance-payment/08-e2e-journeys",
+      "branch": "pr/002-full-balance-payment/08-e2e",
       "url": null
     }
   ],
-  "bugs_open": [],
+  "bugs_open": [
+    "BUG-001"
+  ],
   "resume": null,
   "history": [
     {
