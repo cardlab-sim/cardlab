@@ -2,7 +2,7 @@
   "feature": "002-full-balance-payment",
   "title": "CL-3 slice 1: pay the full card balance from the linked current account",
   "lane": "M",
-  "phase": "plan",
+  "phase": "build",
   "base_branch": "main",
   "feature_branch": "feat/002-full-balance-payment",
   "gates": {
@@ -14,10 +14,117 @@
       "approved_at": "2026-11-07T15:34Z",
       "note": "Approve"
     },
-    "plan": null
+    "plan": {
+      "approved_at": "2026-11-07T16:30Z",
+      "note": "Approve"
+    }
   },
   "discovery": [],
-  "prs": [],
+  "prs": [
+    {
+      "id": "PR-00",
+      "title": "Skeleton, shared wiring and plan",
+      "wave": 0,
+      "depends_on": [],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/00-skeleton",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/32"
+    },
+    {
+      "id": "PR-01",
+      "title": "Payment domain rules: balance, quote, confirm, lifecycle, wording v1",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "planned",
+      "branch": "pr/002-full-balance-payment/01-domain-rules",
+      "url": null
+    },
+    {
+      "id": "PR-02",
+      "title": "Payment test harness: in-memory store, scriptable bank, contract suites",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "planned",
+      "branch": "pr/002-full-balance-payment/02-test-harness",
+      "url": null
+    },
+    {
+      "id": "PR-03",
+      "title": "Cardholder web journey: view, review, receipt, fake-bank panel, API clients",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "planned",
+      "branch": "pr/002-full-balance-payment/03-cardholder-web",
+      "url": null
+    },
+    {
+      "id": "PR-04",
+      "title": "Payment application services: quote, three-step confirm, status check, view",
+      "wave": 2,
+      "depends_on": [
+        "PR-01",
+        "PR-02"
+      ],
+      "status": "planned",
+      "branch": "pr/002-full-balance-payment/04-app-services",
+      "url": null
+    },
+    {
+      "id": "PR-05",
+      "title": "SQL payment store, persisted fake bank, migration, seed and reset",
+      "wave": 2,
+      "depends_on": [
+        "PR-02"
+      ],
+      "status": "planned",
+      "branch": "pr/002-full-balance-payment/05-sql-store-fake-bank",
+      "url": null
+    },
+    {
+      "id": "PR-06",
+      "title": "Cardholder and fake-bank API with payment-flow integration tests",
+      "wave": 3,
+      "depends_on": [
+        "PR-04",
+        "PR-05"
+      ],
+      "status": "planned",
+      "branch": "pr/002-full-balance-payment/06-cardholder-api",
+      "url": null
+    },
+    {
+      "id": "PR-07",
+      "title": "Admin payment visibility: balance, activity, payments list and record (API + web)",
+      "wave": 3,
+      "depends_on": [
+        "PR-03",
+        "PR-04",
+        "PR-05"
+      ],
+      "status": "planned",
+      "branch": "pr/002-full-balance-payment/07-admin-visibility",
+      "url": null
+    },
+    {
+      "id": "PR-08",
+      "title": "End-to-end payment journeys, deploy smoke and cross-path checks",
+      "wave": 4,
+      "depends_on": [
+        "PR-03",
+        "PR-06",
+        "PR-07"
+      ],
+      "status": "planned",
+      "branch": "pr/002-full-balance-payment/08-e2e-journeys",
+      "url": null
+    }
+  ],
   "bugs_open": [],
   "resume": null,
   "history": [
@@ -32,6 +139,10 @@
     {
       "at": "2026-11-07T15:34Z",
       "event": "gate design approved; requirements erratum (decision 37: additive Origin field, DEC-15), Gate 1 unchanged"
+    },
+    {
+      "at": "2026-11-07T16:30Z",
+      "event": "gate plan approved; PR-00 merged (#32); feat/* protection removed by human; phase build"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"
