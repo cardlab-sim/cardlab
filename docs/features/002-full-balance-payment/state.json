@@ -59,7 +59,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "coding",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/03-cardholder-web",
       "url": "https://github.com/cardlab-sim/cardlab/pull/37"
     },
@@ -71,7 +71,7 @@
         "PR-01",
         "PR-02"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/04-application",
       "url": null
     },
@@ -82,7 +82,7 @@
       "depends_on": [
         "PR-02"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/05-sql-and-fake-bank",
       "url": null
     },
