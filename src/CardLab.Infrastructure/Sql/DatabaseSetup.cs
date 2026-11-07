@@ -134,9 +134,15 @@ public static class Seeder
     }
 
     // 002: the linked account, its fake bank account and the steering row, each only when missing (a restart never
-    // resets the bank, AC-22). Only the last four of the account number is kept (NFR-3).
+    // resets the bank, AC-22). Only the last four of the account number is kept (NFR-3). Skipped when no account number is
+    // configured, so 001-era seed options keep working.
     private static async Task SeedLinkedAccountAsync(CardLabDbContext db, Guid accountId, SeedLinkedAccountOptions linked, CancellationToken ct)
     {
+        if (linked.AccountNumber.Length < 4)
+        {
+            return; // No linked account configured (pre-002 seed options): nothing to seed.
+        }
+
         var lastFour = linked.AccountNumber[^4..];
         if (!await db.LinkedAccounts.AnyAsync(l => l.AccountId == accountId, ct))
         {

@@ -1,5 +1,6 @@
 using CardLab.Domain;
 using CardLab.Domain.Ports;
+using CardLab.Infrastructure.FakeBank;
 using CardLab.Integration.Tests.Harness;
 using CardLab.TestKit.Contracts;
 
@@ -15,6 +16,14 @@ public sealed class FakeBankContractTests : CurrentAccountBankContractTests, ICl
     public FakeBankContractTests(SqlTestDatabase database) => _database = database;
 
     /// <inheritdoc />
-    protected override Task<ICurrentAccountBank> CreateBankAsync(BankAccountRef account, string lastFour, Money openingBalance) =>
-        throw new NotImplementedException("PR-05");
+    protected override async Task<ICurrentAccountBank> CreateBankAsync(BankAccountRef account, string lastFour, Money openingBalance)
+    {
+        await using (var setup = _database.CreateDbContext())
+        {
+            setup.BankAccounts.Add(new BankAccountRow { Id = account.Value, LastFour = lastFour, AvailableBalance = openingBalance.Amount });
+            await setup.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        return new SqlFakeBank(_database.CreateDbContext(), Clock);
+    }
 }

@@ -1,4 +1,4 @@
-﻿using System.Data;
+using System.Data;
 using CardLab.Domain;
 using CardLab.Domain.Authorisation;
 using CardLab.Domain.Cards;
