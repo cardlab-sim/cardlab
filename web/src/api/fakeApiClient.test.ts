@@ -583,34 +583,35 @@ describe('FakeApiClient (002)', () => {
   });
 
   // T-W-10 · PR-03f · web unit (BUG-007)
-  // Given a payment and purchases at different times, When listing, Then activity is ordered newest first by time, not by insertion
-  // Catches: rows concatenated in the order they were added
-  test('T-W-10 activity is ordered newest first by time', async () => {
+  // Given purchases decided and a payment confirmed at different times, When listing, Then activity is newest first by decision time (purchases, ignoring a client timestamp) and confirm time (payments, unmoved by a later status check), like design §5
+  // Catches: rows in insertion order; a client-supplied timestamp or the settlement time used as the activity time
+  test('T-W-10 activity is ordered newest first by decision and confirm time', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-07-01T12:00:00Z') });
     const fake = seeded();
+    vi.setSystemTime(new Date('2026-07-01T12:03:00Z'));
+    await fake.simulatePurchase('ops-1', { ...purchase, merchant: 'Early' });
     const quote = await fake.createQuote('ops-1');
     vi.setSystemTime(new Date('2026-07-01T12:05:00Z'));
+    fake.withBank('timeout_not_received');
     await fake.confirmPayment('ops-1', quote.reference);
+    vi.setSystemTime(new Date('2026-07-01T12:10:00Z'));
     await fake.simulatePurchase('ops-1', {
       ...purchase,
-      merchant: 'Old',
+      merchant: 'Late',
       timestamp: '2026-06-01T08:00:00Z',
     });
-    await fake.simulatePurchase('ops-1', {
-      ...purchase,
-      merchant: 'New',
-      timestamp: '2026-07-02T08:00:00Z',
-    });
+    vi.setSystemTime(new Date('2026-07-01T12:20:00Z'));
+    await fake.checkPayment('ops-1', quote.reference);
 
     const activity = await fake.listActivity('ops-1');
 
-    expect(activity.map((a) => a.description)).toEqual([
-      'New',
-      `Payment ${quote.reference}`,
-      'Card purchase',
-      'Old',
+    expect(activity.map((a) => [a.description, a.at])).toEqual([
+      ['Late', '2026-07-01T12:10:00.000Z'],
+      [`Payment ${quote.reference}`, '2026-07-01T12:05:00.000Z'],
+      ['Early', '2026-07-01T12:03:00.000Z'],
+      ['Card purchase', '2026-07-01T12:00:00.000Z'],
     ]);
-    expect((await fake.getCard('ops-1')).balanceOwed).toBe('25.00');
+    expect((await fake.getCard('ops-1')).balanceOwed).toBe('175.50');
   });
 
   // T-W-10 · PR-03f · web unit (BUG-007)

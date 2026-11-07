@@ -69,7 +69,7 @@ interface PurchaseItem {
   reason: Decision['reason'];
 }
 
-type ActivityItem = PurchaseItem | { kind: 'payment'; reference: string };
+type ActivityItem = PurchaseItem | { kind: 'payment'; reference: string; at: string };
 
 const MAX_PAYABLE_CENTS = 100000000;
 const AUTHORITY_BASIS =
@@ -116,7 +116,7 @@ function limitValue(category: Category, period: Period, amount: string): string 
  * `Date` (pin with `vi.setSystemTime`). `calls` records method names.
  * 002: simulates the cardholder payment flow (quote, confirm, check, receipt) with the §17 wording, a one-shot next debit
  * outcome (`withBank`), the status-check steering (`withStatusCheck`) and `addPurchase`; balance owed = approved purchases minus
- * completed payments (R-1); activity lists purchases (any outcome) and payments newest first by time; `withQuoteOrigin` sets the next quote's origin. Each payment record carries the events of its attempts
+ * completed payments (R-1); activity lists approved and declined purchases (by decision time) and payments (by confirm time) newest first, like design §5; `withQuoteOrigin` sets the next quote's origin. Each payment record carries the events of its attempts
  * and `simulated` (true when a fake-bank steering value produced its outcome); steering is one-shot (DEC-6, DEC-7).
  * Every method can be made to hang with `hold()` to test pending states. Results are copies, so callers
  * cannot mutate the fake's state.
@@ -348,7 +348,7 @@ export class FakeApiClient implements ApiClient {
     this.transactions.set(id, [transaction, ...(this.transactions.get(id) ?? [])]);
     this.activityOf(id).unshift({
       kind: 'purchase',
-      at: transaction.occurredAt,
+      at: new Date().toISOString(),
       cents: toCents(input.amount),
       description: input.merchant,
       category: input.category,
@@ -460,7 +460,7 @@ export class FakeApiClient implements ApiClient {
     this.nextDebitOutcome = 'complete';
     this.debitSteered = false;
     rec.simulated = steered;
-    this.activityOf(id).unshift({ kind: 'payment', reference });
+    this.activityOf(id).unshift({ kind: 'payment', reference, at: now });
     this.addEvent(rec, 'confirm_created', null, 'pending', null, false);
     this.addEvent(rec, 'debit_requested', null, null, null, false);
     if (outcome === 'complete' && rec.cents > this.account.balanceCents) {
@@ -620,13 +620,14 @@ export class FakeApiClient implements ApiClient {
   }
 
   private owed(id: string): number {
-    return this.activityOf(id).reduce((sum, item) => {
+    const total = this.activityOf(id).reduce((sum, item) => {
       if (item.kind === 'purchase') {
         return item.outcome === 'approved' ? sum + item.cents : sum;
       }
       const rec = this.payments.get(item.reference);
       return rec?.state === 'completed' ? sum - rec.cents : sum;
     }, 0);
+    return Math.max(0, total);
   }
 
   private pendingOf(id: string): PaymentRec | undefined {
@@ -750,7 +751,7 @@ export class FakeApiClient implements ApiClient {
       }
       const rec = this.payments.get(item.reference);
       return {
-        at: rec?.effectiveAt ?? rec?.createdAt ?? '',
+        at: item.at,
         kind: 'payment',
         amount: fromCents(rec?.cents ?? 0),
         description: `Payment ${item.reference}`,

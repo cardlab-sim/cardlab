@@ -166,35 +166,39 @@ describe('CardDetailPage', () => {
   // Given a card with a £1,234.56 Fuel/Day limit and a transaction at 2026-10-24T23:30:00Z, When rendered, Then the limit shows "£1,234.56" and the transaction time "25 Oct 2026 00:30"; Remove "Remove Fuel day limit" removes the row
   // Catches: raw amounts/UTC times on the page (AC-38), missing remove (AC-8)
   test('T-W-9 renders limits and transactions with UK formatting and removes a limit', async () => {
-    const user = userEvent.setup();
-    const card: CardDetail = {
-      ...opsVan,
-      limits: [
-        { category: 'fuel', period: 'day', amount: '1234.56' },
-        { category: 'travel', period: 'month', amount: '500.00' },
-      ],
-    };
-    const fake = new FakeApiClient({ cards: [card] });
-    await fake.simulatePurchase('c1', {
-      amount: '12.50',
-      category: 'fuel',
-      merchant: 'Shell',
-      timestamp: '2026-10-24T23:30:00Z',
-    });
-    renderDetail(fake);
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-24T23:30:00Z') });
+    try {
+      const user = userEvent.setup();
+      const card: CardDetail = {
+        ...opsVan,
+        limits: [
+          { category: 'fuel', period: 'day', amount: '1234.56' },
+          { category: 'travel', period: 'month', amount: '500.00' },
+        ],
+      };
+      const fake = new FakeApiClient({ cards: [card] });
+      await fake.simulatePurchase('c1', {
+        amount: '12.50',
+        category: 'fuel',
+        merchant: 'Shell',
+      });
+      renderDetail(fake);
 
-    const limits = await limitsRegion();
-    expect(limits.getByText('£1,234.56')).toBeInTheDocument();
-    const history = within(await screen.findByRole('region', { name: 'Activity' }));
-    expect(history.getByText('25 Oct 2026 00:30')).toBeInTheDocument();
+      const limits = await limitsRegion();
+      expect(limits.getByText('£1,234.56')).toBeInTheDocument();
+      const history = within(await screen.findByRole('region', { name: 'Activity' }));
+      expect(history.getByText('25 Oct 2026 00:30')).toBeInTheDocument();
 
-    await user.click(limits.getByRole('button', { name: 'Remove Fuel day limit' }));
+      await user.click(limits.getByRole('button', { name: 'Remove Fuel day limit' }));
 
-    await waitFor(() => {
-      expect(limits.queryByText('£1,234.56')).toBeNull();
-    });
-    expect(limits.getByText('£500.00')).toBeInTheDocument();
-    expect(limits.getByRole('button', { name: 'Remove Travel month limit' })).toBeInTheDocument();
+      await waitFor(() => {
+        expect(limits.queryByText('£1,234.56')).toBeNull();
+      });
+      expect(limits.getByText('£500.00')).toBeInTheDocument();
+      expect(limits.getByRole('button', { name: 'Remove Travel month limit' })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // T-W-9 · PR-07 · web unit (added: a failed removal must be visible, not an unhandled rejection)
@@ -443,7 +447,7 @@ class GatedCardClient extends FakeApiClient {
 
 describe('CardDetailPage (002)', () => {
   // T-W-8 · PR-07 · web unit
-  // Given a card with balanceOwed "150.50", a purchase and a completed payment, When rendered, Then the heading shows "Balance owed £20.00" (the opening £150.50 was paid, a £20.00 purchase followed); the Activity table (caption "Transaction history") lists the payment with a Payment type badge, Completed state badge and a link to its record, and the purchase with its merchant, category, outcome and reason; the Payments section lists every reference with status, state and origin badges
+  // Given a card with balanceOwed "150.50", a purchase and a completed payment, When rendered, Then the heading shows "Balance owed £32.50" (the opening £150.50 was paid; £20.00 and a £12.50 Shell purchase followed); the open quote is £32.50; the Activity table (caption "Transaction history") lists the payment with a Payment type badge, Completed state badge and a link to its record, and the purchase with its merchant, category, outcome and reason; the Payments section lists every reference with status, state and origin badges
   // Catches: the admin unable to see the balance or tell payments from purchases (AC-1, AC-2, R-13, DEC-12)
   test('T-W-8 shows balance, activity and payments', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-24T23:30:00Z') });
