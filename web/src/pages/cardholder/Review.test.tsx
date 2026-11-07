@@ -19,6 +19,13 @@ const opsVan: CardDetail = {
   balanceOwed: '0.00',
 };
 
+async function rejection(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+}
+
 const owing = (...purchases: string[]) =>
   new FakeApiClient({ cards: [opsVan], purchases: { 'ops-1': purchases } });
 
@@ -115,12 +122,34 @@ describe('ReviewPage', () => {
       'Payment not made. Your card balance changed while you were reviewing. No money has moved. Your card balance is now £170.50. Review the new amount and confirm again if you want to pay it.',
     );
     expect(screen.queryByRole('button', { name: /Confirm payment/ })).toBeNull();
+    expect(document.activeElement).not.toBe(document.body);
     await user.click(screen.getByRole('button', { name: 'Review again' }));
     expect(
       await screen.findByRole('button', { name: 'Confirm payment of £170.50' }),
     ).toBeInTheDocument();
     expect(screen.queryByRole('alert')).toBeNull();
     expect(fake.calls.filter((c) => c === 'createQuote')).toHaveLength(2);
+  });
+
+  // T-W-3 · PR-03 · web unit (AC-30)
+  // Given the page's reference already refused (balance changed), When confirm is pressed again, Then 409 quote_refused shows W-6 in an alert with "Review again", focus moved into the notice
+  // Catches: the retried-confirm refusal falling into the generic error (AC-30)
+  test('T-W-3 shows the repeated-confirm refusal of a refused reference with Review again', async () => {
+    const user = userEvent.setup();
+    const fake = owing('150.50');
+    renderReview(fake);
+    const button = await screen.findByRole('button', { name: 'Confirm payment of £150.50' });
+    fake.addPurchase('ops-1', '20.00');
+    await rejection(fake.confirmPayment('ops-1', 'PAY-00000001'));
+
+    await user.click(button);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      'Payment not made. Your card balance changed while you were reviewing. No money has moved. Your card balance is now £170.50. Review the new amount and confirm again if you want to pay it.',
+    );
+    expect(screen.getByRole('button', { name: 'Review again' })).toBeInTheDocument();
+    expect(alert.parentElement).toHaveFocus();
   });
 
   test('T-W-3 shows a quote refusal with a Back link and no confirm button', async () => {

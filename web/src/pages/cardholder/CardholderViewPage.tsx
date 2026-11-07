@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { useApi } from '../../api/ApiContext';
 import { ApiError } from '../../api/apiClient';
-import type { AccountEntry, ActivityEntry, CardholderView } from '../../api/types';
+import type { AccountEntry, ActivityEntry, CardholderView, Receipt } from '../../api/types';
 import { Badge } from '../../components/Badge';
 import { Button } from '../../components/Button';
-import buttonStyles from '../../components/Button.module.css';
 import { DataTable, type Column } from '../../components/DataTable';
 import { Notice } from '../../components/Notice';
 import { activityKindLabel, outcomeLabel, paymentStateLabel } from '../../format/labels';
@@ -55,9 +54,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /**
  * Route `/cardholder/:id` (002 §4.1, DEC-11, DEC-13). Loads `getCardholderView(id)`; when `pendingPayment` is set it
  * calls `checkPayment(id, reference)` once per reference and then re-reads the view (auto status check). Sections in DOM
- * order: heading (card name, "•••• 0001"); **Balance** (32 px figure; the primary link "Pay full balance" to
- * `/cardholder/:id/pay` when availability is `available`, else `availabilityMessage` verbatim, and for `payment_pending`
- * a "Check status" button); **Pending payment** Notice (W-5 message, role="status", "Check status" button); **Linked
+ * order: heading (card name, "•••• 0001"); **Balance** (32 px figure; the primary button "Pay full balance" navigating
+ * to `/cardholder/:id/pay` when availability is `available`, else `availabilityMessage` verbatim, and for
+ * `payment_pending` a "Check status" button; after a manual check that settled the payment, its outcome message (W-2/W-4)
+ * in a Notice that takes focus); **Pending payment** Notice (W-5 message, or W-10 after a manual check the bank did not
+ * answer; role="status"; "Check status" button; a failing automatic check keeps the loaded view); **Linked
  * current account** (display name, "ending 7731", available balance, authority sentence); **Recent card activity** table
  * (date, description, amount, type badge, state/outcome badge); **Current account recent activity** table (date,
  * reference, amount); last, `<FakeBankPanel />`. Unknown card → Notice "Card not found".
@@ -69,6 +70,9 @@ export function CardholderViewPage() {
   const [checking, setChecking] = useState(false);
   const alive = useRef(false);
   const checked = useRef<string | null>(null);
+  const outcomeRef = useRef<HTMLDivElement>(null);
+  const [lastCheck, setLastCheck] = useState<Receipt | null>(null);
+  const navigate = useNavigate();
 
   const fail = useCallback((error: unknown) => {
     if (alive.current) {
@@ -82,8 +86,12 @@ export function CardholderViewPage() {
       const pending = view.pendingPayment;
       if (autoCheck && pending !== null && checked.current !== pending.reference) {
         checked.current = pending.reference;
-        await api.checkPayment(id, pending.reference);
-        view = await api.getCardholderView(id);
+        try {
+          await api.checkPayment(id, pending.reference);
+          view = await api.getCardholderView(id);
+        } catch {
+          // The automatic check is a convenience on a pure read: keep the view that loaded.
+        }
       }
       if (alive.current) {
         setState({ kind: 'loaded', view });
@@ -100,11 +108,22 @@ export function CardholderViewPage() {
     };
   }, [load, fail]);
 
+  useEffect(() => {
+    if (lastCheck !== null && lastCheck.state !== 'pending') {
+      outcomeRef.current?.focus();
+    }
+  }, [lastCheck]);
+
   function checkStatus(reference: string): void {
     setChecking(true);
     api
       .checkPayment(id, reference)
-      .then(() => load(false))
+      .then((receipt) => {
+        if (alive.current) {
+          setLastCheck(receipt);
+        }
+        return load(false);
+      })
       .catch(fail)
       .finally(() => {
         if (alive.current) {
@@ -154,14 +173,22 @@ export function CardholderViewPage() {
 
       <Section title="Balance">
         <p className={styles['balance']}>{formatMoney(view.balanceOwed)}</p>
+        {lastCheck !== null && lastCheck.state !== 'pending' && (
+          <div ref={outcomeRef} tabIndex={-1} className={styles['outcome']}>
+            <Notice tone={lastCheck.state === 'completed' ? 'success' : 'error'}>
+              {lastCheck.message}
+            </Notice>
+          </div>
+        )}
         {view.availability === 'available' ? (
           <div>
-            <Link
-              to={`/cardholder/${encodeURIComponent(id)}/pay`}
-              className={`${buttonStyles['button']} ${buttonStyles['primary']}`}
+            <Button
+              onClick={() => {
+                void navigate(`/cardholder/${encodeURIComponent(id)}/pay`);
+              }}
             >
               Pay full balance
-            </Link>
+            </Button>
           </div>
         ) : (
           <p>{view.availabilityMessage}</p>
@@ -173,7 +200,11 @@ export function CardholderViewPage() {
 
       {pending !== null && (
         <Section title="Pending payment">
-          <Notice tone="info">{pending.message}</Notice>
+          <Notice tone="info">
+            {lastCheck?.state === 'pending' && lastCheck.reference === pending.reference
+              ? lastCheck.message
+              : pending.message}
+          </Notice>
           <div>{checkButton(pending.reference)}</div>
         </Section>
       )}

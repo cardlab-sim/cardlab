@@ -111,3 +111,7 @@
 .fakeBank p {
   margin: 0;
 }
+
+.outcome {
+  display: block;
+}

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Navigate, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -142,6 +142,8 @@ describe('ReceiptPage', () => {
     expect(screen.getByRole('button', { name: 'Check status' })).toBeInTheDocument();
     expect(fake.calls.filter((c) => c === 'checkPayment')).toHaveLength(1);
 
+    // The steering is one-shot: arm it again for the second check.
+    fake.withStatusCheck('does_not_answer');
     await user.click(screen.getByRole('button', { name: 'Check status' }));
     await vi.waitFor(() => {
       expect(fake.calls.filter((c) => c === 'checkPayment')).toHaveLength(2);
@@ -158,7 +160,8 @@ describe('ReceiptPage', () => {
     expect(
       await screen.findByRole('heading', { level: 1, name: 'Payment not made' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('alert')).toBeInTheDocument();
+    const alert = screen.getByRole('alert');
+    expect(alert.parentElement).toHaveFocus();
     expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull();
   });
 
@@ -178,7 +181,7 @@ describe('ReceiptPage', () => {
 
   test('T-W-4 shows not found for an unknown reference', async () => {
     renderWithApi(<ReceiptPage />, owing(), {
-      route: '/cardholder/ops-1/payments/PAY-999999',
+      route: '/cardholder/ops-1/payments/PAY-99999999',
       path: '/cardholder/:id/payments/:reference',
     });
 
@@ -188,27 +191,15 @@ describe('ReceiptPage', () => {
     expect(screen.queryByRole('heading', { level: 1, name: /Payment/ })).toBeNull();
   });
 
-  test('T-W-4 uses the receipt from navigation state without loading it', async () => {
+  test('T-W-4 paints the navigation state first and keeps it when the re-read fails', async () => {
     const fake = owing();
-    const receipt: Receipt = {
-      reference: 'PAY-STATE',
-      state: 'completed',
-      amount: '150.50',
-      fee: '0.00',
-      time: '2026-11-07T10:00:00Z',
-      from: FROM,
-      to: TO,
-      failureReason: null,
-      message: 'Payment complete. From the navigation state.',
-      balanceOwed: '0.00',
-      repeated: false,
-      origin: 'cardholder_view',
-    };
     renderWithApi(
       <Routes>
         <Route
           path="/start"
-          element={<Navigate to="/cardholder/ops-1/payments/PAY-STATE" state={receipt} replace />}
+          element={
+            <Navigate to="/cardholder/ops-1/payments/PAY-STATE" state={stateReceipt()} replace />
+          }
         />
         <Route path="/cardholder/:id/payments/:reference" element={<ReceiptPage />} />
       </Routes>,
@@ -219,7 +210,56 @@ describe('ReceiptPage', () => {
     expect(await screen.findByRole('status')).toHaveTextContent(
       'Payment complete. From the navigation state.',
     );
-    expect(fake.calls).toEqual([]);
-    expect(within(screen.getByRole('status')).queryByRole('button')).toBeNull();
+    await vi.waitFor(() => {
+      expect(fake.calls).toEqual(['getReceipt']);
+    });
+    expect(screen.getByRole('status')).toHaveTextContent('From the navigation state.');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  // T-W-4 · PR-03 · web unit (M3: history state survives reload and back/forward)
+  // Given a pending receipt in history state while the bank has since applied the debit, When the page opens, Then it re-reads and shows "Payment complete"
+  // Catches: a stale pending receipt after reload or back navigation (R-12)
+  test('T-W-4 replaces a stale navigation-state receipt with the current one', async () => {
+    const fake = owing().withBank('timeout_debit_applied');
+    const quote = await fake.createQuote('ops-1');
+    const stale = await fake.confirmPayment('ops-1', quote.reference);
+    await fake.checkPayment('ops-1', quote.reference);
+    expect(stale.state).toBe('pending');
+    renderWithApi(
+      <Routes>
+        <Route
+          path="/start"
+          element={
+            <Navigate to={`/cardholder/ops-1/payments/${quote.reference}`} state={stale} replace />
+          }
+        />
+        <Route path="/cardholder/:id/payments/:reference" element={<ReceiptPage />} />
+      </Routes>,
+      fake,
+      { route: '/start' },
+    );
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Payment complete' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Check status' })).toBeNull();
   });
 });
+
+function stateReceipt(): Receipt {
+  return {
+    reference: 'PAY-STATE',
+    state: 'completed',
+    amount: '150.50',
+    fee: '0.00',
+    time: '2026-11-07T10:00:00Z',
+    from: FROM,
+    to: TO,
+    failureReason: null,
+    message: 'Payment complete. From the navigation state.',
+    balanceOwed: '0.00',
+    repeated: false,
+    origin: 'cardholder_view',
+  };
+}

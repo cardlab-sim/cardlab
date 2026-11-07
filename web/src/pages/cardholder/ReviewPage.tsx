@@ -13,7 +13,7 @@ type State =
   | { kind: 'refused'; problem: ProblemDetails | null; quote: Quote | null }
   | { kind: 'error' };
 
-/** Splits a wording line at its first colon for the definition list: "Amount: £150.50" → ["Amount:", "£150.50"]. */
+/** Splits a wording line at its first ": " for the definition list: "Amount: £150.50" → ["Amount:", "£150.50"]. */
 function splitLine(line: string): [string, string] {
   const at = line.indexOf(': ');
   return at < 0 ? ['', line] : [line.slice(0, at + 1), line.slice(at + 2)];
@@ -23,7 +23,7 @@ function splitLine(line: string): [string, string] {
  * Route `/cardholder/:id/pay`: the one review screen (002 R-4, AC-6, OB-7/OB-8; §4.1). On mount calls `createQuote(id)`
  * once (guarded against the StrictMode double effect; PLANNER-DECISION: each visit mints a new reference). Renders, in the
  * frame's single `<main>` and with nothing else: heading = `wording.heading`; a `<dl>` with `wording.lines` in order (each
- * line split at its first colon into `<dt>` and `<dd>`, text unchanged); the primary button labelled `wording.button`
+ * line split at its first ": " into `<dt>` and `<dd>`, text unchanged); the primary button labelled `wording.button`
  * (while confirming: pending state with `aria-disabled="true"` and a click guard, focus stays, 001 BUG-010); a "Back"
  * link to `/cardholder/:id`. Confirm → `confirmPayment(id, reference)` → navigate to
  * `/cardholder/:id/payments/:reference` with the receipt in navigation state. 409 on quote → the problem `message` in
@@ -40,6 +40,7 @@ export function ReviewPage() {
   const alive = useRef(false);
   const started = useRef(false);
   const inFlight = useRef(false);
+  const noticeRef = useRef<HTMLDivElement>(null);
 
   const mint = useCallback(() => {
     setState({ kind: 'loading' });
@@ -71,6 +72,12 @@ export function ReviewPage() {
       alive.current = false;
     };
   }, [mint]);
+
+  useEffect(() => {
+    if (state.kind === 'refused') {
+      noticeRef.current?.focus();
+    }
+  }, [state.kind]);
 
   function confirm(quote: Quote): void {
     if (inFlight.current) {
@@ -126,7 +133,9 @@ export function ReviewPage() {
       state.quote !== null && (code === 'balance_changed' || code === 'quote_refused');
     return (
       <div className={styles['page']}>
-        <Notice tone="error">{state.problem?.message ?? 'The payment was refused.'}</Notice>
+        <div ref={noticeRef} tabIndex={-1} className={styles['outcome']}>
+          <Notice tone="error">{state.problem?.message ?? 'The payment was refused.'}</Notice>
+        </div>
         <div className={styles['actions']}>
           {reviewable && (
             <Button variant="primary" onClick={mint}>

@@ -49,6 +49,8 @@ interface PaymentRec {
   quote: Quote;
   quoteStatus: QuoteStatus;
   refusal: { balanceCents: number } | null;
+  simulated: boolean;
+  events: PaymentRecord['events'];
   state: PaymentState | null;
   failureReason: FailureReason | null;
   createdAt: string;
@@ -104,7 +106,8 @@ function limitValue(category: Category, period: Period, amount: string): string 
  * `Date` (pin with `vi.setSystemTime`). `calls` records method names.
  * 002: simulates the cardholder payment flow (quote, confirm, check, receipt) with the §17 wording, a one-shot next debit
  * outcome (`withBank`), the status-check steering (`withStatusCheck`) and `addPurchase`; balance owed = purchases minus
- * completed payments. Payment records carry no event log (`events` is empty).
+ * completed payments. Each payment record carries the events of its attempts
+ * and `simulated` (true when a fake-bank steering value produced its outcome); steering is one-shot (DEC-6, DEC-7).
  * Every method can be made to hang with `hold()` to test pending states. Results are copies, so callers
  * cannot mutate the fake's state.
  */
@@ -127,6 +130,8 @@ export class FakeApiClient implements ApiClient {
   private readonly account: { displayName: string; lastFour: string; balanceCents: number };
   private nextDebitOutcome: NextDebitOutcome = 'complete';
   private nextStatusCheck: NextStatusCheck = 'answers';
+  private debitSteered = false;
+  private checkSteered = false;
 
   constructor(seed: FakeSeed = { cards: [] }) {
     this.cards = new Map(seed.cards.map((card) => [card.id, structuredClone(card)]));
@@ -158,12 +163,14 @@ export class FakeApiClient implements ApiClient {
   /** Sets the next debit outcome (one-shot, same wire values as the fake bank); returns the fake for chaining. */
   withBank(outcome: NextDebitOutcome): this {
     this.nextDebitOutcome = outcome;
+    this.debitSteered = true;
     return this;
   }
 
-  /** Sets whether status checks are answered (stays until changed); returns the fake for chaining. */
+  /** Sets whether status checks are answered (one-shot like the debit outcome: applies to the next status check that reaches the bank, then reverts to answers); returns the fake for chaining. */
   withStatusCheck(check: NextStatusCheck): this {
     this.nextStatusCheck = check;
+    this.checkSteered = true;
     return this;
   }
 
@@ -335,7 +342,7 @@ export class FakeApiClient implements ApiClient {
       throw conflict('above_limit', this.aboveLimitMessage(owed), { balanceOwed: fromCents(owed) });
     }
     const amount = fromCents(owed);
-    const reference = `PAY-${String(this.nextReference++).padStart(6, '0')}`;
+    const reference = `PAY-${String(this.nextReference++).padStart(8, '0')}`;
     const to = `${card.name} card, ending ${card.lastFour}`;
     const quote: Quote = {
       reference,
@@ -367,6 +374,8 @@ export class FakeApiClient implements ApiClient {
       quote,
       quoteStatus: 'open',
       refusal: null,
+      simulated: false,
+      events: [],
       state: null,
       failureReason: null,
       createdAt: quote.createdAt,
@@ -378,8 +387,18 @@ export class FakeApiClient implements ApiClient {
 
   async confirmPayment(id: string, reference: string): Promise<Receipt> {
     await this.enter('confirmPayment');
+    this.find(id);
+    const known = this.payments.get(reference);
+    if (known?.cardId === id && known.quoteStatus === 'refused' && known.state === null) {
+      const balanceAtRefusal = known.refusal?.balanceCents ?? 0;
+      this.addEvent(known, 'confirm_refused', null, null, 'quote_refused', false);
+      throw conflict('quote_refused', this.balanceChangedMessage(balanceAtRefusal), {
+        balanceOwed: fromCents(this.owed(id)),
+      });
+    }
     const rec = this.findPayment(id, reference);
     if (rec.state !== null) {
+      this.addEvent(rec, 'confirm_repeated', rec.state, rec.state, null, false);
       return { ...this.receipt(rec), repeated: true };
     }
     const pending = this.pendingOf(id);
@@ -390,31 +409,40 @@ export class FakeApiClient implements ApiClient {
     if (owed !== rec.cents) {
       rec.quoteStatus = 'refused';
       rec.refusal = { balanceCents: owed };
-      throw conflict(
-        'balance_changed',
-        `Payment not made. Your card balance changed while you were reviewing. No money has moved. Your card balance is now ${formatMoney(fromCents(owed))}. Review the new amount and confirm again if you want to pay it.`,
-        { balanceOwed: fromCents(owed) },
-      );
+      this.addEvent(rec, 'confirm_refused', null, null, 'balance_changed', false);
+      throw conflict('balance_changed', this.balanceChangedMessage(owed), {
+        balanceOwed: fromCents(owed),
+      });
     }
     rec.quoteStatus = 'confirmed';
     const now = new Date().toISOString();
     const outcome = this.nextDebitOutcome;
+    const steered = this.debitSteered;
     this.nextDebitOutcome = 'complete';
+    this.debitSteered = false;
+    rec.simulated = steered;
     this.activityOf(id).unshift({ kind: 'payment', reference });
+    this.addEvent(rec, 'confirm_created', null, 'pending', null, false);
+    this.addEvent(rec, 'debit_requested', null, null, null, false);
     if (outcome === 'complete' && rec.cents > this.account.balanceCents) {
       this.settle(rec, 'failed', now, 'insufficient_funds');
+      this.addEvent(rec, 'bank_refused', 'pending', 'failed', 'insufficient_funds', steered);
     } else if (outcome === 'complete') {
       this.debit(rec, now);
       this.settle(rec, 'completed', now, null);
+      this.addEvent(rec, 'bank_completed', 'pending', 'completed', null, steered);
     } else if (outcome === 'refuse_insufficient_funds') {
       this.settle(rec, 'failed', now, 'insufficient_funds');
+      this.addEvent(rec, 'bank_refused', 'pending', 'failed', 'insufficient_funds', steered);
     } else if (outcome === 'refuse_account_unavailable') {
       this.settle(rec, 'failed', now, 'account_unavailable');
+      this.addEvent(rec, 'bank_refused', 'pending', 'failed', 'account_unavailable', steered);
     } else {
       rec.state = 'pending';
       if (outcome === 'timeout_debit_applied') {
         this.debit(rec, now);
       }
+      this.addEvent(rec, 'bank_unanswered', 'pending', 'pending', null, steered);
     }
     return this.receipt(rec);
   }
@@ -425,7 +453,13 @@ export class FakeApiClient implements ApiClient {
     if (rec.state !== 'pending') {
       return this.receipt(rec);
     }
-    if (this.nextStatusCheck === 'does_not_answer') {
+    const check = this.nextStatusCheck;
+    const steered = this.checkSteered;
+    this.nextStatusCheck = 'answers';
+    this.checkSteered = false;
+    rec.simulated = rec.simulated || steered;
+    if (check === 'does_not_answer') {
+      this.addEvent(rec, 'status_check_unanswered', 'pending', 'pending', null, steered);
       return {
         ...this.receipt(rec),
         message: `Still pending. Your bank did not answer. No new payment has been requested and no money has been taken twice. Try Check status again shortly. Reference ${reference}.`,
@@ -433,8 +467,10 @@ export class FakeApiClient implements ApiClient {
     }
     if (rec.debitedAt !== null) {
       this.settle(rec, 'completed', rec.debitedAt, null);
+      this.addEvent(rec, 'status_check_completed', 'pending', 'completed', null, steered);
     } else {
       this.settle(rec, 'failed', new Date().toISOString(), 'not_received');
+      this.addEvent(rec, 'status_check_not_received', 'pending', 'failed', 'not_received', steered);
     }
     return this.receipt(rec);
   }
@@ -451,8 +487,12 @@ export class FakeApiClient implements ApiClient {
 
   async setFakeBank(steering: SteeringInput): Promise<FakeBank> {
     await this.enter('setFakeBank');
-    this.nextDebitOutcome = steering.nextDebitOutcome ?? this.nextDebitOutcome;
-    this.nextStatusCheck = steering.nextStatusCheck ?? this.nextStatusCheck;
+    if (steering.nextDebitOutcome !== undefined) {
+      this.withBank(steering.nextDebitOutcome);
+    }
+    if (steering.nextStatusCheck !== undefined) {
+      this.withStatusCheck(steering.nextStatusCheck);
+    }
     return this.bank();
   }
 
@@ -483,7 +523,7 @@ export class FakeApiClient implements ApiClient {
   async getPaymentRecord(id: string, reference: string): Promise<PaymentRecord> {
     await this.enter('getPaymentRecord');
     const card = this.find(id);
-    const rec = this.findPayment(id, reference);
+    const rec = this.findPayment(id, reference, true);
     const q = rec.quote;
     return {
       quote: {
@@ -518,11 +558,16 @@ export class FakeApiClient implements ApiClient {
               effectiveAt: rec.state === 'completed' ? rec.effectiveAt : null,
               bankDebitedAt: rec.debitedAt,
               failureReason: rec.failureReason,
-              balanceBefore: fromCents(rec.cents),
-              balanceAfter: rec.state === 'completed' ? '0.00' : fromCents(rec.cents),
-              simulated: false,
+              balanceBefore: rec.state === 'pending' ? null : fromCents(rec.cents),
+              balanceAfter:
+                rec.state === 'pending'
+                  ? null
+                  : rec.state === 'completed'
+                    ? '0.00'
+                    : fromCents(rec.cents),
+              simulated: rec.simulated,
             },
-      events: [],
+      events: structuredClone(rec.events),
     };
   }
 
@@ -557,13 +602,28 @@ export class FakeApiClient implements ApiClient {
     });
   }
 
-  private findPayment(id: string, reference: string): PaymentRec {
+  private findPayment(id: string, reference: string, allowRefused = false): PaymentRec {
     this.find(id);
     const rec = this.payments.get(reference);
-    if (rec?.cardId !== id || (rec.state === null && rec.quoteStatus !== 'open')) {
+    if (rec?.cardId !== id || (!allowRefused && rec.state === null && rec.quoteStatus !== 'open')) {
       throw new ApiError(404, { title: 'Not Found', status: 404 });
     }
     return rec;
+  }
+
+  private balanceChangedMessage(balanceCents: number): string {
+    return `Payment not made. Your card balance changed while you were reviewing. No money has moved. Your card balance is now ${formatMoney(fromCents(balanceCents))}. Review the new amount and confirm again if you want to pay it.`;
+  }
+
+  private addEvent(
+    rec: PaymentRec,
+    kind: string,
+    from: PaymentState | null,
+    to: PaymentState | null,
+    detail: string | null,
+    simulated: boolean,
+  ): void {
+    rec.events.push({ at: new Date().toISOString(), kind, from, to, detail, simulated });
   }
 
   private fromText(): string {

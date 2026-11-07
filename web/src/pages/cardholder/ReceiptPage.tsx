@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useApi } from '../../api/ApiContext';
 import { ApiError } from '../../api/apiClient';
 import type { PaymentState, Receipt } from '../../api/types';
@@ -34,8 +34,10 @@ function isReceipt(value: unknown, reference: string): value is Receipt {
 }
 
 /**
- * Route `/cardholder/:id/payments/:reference` (002 R-12, §4.1). Uses the receipt from navigation state, else
- * `getReceipt(id, reference)`. Heading by state: "Payment complete" / "Payment not made" / "Payment pending"; the
+ * Route `/cardholder/:id/payments/:reference` (002 R-12, §4.1). Paints the receipt from navigation state when present
+ * (first frame only; history state survives reload) and always re-reads `getReceipt(id, reference)`, which replaces
+ * it; a failed re-read keeps the painted receipt. A manual check also stores the new receipt in the history entry and
+ * moves focus to the outcome Notice when the payment settled. Heading by state: "Payment complete" / "Payment not made" / "Payment pending"; the
  * receipt `message` verbatim in a Notice (role="status" for pending/completed, role="alert" for failed); a `<dl>`
  * with Reference, Amount, Fee, Time (Europe/London), From, To, Outcome (text badge; plus a "Not received" reason badge
  * for not_received); a "Check status" button when pending (calls `checkPayment`, shows the new message, W-10 when
@@ -45,20 +47,21 @@ function isReceipt(value: unknown, reference: string): value is Receipt {
 export function ReceiptPage() {
   const api = useApi();
   const { id = '', reference = '' } = useParams();
-  const navState: unknown = useLocation().state;
+  const location = useLocation();
+  const navigate = useNavigate();
+  // History state survives reload and back/forward, so it only paints the first frame; the API is the truth.
+  const [first] = useState<unknown>(location.state);
   const [state, setState] = useState<State>(
-    isReceipt(navState, reference) ? { kind: 'loaded', receipt: navState } : { kind: 'loading' },
+    isReceipt(first, reference) ? { kind: 'loaded', receipt: first } : { kind: 'loading' },
   );
   const [checking, setChecking] = useState(false);
   const alive = useRef(false);
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const focusNotice = useRef(false);
 
   useEffect(() => {
     alive.current = true;
-    if (isReceipt(navState, reference)) {
-      return () => {
-        alive.current = false;
-      };
-    }
+    const painted = isReceipt(first, reference);
     api
       .getReceipt(id, reference)
       .then((receipt) => {
@@ -67,7 +70,7 @@ export function ReceiptPage() {
         }
       })
       .catch((error: unknown) => {
-        if (alive.current) {
+        if (alive.current && !painted) {
           setState({
             kind: error instanceof ApiError && error.status === 404 ? 'notFound' : 'error',
           });
@@ -76,7 +79,14 @@ export function ReceiptPage() {
     return () => {
       alive.current = false;
     };
-  }, [api, id, reference, navState]);
+  }, [api, id, reference, first]);
+
+  useEffect(() => {
+    if (focusNotice.current) {
+      focusNotice.current = false;
+      noticeRef.current?.focus();
+    }
+  }, [state]);
 
   function checkStatus(): void {
     setChecking(true);
@@ -84,7 +94,9 @@ export function ReceiptPage() {
       .checkPayment(id, reference)
       .then((receipt) => {
         if (alive.current) {
+          focusNotice.current = receipt.state !== 'pending';
           setState({ kind: 'loaded', receipt });
+          void navigate(location.pathname, { replace: true, state: receipt });
         }
       })
       .catch(() => {
@@ -121,7 +133,9 @@ export function ReceiptPage() {
   return (
     <div className={styles['page']}>
       <h1 className={styles['title']}>{HEADINGS[receipt.state]}</h1>
-      <Notice tone={TONES[receipt.state]}>{receipt.message}</Notice>
+      <div ref={noticeRef} tabIndex={-1} className={styles['outcome']}>
+        <Notice tone={TONES[receipt.state]}>{receipt.message}</Notice>
+      </div>
       <dl className={styles['details']}>
         <dt>Reference</dt>
         <dd>{receipt.reference}</dd>

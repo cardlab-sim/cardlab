@@ -1,6 +1,9 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { StrictMode } from 'react';
+import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, test, vi } from 'vitest';
+import { ApiError } from '../../api/apiClient';
 import { FakeApiClient } from '../../api/fakeApiClient';
 import type { CardDetail } from '../../api/types';
 import { CardholderShell } from '../../components/CardholderShell';
@@ -29,7 +32,7 @@ function names(role: 'heading' | 'button' | 'link'): string[] {
 
 describe('CardholderViewPage', () => {
   // T-W-2 · PR-03 · web unit
-  // Given FakeApiClient with Ops van owing £150.50, When rendered at /cardholder/:id, Then heading "Ops van" with "•••• 0001", balance "£150.50", a "Pay full balance" link to /cardholder/:id/pay, the linked account name, "ending 7731", available balance and authority text, both activity tables, and the Fake bank section last in DOM order
+  // Given FakeApiClient with Ops van owing £150.50, When rendered at /cardholder/:id, Then heading "Ops van" with "•••• 0001", balance "£150.50", a "Pay full balance" button navigating to /cardholder/:id/pay, the linked account name, "ending 7731", available balance and authority text, both activity tables, and the Fake bank section last in DOM order
   // Catches: missing balance/account or the fake-bank control placed above the pay action (AC-4, R-15, CQ-8)
   test('T-W-2 shows balance, account, activity and the fake bank section last', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
@@ -37,17 +40,21 @@ describe('CardholderViewPage', () => {
     const fake = new FakeApiClient({ cards: [opsVan], purchases: { 'ops-1': ['100.00'] } });
     await fake.confirmPayment('ops-1', (await fake.createQuote('ops-1')).reference);
     fake.addPurchase('ops-1', '150.50');
-    renderWithApi(<CardholderViewPage />, fake, route);
+    renderWithApi(
+      <Routes>
+        <Route path="/cardholder/:id" element={<CardholderViewPage />} />
+        <Route path="/cardholder/:id/pay" element={<p>Review placeholder</p>} />
+      </Routes>,
+      fake,
+      { route: '/cardholder/ops-1' },
+    );
 
     expect(await screen.findByRole('heading', { level: 1, name: /Ops van/ })).toHaveTextContent(
       'Ops van •••• 0001',
     );
     const balance = screen.getByRole('region', { name: 'Balance' });
     expect(within(balance).getByText('£150.50')).toBeInTheDocument();
-    expect(within(balance).getByRole('link', { name: 'Pay full balance' })).toHaveAttribute(
-      'href',
-      '/cardholder/ops-1/pay',
-    );
+    expect(within(balance).getByRole('button', { name: 'Pay full balance' })).toBeInTheDocument();
 
     const account = screen.getByRole('region', { name: 'Linked current account' });
     expect(account).toHaveTextContent('Brightline Supplies Ltd current account');
@@ -72,7 +79,7 @@ describe('CardholderViewPage', () => {
         .map((c) => c.textContent),
     ).toEqual([
       '7 Nov 2026 10:00',
-      expect.stringMatching(/^Payment PAY-\d+$/),
+      expect.stringMatching(/^Payment PAY-[0-9A-HJKMNP-TV-Z]{8}$/),
       '£100.00',
       'Payment',
       'Completed',
@@ -84,7 +91,7 @@ describe('CardholderViewPage', () => {
       .map((c) => c.textContent);
     expect(accountCells).toEqual([
       '7 Nov 2026 10:00',
-      expect.stringMatching(/^PAY-\d+$/),
+      expect.stringMatching(/^PAY-[0-9A-HJKMNP-TV-Z]{8}$/),
       '£100.00',
     ]);
 
@@ -99,6 +106,11 @@ describe('CardholderViewPage', () => {
     for (const other of [balance, account, cardTable, accountTable]) {
       expect(other.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
+
+    await userEvent
+      .setup()
+      .click(within(balance).getByRole('button', { name: 'Pay full balance' }));
+    expect(await screen.findByText('Review placeholder')).toBeInTheDocument();
   });
 
   // T-W-2 · PR-03 · web unit
@@ -119,7 +131,6 @@ describe('CardholderViewPage', () => {
 
     const balance = await screen.findByRole('region', { name: 'Balance' });
     expect(within(balance).getByText(message)).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Pay full balance' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Pay full balance' })).toBeNull();
     expect(within(balance).queryByRole('button', { name: 'Check status' })).toBeNull();
   });
@@ -135,7 +146,13 @@ describe('CardholderViewPage', () => {
     const quote = await fake.createQuote('ops-1');
     await fake.confirmPayment('ops-1', quote.reference);
     fake.calls.length = 0;
-    renderWithApi(<CardholderViewPage />, fake, route);
+    renderWithApi(
+      <StrictMode>
+        <CardholderViewPage />
+      </StrictMode>,
+      fake,
+      route,
+    );
 
     const pending = await screen.findByRole('region', { name: 'Pending payment' });
     expect(within(pending).getByRole('status')).toHaveTextContent(
@@ -147,18 +164,70 @@ describe('CardholderViewPage', () => {
       `A payment of £150.50 (reference ${quote.reference}) is still pending. You cannot make another payment until we know its outcome. Choose Check status.`,
     );
     expect(within(balance).getByRole('button', { name: 'Check status' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Pay full balance' })).toBeNull();
-    expect(fake.calls.filter((c) => c === 'getCardholderView' || c === 'checkPayment')).toEqual([
-      'getCardholderView',
-      'checkPayment',
-      'getCardholderView',
-    ]);
+    expect(screen.queryByRole('button', { name: 'Pay full balance' })).toBeNull();
+    expect(fake.calls.filter((c) => c === 'checkPayment')).toHaveLength(1);
+    expect(fake.calls.filter((c) => c === 'getCardholderView')).toHaveLength(2);
 
+    // The steering is one-shot and the open used it: arm it again for the manual check.
+    fake.withStatusCheck('does_not_answer');
     await user.click(within(pending).getByRole('button', { name: 'Check status' }));
     await vi.waitFor(() => {
       expect(fake.calls.filter((c) => c === 'checkPayment')).toHaveLength(2);
     });
-    expect(await screen.findByRole('region', { name: 'Pending payment' })).toBeInTheDocument();
+    expect(
+      within(await screen.findByRole('region', { name: 'Pending payment' })).getByRole('status'),
+    ).toHaveTextContent(
+      `Still pending. Your bank did not answer. No new payment has been requested and no money has been taken twice. Try Check status again shortly. Reference ${quote.reference}.`,
+    );
+    expect(
+      within(screen.getByRole('region', { name: 'Pending payment' })).getByRole('button', {
+        name: 'Check status',
+      }),
+    ).toBeInTheDocument();
+  });
+
+  // T-W-2 · PR-03 · web unit (list addition: AC-16 / AC-13 on the view path)
+  // Given a pending payment the open-time check left pending, When Check status is pressed and the bank now answers, Then the outcome message (W-4) shows in an alert that holds focus
+  // Catches: no feedback or lost keyboard focus after Check status on the card view (AC-16, NFR-5)
+  test('T-W-2 shows the outcome of Check status and keeps focus in the page', async () => {
+    const user = userEvent.setup();
+    const fake = new FakeApiClient({ cards: [opsVan], purchases: { 'ops-1': ['150.50'] } })
+      .withBank('timeout_not_received')
+      .withStatusCheck('does_not_answer');
+    const quote = await fake.createQuote('ops-1');
+    await fake.confirmPayment('ops-1', quote.reference);
+    renderWithApi(<CardholderViewPage />, fake, route);
+    const pending = await screen.findByRole('region', { name: 'Pending payment' });
+
+    await user.click(within(pending).getByRole('button', { name: 'Check status' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(
+      `Payment not made. Your bank could not process it right now. No money has moved. Your card balance is still £150.50. Try again later. Reference ${quote.reference}.`,
+    );
+    expect(screen.queryByRole('region', { name: 'Pending payment' })).toBeNull();
+    await vi.waitFor(() => {
+      expect(alert.parentElement).toHaveFocus();
+    });
+  });
+
+  // T-W-2 · PR-03 · web unit (list addition)
+  // Given the automatic status check failing with 503, When the view opens, Then the loaded view still shows (balance, W-9, Check status)
+  // Catches: a convenience check hiding the whole card view (DEC-13)
+  test('T-W-2 keeps the view when the automatic check fails', async () => {
+    const fake = new FakeApiClient({
+      cards: [opsVan],
+      purchases: { 'ops-1': ['150.50'] },
+    }).withBank('timeout_not_received');
+    const quote = await fake.createQuote('ops-1');
+    await fake.confirmPayment('ops-1', quote.reference);
+    vi.spyOn(fake, 'checkPayment').mockRejectedValue(new ApiError(503, { status: 503 }));
+    renderWithApi(<CardholderViewPage />, fake, route);
+
+    const balance = await screen.findByRole('region', { name: 'Balance' });
+    expect(balance).toHaveTextContent('is still pending');
+    expect(within(balance).getByRole('button', { name: 'Check status' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   // T-W-2 · PR-03 · web unit (AC-34)
@@ -199,7 +268,7 @@ describe('CardholderViewPage', () => {
     });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Card not found');
-    expect(screen.queryByRole('link', { name: 'Pay full balance' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Pay full balance' })).toBeNull();
   });
 });
 

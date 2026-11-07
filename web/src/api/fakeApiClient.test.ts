@@ -199,7 +199,7 @@ describe('FakeApiClient (002)', () => {
     expect((await fake.getCard('ops-1')).balanceOwed).toBe('150.50');
 
     const quote = await fake.createQuote('ops-1');
-    expect(quote.reference).toMatch(/^PAY-\d+$/);
+    expect(quote.reference).toMatch(/^PAY-[0-9A-HJKMNP-TV-Z]{8}$/);
     expect([quote.amount, quote.fee, quote.total]).toEqual(['150.50', '0.00', '150.50']);
     expect(quote.wording.heading).toBe('Pay your full balance');
     expect(quote.wording.lines).toEqual([
@@ -418,6 +418,97 @@ describe('FakeApiClient (002)', () => {
     expect(((await rejection(fake.getPaymentRecord('ops-1', 'PAY-nope'))) as ApiError).status).toBe(
       404,
     );
+  });
+
+  test('T-W-10 references are sequential PAY- plus eight digits and records are readable by them', async () => {
+    const fake = seeded();
+    const quote = await fake.createQuote('ops-1');
+    expect(quote.reference).toBe('PAY-00000001');
+    expect((await fake.getPaymentRecord('ops-1', 'PAY-00000001')).quote.reference).toBe(
+      'PAY-00000001',
+    );
+  });
+
+  test('T-W-10 records carry events and are simulated only when steered', async () => {
+    const plain = seeded();
+    const q1 = await plain.createQuote('ops-1');
+    await plain.confirmPayment('ops-1', q1.reference);
+    const r1 = await plain.getPaymentRecord('ops-1', q1.reference);
+    expect(r1.payment?.simulated).toBe(false);
+    expect(r1.events.map((e) => e.kind)).toEqual([
+      'confirm_created',
+      'debit_requested',
+      'bank_completed',
+    ]);
+
+    const steered = seeded().withBank('refuse_insufficient_funds');
+    const q2 = await steered.createQuote('ops-1');
+    await steered.confirmPayment('ops-1', q2.reference);
+    const r2 = await steered.getPaymentRecord('ops-1', q2.reference);
+    expect(r2.payment?.simulated).toBe(true);
+    expect(r2.events.map((e) => [e.kind, e.simulated])).toEqual([
+      ['confirm_created', false],
+      ['debit_requested', false],
+      ['bank_refused', true],
+    ]);
+    expect(r2.events[2]).toMatchObject({
+      from: 'pending',
+      to: 'failed',
+      detail: 'insufficient_funds',
+    });
+
+    const timeout = seeded().withBank('timeout_not_received');
+    const q3 = await timeout.createQuote('ops-1');
+    await timeout.confirmPayment('ops-1', q3.reference);
+    const r3 = await timeout.getPaymentRecord('ops-1', q3.reference);
+    expect([r3.payment?.balanceBefore, r3.payment?.balanceAfter]).toEqual([null, null]);
+  });
+
+  test('T-W-10 a refused quote has a record with its refusal', async () => {
+    const fake = seeded();
+    const quote = await fake.createQuote('ops-1');
+    fake.addPurchase('ops-1', '20.00');
+    await rejection(fake.confirmPayment('ops-1', quote.reference));
+    const record = await fake.getPaymentRecord('ops-1', quote.reference);
+    expect([record.status, record.refusalReason, record.balanceAtRefusal, record.payment]).toEqual([
+      'refused',
+      'balance_changed',
+      '170.50',
+      null,
+    ]);
+    expect(record.events.map((e) => [e.kind, e.detail])).toEqual([
+      ['confirm_refused', 'balance_changed'],
+    ]);
+  });
+
+  test('T-W-10 confirming an already refused reference is refused again with quote_refused (AC-30)', async () => {
+    const fake = seeded();
+    const quote = await fake.createQuote('ops-1');
+    fake.addPurchase('ops-1', '20.00');
+    const first = (await rejection(fake.confirmPayment('ops-1', quote.reference))) as ApiError;
+    const second = (await rejection(fake.confirmPayment('ops-1', quote.reference))) as ApiError;
+
+    expect(second.status).toBe(409);
+    expect(second.problem?.code).toBe('quote_refused');
+    expect(second.problem?.message).toBe(first.problem?.message);
+    expect(second.problem?.balanceOwed).toBe('170.50');
+    expect(((await rejection(fake.getReceipt('ops-1', quote.reference))) as ApiError).status).toBe(
+      404,
+    );
+  });
+
+  test('T-W-10 the status-check steering applies once, then reverts to answering (DEC-7)', async () => {
+    const fake = seeded().withBank('timeout_not_received').withStatusCheck('does_not_answer');
+    const quote = await fake.createQuote('ops-1');
+    await fake.confirmPayment('ops-1', quote.reference);
+
+    const first = await fake.checkPayment('ops-1', quote.reference);
+    expect(first.state).toBe('pending');
+    expect(first.message).toMatch(/^Still pending\./);
+    expect((await fake.getFakeBank()).nextStatusCheck).toBe('answers');
+
+    const second = await fake.checkPayment('ops-1', quote.reference);
+    expect([second.state, second.failureReason]).toEqual(['failed', 'not_received']);
   });
 
   test('T-W-10 hold keeps confirm pending and calls are recorded', async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import { useApi } from '../../api/ApiContext';
-import type { FakeBank } from '../../api/types';
+import type { FakeBank, NextDebitOutcome, NextStatusCheck } from '../../api/types';
 import { Button } from '../../components/Button';
 import { SelectField } from '../../components/Field';
 import { NEXT_DEBIT_OUTCOMES, NEXT_STATUS_CHECKS } from '../../format/labels';
@@ -17,8 +17,8 @@ export function FakeBankPanel({ onChanged }: { onChanged?: () => void }) {
   const api = useApi();
   const headingId = useId();
   const [bank, setBank] = useState<FakeBank | null>(null);
-  const [outcome, setOutcome] = useState('complete');
-  const [check, setCheck] = useState('answers');
+  const [outcome, setOutcome] = useState<NextDebitOutcome>('complete');
+  const [check, setCheck] = useState<NextStatusCheck>('answers');
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -50,8 +50,8 @@ export function FakeBankPanel({ onChanged }: { onChanged?: () => void }) {
     setSaving(true);
     api
       .setFakeBank({
-        nextDebitOutcome: outcome as FakeBank['nextDebitOutcome'],
-        nextStatusCheck: check as FakeBank['nextStatusCheck'],
+        nextDebitOutcome: outcome,
+        nextStatusCheck: check,
       })
       .then((updated) => {
         setBank(updated);
@@ -81,14 +81,20 @@ export function FakeBankPanel({ onChanged }: { onChanged?: () => void }) {
             label="Next debit outcome"
             value={outcome}
             options={NEXT_DEBIT_OUTCOMES}
-            onChange={setOutcome}
+            onChange={(value) => {
+              setOutcome(
+                (prev) => NEXT_DEBIT_OUTCOMES.find((o) => o.value === value)?.value ?? prev,
+              );
+            }}
           />
           <SelectField
             id={`${headingId}-check`}
             label="Next status check"
             value={check}
             options={NEXT_STATUS_CHECKS}
-            onChange={setCheck}
+            onChange={(value) => {
+              setCheck((prev) => NEXT_STATUS_CHECKS.find((o) => o.value === value)?.value ?? prev);
+            }}
           />
           <div>
             <Button variant="secondary" pending={saving} pendingLabel="Setting…" onClick={set}>
