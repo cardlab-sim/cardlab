@@ -127,14 +127,15 @@ export class CardDetailPage {
     const result: TransactionRow[] = [];
     for (const row of await rows.all()) {
       const c = (await row.getByRole('cell').allInnerTexts()).map((t) => t.trim());
-      if (c.length === 6) {
+      // Activity columns: Time, Type, Description, Category, Amount, Outcome, Reason; only purchases are transactions.
+      if (c.length === 7 && c[1] === 'Purchase') {
         result.push({
           time: c[0] ?? '',
-          merchant: c[1] ?? '',
-          category: c[2] ?? '',
-          amount: c[3] ?? '',
-          outcome: c[4] ?? '',
-          reason: c[5] ?? '',
+          merchant: c[2] ?? '',
+          category: c[3] ?? '',
+          amount: c[4] ?? '',
+          outcome: c[5] ?? '',
+          reason: c[6] ?? '',
         });
       }
     }

@@ -15,6 +15,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.balance {
+  font-size: var(--font-size-lg);
+  font-variant-numeric: tabular-nums;
+}
+
 .columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

@@ -9,7 +9,6 @@ import type {
   Limit,
   Period,
   Problem,
-  Transaction,
 } from '../../api/types';
 import { CATEGORIES, PERIODS } from '../../api/types';
 import { Badge } from '../../components/Badge';
@@ -22,7 +21,6 @@ import {
   categoryLabel,
   outcomeLabel,
   periodLabel,
-  reasonLabel,
   statusLabel,
 } from '../../format/labels';
 import { formatMoney } from '../../format/money';
@@ -443,33 +441,5 @@ function DecisionNotice({ decision }: { decision: Decision }) {
         </ul>
       )}
     </Notice>
-  );
-}
-
-const TRANSACTION_COLUMNS: readonly Column<Transaction>[] = [
-  { header: 'Time', cell: (tx) => formatLondonTime(tx.occurredAt) },
-  { header: 'Merchant', cell: (tx) => tx.merchant },
-  { header: 'Category', cell: (tx) => categoryLabel(tx.category) },
-  { header: 'Amount', numeric: true, cell: (tx) => formatMoney(tx.amount) },
-  {
-    header: 'Outcome',
-    cell: (tx) => <Badge tone={tx.outcome}>{outcomeLabel(tx.outcome)}</Badge>,
-  },
-  { header: 'Reason', cell: (tx) => reasonLabel(tx.reason) },
-];
-
-/** "Transactions": DataTable newest first: Time (London), Merchant, Category, Amount, Outcome badge, Reason. */
-export function TransactionsSection({ transactions }: { transactions: Transaction[] }) {
-  return (
-    <section aria-labelledby="transactions-heading" className={styles['section']}>
-      <h2 id="transactions-heading">Transactions</h2>
-      <DataTable
-        caption="Transaction history"
-        columns={TRANSACTION_COLUMNS}
-        rows={transactions}
-        rowKey={(tx) => tx.id}
-        emptyText="No transactions yet."
-      />
-    </section>
   );
 }

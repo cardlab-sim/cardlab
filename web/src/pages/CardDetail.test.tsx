@@ -2,7 +2,13 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { FakeApiClient } from '../api/fakeApiClient';
-import type { AuditEntry, CardDetail } from '../api/types';
+import type {
+  ActivityEntry,
+  AuditEntry,
+  CardDetail,
+  Decision,
+  SimulatePurchaseInput,
+} from '../api/types';
 import { renderWithApi } from '../test/render';
 import { CardDetailPage } from './CardDetailPage';
 
@@ -69,7 +75,7 @@ describe('CardDetailPage', () => {
   // Catches: no pending state, result not shown, history not refreshed (AC-22, §4.1)
   test('T-W-3 simulate shows pending state then the decision and refreshes history', async () => {
     const user = userEvent.setup();
-    const fake = new FakeApiClient({ cards: [opsVan] });
+    const fake = new ActivityFake({ cards: [opsVan] });
     renderDetail(fake);
     const simulate = within(await screen.findByRole('region', { name: 'Simulate purchase' }));
 
@@ -95,7 +101,7 @@ describe('CardDetailPage', () => {
     expect(result).toHaveTextContent('limit_exceeded');
     expect(result).toHaveTextContent('Fuel day');
     expect(result).toHaveTextContent('£0.00');
-    const history = within(screen.getByRole('region', { name: 'Transactions' }));
+    const history = within(screen.getByRole('region', { name: 'Activity' }));
     await waitFor(() => {
       expect(history.getAllByRole('row')).toHaveLength(2);
     });
@@ -129,8 +135,8 @@ describe('CardDetailPage', () => {
     expect(error).toHaveTextContent('Amount must be greater than 0.00.');
     expect(simulate.getByLabelText('Amount')).toHaveAttribute('aria-describedby', error.id);
     expect(simulate.queryByRole('status')).toBeNull();
-    const history = within(screen.getByRole('region', { name: 'Transactions' }));
-    expect(history.getByText('No transactions yet.')).toBeInTheDocument();
+    const history = within(screen.getByRole('region', { name: 'Activity' }));
+    expect(history.getByText('No activity yet.')).toBeInTheDocument();
   });
 
   // T-W-8 · PR-07 · web unit
@@ -174,27 +180,15 @@ describe('CardDetailPage', () => {
         { category: 'travel', period: 'month', amount: '500.00' },
       ],
     };
-    const fake = new FakeApiClient({
-      cards: [card],
-      transactions: {
-        c1: [
-          {
-            id: 't1',
-            occurredAt: '2026-10-24T23:30:00Z',
-            amount: '12.50',
-            category: 'fuel',
-            merchant: 'Shell',
-            outcome: 'approved',
-            reason: 'approved',
-          },
-        ],
-      },
-    });
+    const fake = new ActivityFake({ cards: [card] });
+    fake.prepend(
+      purchaseRow({ at: '2026-10-24T23:30:00Z', amount: '12.50', description: 'Shell' }),
+    );
     renderDetail(fake);
 
     const limits = await limitsRegion();
     expect(limits.getByText('£1,234.56')).toBeInTheDocument();
-    const history = within(screen.getByRole('region', { name: 'Transactions' }));
+    const history = within(await screen.findByRole('region', { name: 'Activity' }));
     expect(history.getByText('25 Oct 2026 00:30')).toBeInTheDocument();
 
     await user.click(limits.getByRole('button', { name: 'Remove Fuel day limit' }));
@@ -454,10 +448,191 @@ describe('CardDetailPage (002)', () => {
   // T-W-8 · PR-07 · web unit
   // Given a card with balanceOwed "150.50", a purchase and a completed payment, When rendered, Then the heading shows "Balance owed £150.50"; the Activity table (caption "Transaction history") lists the payment with a Payment type badge, Completed state badge and a link to its record, and the purchase with its merchant, category, outcome and reason; the Payments section lists every reference with status, state and origin badges
   // Catches: the admin unable to see the balance or tell payments from purchases (AC-1, AC-2, R-13, DEC-12)
-  test.todo('T-W-8 shows balance, activity and payments');
+  test('T-W-8 shows balance, activity and payments', async () => {
+    const fake = new ActivityFake({ cards: [{ ...opsVan, balanceOwed: '150.50' }] });
+    const paid = await fake.createQuote('c1');
+    await fake.confirmPayment('c1', paid.reference);
+    fake.addPurchase('c1', '20.00');
+    const open = await fake.createQuote('c1');
+    fake.prepend(
+      purchaseRow({ at: '2026-10-24T23:30:00Z', amount: '12.50', description: 'Shell' }),
+    );
+    renderDetail(fake);
+
+    expect(await screen.findByText('Balance owed £20.00')).toBeInTheDocument();
+
+    const activity = within(screen.getByRole('table', { name: 'Transaction history' }));
+    const rows = activity.getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(4);
+    // Newest first: the Shell purchase (prepended), the £20.00 purchase, the completed payment, the opening purchase.
+    expect(cellTexts(rows[0])).toEqual([
+      '25 Oct 2026 00:30',
+      'Purchase',
+      'Shell',
+      'Fuel',
+      '£12.50',
+      'Approved',
+      'Approved',
+    ]);
+    const payment = cellTexts(rows[2]);
+    expect(payment[1]).toBe('Payment');
+    expect(payment[2]).toBe(`Payment ${paid.reference}`);
+    expect(payment[3]).toBe('—');
+    expect(payment[4]).toBe('£150.50');
+    expect(payment[5]).toBe('Completed');
+    expect(
+      within(rows[2] as HTMLElement).getByRole('link', { name: `Payment ${paid.reference}` }),
+    ).toHaveAttribute('href', `/cards/c1/payments/${paid.reference}`);
+
+    const payments = within(screen.getByRole('table', { name: 'Payment references' }));
+    const paymentRows = payments.getAllByRole('row').slice(1);
+    expect(paymentRows).toHaveLength(2);
+    expect(within(paymentRows[0] as HTMLElement).getByRole('link')).toHaveTextContent(
+      open.reference,
+    );
+    expect(paymentRows[0]).toHaveTextContent('Open');
+    expect(paymentRows[0]).toHaveTextContent('£20.00');
+    expect(paymentRows[0]).toHaveTextContent('Cardholder view');
+    expect(within(paymentRows[1] as HTMLElement).getByRole('link')).toHaveTextContent(
+      paid.reference,
+    );
+    expect(paymentRows[1]).toHaveTextContent('Confirmed');
+    expect(paymentRows[1]).toHaveTextContent('Completed');
+  });
+
+  // T-W-8 · PR-07 · web unit (added: DEC-15 smoke payments are told apart)
+  // Given a smoke-origin payment in activity and in the payments list, When rendered, Then the Reason cell and the Payments row carry the "origin: smoke" badge
+  // Catches: smoke payments indistinguishable from cardholder ones (DEC-15)
+  test('T-W-8 marks smoke payments with an origin badge', async () => {
+    const fake = new ActivityFake({ cards: [opsVan] });
+    fake.prepend({
+      ...purchaseRow({
+        at: '2026-10-24T23:30:00Z',
+        amount: '1.00',
+        description: 'Payment PAY-AAAAAAAA',
+      }),
+      kind: 'payment',
+      outcome: null,
+      state: 'completed',
+      reference: 'PAY-AAAAAAAA',
+      origin: 'deploy_smoke',
+      category: null,
+      reason: null,
+    });
+    fake.paymentsOverride = [
+      {
+        reference: 'PAY-AAAAAAAA',
+        status: 'confirmed',
+        state: 'completed',
+        amount: '1.00',
+        createdAt: '2026-10-24T23:30:00Z',
+        settledAt: '2026-10-24T23:30:01Z',
+        failureReason: null,
+        origin: 'deploy_smoke',
+      },
+    ];
+    renderDetail(fake);
+
+    const activity = within(await screen.findByRole('table', { name: 'Transaction history' }));
+    expect(activity.getByText('origin: smoke')).toBeInTheDocument();
+    const payments = within(screen.getByRole('table', { name: 'Payment references' }));
+    expect(payments.getByText('origin: smoke')).toBeInTheDocument();
+  });
 
   // T-W-8 · PR-07 · web unit
   // Given the payments list contains a pending payment, When rendered, Then checkPayment is called once for it and the page re-reads card, activity and payments
   // Catches: admin detail not resolving pending payments on open (AC-34, R-11, DEC-13)
-  test.todo('T-W-8 auto-checks a pending payment on open');
+  test('T-W-8 auto-checks a pending payment on open', async () => {
+    const fake = new ActivityFake({ cards: [{ ...opsVan, balanceOwed: '150.50' }] });
+    const quote = await fake.createQuote('c1');
+    fake.withBank('timeout_debit_applied');
+    await fake.confirmPayment('c1', quote.reference);
+    renderDetail(fake);
+
+    expect(await screen.findByText('Balance owed £0.00')).toBeInTheDocument();
+
+    const payments = within(screen.getByRole('table', { name: 'Payment references' }));
+    expect(payments.getAllByRole('row')[1]).toHaveTextContent('Completed');
+    expect(fake.calls.filter((call) => call === 'checkPayment')).toHaveLength(1);
+    expect(fake.calls.filter((call) => call === 'getCard')).toHaveLength(2);
+    expect(fake.calls.filter((call) => call === 'listActivity')).toHaveLength(2);
+    expect(fake.calls.filter((call) => call === 'listPaymentRecords')).toHaveLength(2);
+  });
+
+  // T-W-8 · PR-07 · web unit (added: a pending payment the bank has not answered is checked once, not in a loop)
+  // Given a pending payment and a bank that does not answer, When rendered, Then checkPayment is called once and the payment stays Pending
+  // Catches: an endless check loop on an unanswered bank (DEC-13, AC-16)
+  test('T-W-8 does not re-check an unanswered pending payment', async () => {
+    const fake = new ActivityFake({ cards: [{ ...opsVan, balanceOwed: '150.50' }] });
+    const quote = await fake.createQuote('c1');
+    fake.withBank('timeout_debit_applied');
+    await fake.confirmPayment('c1', quote.reference);
+    fake.withStatusCheck('does_not_answer');
+    renderDetail(fake);
+
+    const payments = within(await screen.findByRole('table', { name: 'Payment references' }));
+    await waitFor(() => {
+      expect(fake.calls.filter((call) => call === 'listPaymentRecords')).toHaveLength(2);
+    });
+    expect(payments.getAllByRole('row')[1]).toHaveTextContent('Pending');
+    expect(fake.calls.filter((call) => call === 'checkPayment')).toHaveLength(1);
+  });
 });
+
+function cellTexts(row: HTMLElement | undefined): (string | null)[] {
+  return within(row as HTMLElement)
+    .getAllByRole('cell')
+    .map((cell) => cell.textContent);
+}
+
+function purchaseRow(
+  overrides: Partial<ActivityEntry> & Pick<ActivityEntry, 'at' | 'amount' | 'description'>,
+): ActivityEntry {
+  return {
+    kind: 'purchase',
+    outcome: 'approved',
+    state: null,
+    reference: null,
+    origin: null,
+    category: 'fuel',
+    reason: 'approved',
+    ...overrides,
+  };
+}
+
+/** FakeApiClient whose activity also lists simulated purchases and rows added by the test, like the real API. */
+class ActivityFake extends FakeApiClient {
+  /** Replaces the payments list when set. */
+  paymentsOverride: Awaited<ReturnType<FakeApiClient['listPaymentRecords']>> | null = null;
+  private readonly rows: ActivityEntry[] = [];
+
+  prepend(row: ActivityEntry): void {
+    this.rows.unshift(row);
+  }
+
+  override async simulatePurchase(id: string, input: SimulatePurchaseInput): Promise<Decision> {
+    const decision = await super.simulatePurchase(id, input);
+    if (decision.problems.length === 0 && decision.reason !== 'card_not_found') {
+      this.rows.unshift(
+        purchaseRow({
+          at: input.timestamp ?? new Date().toISOString(),
+          amount: input.amount,
+          description: input.merchant,
+          category: input.category,
+          outcome: decision.outcome,
+          reason: decision.reason,
+        }),
+      );
+    }
+    return decision;
+  }
+
+  override async listActivity(id: string): Promise<ActivityEntry[]> {
+    return [...this.rows, ...(await super.listActivity(id))];
+  }
+
+  override async listPaymentRecords(id: string) {
+    const real = await super.listPaymentRecords(id);
+    return this.paymentsOverride ?? real;
+  }
+}
