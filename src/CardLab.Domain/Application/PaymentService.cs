@@ -67,7 +67,7 @@ public sealed class PaymentService
         }
 
         var account = await RequireAccountAsync(ct);
-        var now = _clock.UtcNow;
+        var now = Now();
         return await _store.WithCardLockAsync(
             cardId,
             async writer =>
@@ -318,6 +318,13 @@ public sealed class PaymentService
         return BalanceRules.Owed(purchases, completed);
     }
 
+    // Every instant that reaches a receipt or record is cut to milliseconds at its source: the store keeps milliseconds,
+    // so a finer first receipt would differ from every repeat and read on the wire (BUG-008).
+    private DateTimeOffset Now() => TruncateToMilliseconds(_clock.UtcNow);
+
+    private static DateTimeOffset TruncateToMilliseconds(DateTimeOffset instant) =>
+        instant.AddTicks(-(instant.Ticks % TimeSpan.TicksPerMillisecond));
+
     private static long ElapsedMs(long started) => (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
     private async Task<LinkedAccount> RequireAccountAsync(CancellationToken ct) =>
@@ -343,7 +350,7 @@ public sealed class PaymentService
             return Validated.Failed(new PaymentError.ReferenceNotFound(), null);
         }
 
-        var now = _clock.UtcNow;
+        var now = Now();
         var owed = await OwedAsync(payments, ct);
         var pending = await payments.GetPendingPaymentAsync(ct);
         var other = pending is not null && pending.Reference != reference ? new PendingPaymentRef(pending.Reference, pending.Amount) : null;
@@ -464,7 +471,7 @@ public sealed class PaymentService
                 cardId,
                 writer =>
                 {
-                    writer.Payments.AppendEvent(Event(reference, payment, _clock.UtcNow, PaymentEventKind.BankUnanswered, PaymentState.Pending, PaymentState.Pending, "settle_lock_timeout"));
+                    writer.Payments.AppendEvent(Event(reference, payment, Now(), PaymentEventKind.BankUnanswered, PaymentState.Pending, PaymentState.Pending, "settle_lock_timeout"));
                     return Task.FromResult(true);
                 },
                 CancellationToken.None);
@@ -486,8 +493,9 @@ public sealed class PaymentService
             return new SettleResult(BuildReceipt(record.Quote, payment, before, repeated: false), record.Quote, payment, null, false);
         }
 
-        var now = _clock.UtcNow;
+        var now = Now();
         var transition = PaymentStateMachine.Apply(PaymentState.Pending, outcome).Value!;
+        var debitedAt = transition.BankDebitedAtUtc is { } reported ? TruncateToMilliseconds(reported) : (DateTimeOffset?)null;
         if (transition.To == PaymentState.Pending)
         {
             payments.AppendEvent(Event(reference, payment.Id, now, fromCheck ? PaymentEventKind.StatusCheckUnanswered : PaymentEventKind.BankUnanswered, PaymentState.Pending, PaymentState.Pending, detail));
@@ -499,8 +507,8 @@ public sealed class PaymentService
             transition.To,
             transition.Reason,
             now,
-            transition.BankDebitedAtUtc ?? now,
-            transition.BankDebitedAtUtc,
+            debitedAt ?? now,
+            debitedAt,
             before,
             after,
             outcome.Simulated);
