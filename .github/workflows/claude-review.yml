@@ -31,28 +31,67 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
+      pull-requests: write   # used only by tools/findings.py (from main), never by the agent
       issues: read
+      statuses: write        # the ai-blockers status
       id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Trusted copy of the findings script (from main, not from the PR)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: trusted
       - id: tier
         run: |
           git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD > changed.txt
           echo "tier=$(python3 tools/risk_tier.py docs/sdlc/review-tiers.json < changed.txt)" >> "$GITHUB_OUTPUT"
       - if: steps.tier.outputs.tier != '1'
+        id: review
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
-            Review PR #${{ github.event.pull_request.number }} in ${{ github.repository }} as the money-and-security reviewer.
-            Use `git diff origin/${{ github.event.pull_request.base.ref }}...HEAD` to read the change.
-            Only comment on: money arithmetic and rounding, limit and period boundaries, authorisation decisions,
+            You are the money-and-security reviewer for PR #${{ github.event.pull_request.number }} in ${{ github.repository }}.
+            Read the change with `git diff origin/${{ github.event.pull_request.base.ref }}...HEAD`.
+            Look up the requirement and acceptance-criterion IDs it affects in docs/features/*/01-requirements.md.
+            Only report on: money arithmetic and rounding, limit and period boundaries, authorisation decisions,
             audit completeness, card-number exposure (any run of 13+ digits), idempotency and locking, migrations,
             secrets or credentials in code or workflows.
-            Post each finding as an inline comment that starts with `[money]` and a severity tag [S1] blocker,
-            [S2] major, [S3] minor, [S4] cosmetic, then the acceptance criterion or requirement it affects.
-            If there is nothing in scope, post nothing. Never approve, never request changes, never push.
-          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(git diff *),Bash(git log *)" --model claude-opus-5-5 --max-turns 30'
+            Return your findings as JSON only. You cannot post comments; a script posts them.
+            For each finding: severity S1 (blocker: wrong money, security hole, data loss), S2 (major), S3 (minor), S4 (cosmetic);
+            path; line = the line number in the NEW version of the file, on a line the diff changed or added;
+            a one-line title; a short detail with the evidence; requirement_ids such as R-11 or AC-9;
+            suspected_layer = where the defect most likely originated (requirements, design, plan, code, test, environment, unknown).
+            If nothing is in scope, return an empty findings list.
+          claude_args: >-
+            --allowedTools "Bash(git diff *),Bash(git log *),Read,Grep,Glob"
+            --model claude-opus-5-5 --max-turns 30
+            --json-schema '{"type":"object","required":["findings"],"properties":{"findings":{"type":"array","items":{"type":"object","required":["severity","path","title","detail","requirement_ids","suspected_layer"],"properties":{"severity":{"enum":["S1","S2","S3","S4"]},"path":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string"},"detail":{"type":"string"},"requirement_ids":{"type":"array","items":{"type":"string"}},"suspected_layer":{"enum":["requirements","design","plan","code","test","environment","unknown"]}}}}}}'
+      - name: Post findings and set ai-blockers
+        if: steps.tier.outputs.tier != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          FINDINGS: ${{ steps.review.outputs.structured_output }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python3 trusted/tools/findings.py post
+      - name: Tier 1 has no money review, so no blockers
+        if: steps.tier.outputs.tier == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 trusted/tools/findings.py status
+      - name: Keep the raw findings for 90 days
+        if: steps.tier.outputs.tier != '1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: findings-pr${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: findings.json
+          retention-days: 90
