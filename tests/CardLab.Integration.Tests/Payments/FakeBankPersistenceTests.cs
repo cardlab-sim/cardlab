@@ -30,6 +30,7 @@ public sealed class FakeBankPersistenceTests : IClassFixture<SqlTestDatabase>
     [Fact]
     public async Task Ledger_survives_restart_and_reseed()
     {
+        await ReseedAsync();
         var account = new BankAccountRef(TestSeed.BankAccountRef);
         var clock = new FakeClock(new DateTimeOffset(2026, 11, 7, 10, 0, 0, TimeSpan.Zero));
         var reference = new PaymentReference("PAY-PERSIST1");
@@ -58,6 +59,7 @@ public sealed class FakeBankPersistenceTests : IClassFixture<SqlTestDatabase>
     [Fact]
     public async Task Seeds_linked_account_once_without_the_full_number()
     {
+        await ClearBankAndLinkedAccountAsync();
         await ReseedAsync();
         await ReseedAsync();
 
@@ -71,8 +73,32 @@ public sealed class FakeBankPersistenceTests : IClassFixture<SqlTestDatabase>
         Assert.DoesNotContain(TestSeed.LinkedAccountNumber, await _fixture.DumpAllRowsAsync(), StringComparison.Ordinal);
     }
 
+    // Given a linked-account section with a number shorter than four digits, When Seeder.EnsureSeedAsync runs, Then it throws InvalidOperationException and writes no LinkedAccount
+    // Catches: a typo in the configured number silently shipping an app with no linked account (R-2)
+    [Fact]
+    public async Task Invalid_linked_account_number_fails_the_seed_loudly()
+    {
+        await ClearBankAndLinkedAccountAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => ReseedAsync("773"));
+
+        await using var db = _fixture.CreateDbContext();
+        Assert.Empty(await db.LinkedAccounts.AsNoTracking().ToListAsync(Ct));
+    }
+
+    // Starts the seed tests from empty seed tables so they never depend on what ran before them in this class.
+    private async Task ClearBankAndLinkedAccountAsync()
+    {
+        await using var db = _fixture.CreateDbContext();
+        await db.BankEntries.ExecuteDeleteAsync(Ct);
+        await db.BankDebitRequests.ExecuteDeleteAsync(Ct);
+        await db.BankAccounts.ExecuteDeleteAsync(Ct);
+        await db.BankSteerings.ExecuteDeleteAsync(Ct);
+        await db.LinkedAccounts.ExecuteDeleteAsync(Ct);
+    }
+
     // Runs the seed again through a fresh scope, as an application restart does.
-    private async Task ReseedAsync()
+    private async Task ReseedAsync(string? accountNumber = null)
     {
         var services = new ServiceCollection();
         services.AddDbContext<CardLabDbContext>(o => o.UseSqlServer(_fixture.ConnectionString));
@@ -90,7 +116,7 @@ public sealed class FakeBankPersistenceTests : IClassFixture<SqlTestDatabase>
             LinkedAccount = new SeedLinkedAccountOptions
             {
                 DisplayName = TestSeed.LinkedAccountName,
-                AccountNumber = TestSeed.LinkedAccountNumber,
+                AccountNumber = accountNumber ?? TestSeed.LinkedAccountNumber,
                 BankAccountRef = TestSeed.BankAccountRef,
                 OpeningBalance = TestSeed.BankOpeningBalance,
                 AuthorityBasis = TestSeed.AuthorityBasis,

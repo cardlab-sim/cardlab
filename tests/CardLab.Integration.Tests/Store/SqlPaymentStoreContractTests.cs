@@ -3,6 +3,7 @@ using CardLab.Domain.Ports;
 using CardLab.Infrastructure.Model;
 using CardLab.Infrastructure.Sql;
 using CardLab.Integration.Tests.Harness;
+using CardLab.TestKit.Builders;
 using CardLab.TestKit.Contracts;
 
 namespace CardLab.Integration.Tests.Store;
@@ -53,4 +54,38 @@ public sealed class SqlPaymentStoreContractTests : PaymentStoreContractTests, IC
     /// <inheritdoc />
     protected override Task<ICardStore> OpenStoreAsync(ICardStore seeded) =>
         Task.FromResult<ICardStore>(new SqlCardStore(_database.CreateDbContext()));
+
+    // Given a quote and six events appended with one timestamp in one unit of work, When GetPaymentRecordAsync, Then the events come back in the order they were appended
+    // Catches: random event ids ordering same-millisecond events arbitrarily, so a debit shows before its confirm (R-14, AC-20)
+    [Fact]
+    public async Task Events_with_equal_times_keep_call_order()
+    {
+        var card = new CardBuilder().Build();
+        var store = await CreateStoreAsync([card], new LinkedAccountBuilder().WithId(Guid.NewGuid()).Build());
+        var at = new DateTimeOffset(2026, 11, 7, 10, 0, 0, TimeSpan.Zero);
+        var quote = new QuoteBuilder().ForCard(card).WithReference($"PAY-{Guid.NewGuid():N}"[..12]).At(at).Build();
+        PaymentEventKind[] kinds =
+        [
+            PaymentEventKind.ConfirmCreated,
+            PaymentEventKind.DebitRequested,
+            PaymentEventKind.BankUnanswered,
+            PaymentEventKind.StatusCheckUnanswered,
+            PaymentEventKind.ConfirmRepeated,
+            PaymentEventKind.StatusCheckCompleted,
+        ];
+        await store.WithCardLockAsync(card.Id, w =>
+        {
+            w.Payments.AppendQuote(quote);
+            foreach (var kind in kinds)
+            {
+                w.Payments.AppendEvent(new PaymentEvent(quote.Reference, null, at, kind, null, null, null, false));
+            }
+
+            return Task.FromResult(0);
+        }, TestContext.Current.CancellationToken);
+
+        var record = await store.GetPaymentRecordAsync(quote.Reference, TestContext.Current.CancellationToken);
+
+        Assert.Equal(kinds, record!.Events.Select(e => e.Kind).ToArray());
+    }
 }

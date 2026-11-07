@@ -21,10 +21,11 @@ namespace CardLab.Infrastructure.FakeBank;
 /// <c>BankSteering.NextDebitOutcome</c> (Simulated = a value was set); refuse InsufficientFunds when steered or when
 /// Amount &gt; AvailableBalance (the refusal is recorded so a status check can answer Refused); Complete and
 /// TimeoutDebitApplied insert <c>BankDebitRequest</c> + <c>BankEntry</c> and decrement the balance, commit;
-/// TimeoutNotReceived commits only the steering clear; both timeout modes then <c>await Task.Delay(Timeout.Infinite, ct)</c>
+/// TimeoutNotReceived commits the steering clear and a simulated <c>NotReceived</c> request row (no entry, no balance change,
+/// BUG-004); both timeout modes then <c>await Task.Delay(Timeout.Infinite, ct)</c>
 /// (a timeout mode on a debit the balance cannot cover is refused instead, there is nothing to apply). Status:
 /// read-and-clear <c>NextStatusCheck</c>; DoesNotAnswer waits on <c>ct</c>; else Completed(DebitedAtUtc) / Refused(reason)
-/// from the request row, NotReceived when none (marked simulated only when a status steering value was set). Shares the
+/// from the request row (NotReceived is simulated when recorded under steering), NotReceived(not simulated) when none. Shares the
 /// request's scoped <see cref="CardLabDbContext"/>.
 /// </remarks>
 public sealed class SqlFakeBank : ICurrentAccountBank, IFakeBankSteering
@@ -97,7 +98,7 @@ public sealed class SqlFakeBank : ICurrentAccountBank, IFakeBankSteering
                 else
                 {
                     var known = await _db.BankDebitRequests.AsNoTracking().SingleOrDefaultAsync(r => r.Reference == reference.Value && r.AccountId == account.Value, ct);
-                    outcome = known is null ? new BankOutcome.NotReceived(steering is not null) : ToOutcome(known);
+                    outcome = known is null ? new BankOutcome.NotReceived(false) : ToOutcome(known);
                 }
 
                 await tx.CommitAsync(ct);
@@ -152,6 +153,7 @@ public sealed class SqlFakeBank : ICurrentAccountBank, IFakeBankSteering
         "Completed" => new BankOutcome.Completed(row.DebitedAtUtc is null ? null : RowMapper.ToInstant(row.DebitedAtUtc.Value), row.Simulated),
         "RefusedInsufficientFunds" => new BankOutcome.Refused(FailureReason.InsufficientFunds, row.Simulated),
         "RefusedAccountUnavailable" => new BankOutcome.Refused(FailureReason.AccountUnavailable, row.Simulated),
+        "NotReceived" => new BankOutcome.NotReceived(row.Simulated),
         _ => throw new InvalidOperationException("The bank recorded an unknown outcome."),
     };
 
@@ -177,13 +179,26 @@ public sealed class SqlFakeBank : ICurrentAccountBank, IFakeBankSteering
                 },
                 ct);
             var steered = steeredName is null ? (NextDebitOutcome?)null : Enum.Parse<NextDebitOutcome>(steeredName);
+            var now = _clock.UtcNow.UtcDateTime;
             if (steered == NextDebitOutcome.TimeoutNotReceived)
             {
+                // Recorded as a simulated not-received request (BUG-004): no entry, no balance change, so a status check
+                // answers NotReceived(simulated) while a reference the bank never saw answers NotReceived(not simulated).
+                _db.BankDebitRequests.Add(new BankDebitRequestRow
+                {
+                    Reference = request.Reference.Value,
+                    AccountId = request.Account.Value,
+                    Amount = request.Amount.Amount,
+                    Outcome = "NotReceived",
+                    ReceivedAtUtc = now,
+                    DebitedAtUtc = null,
+                    Simulated = true,
+                });
+                await _db.SaveChangesAsync(ct);
                 await tx.CommitAsync(ct);
                 return (null, true);
             }
 
-            var now = _clock.UtcNow.UtcDateTime;
             var account = await _db.BankAccounts.SingleOrDefaultAsync(a => a.Id == request.Account.Value, ct)
                 ?? throw new InvalidOperationException("The bank has no such account.");
             var refusal = steered switch
@@ -231,7 +246,10 @@ public sealed class SqlFakeBank : ICurrentAccountBank, IFakeBankSteering
     // Reads the steering row, lets the caller take (and clear) one of its fields, and saves the clear.
     private async Task<string?> ReadAndClearAsync(Func<BankSteeringRow, string?> take, CancellationToken ct)
     {
-        var row = await _db.BankSteerings.SingleOrDefaultAsync(s => s.Id == SteeringRowId, ct);
+        // UPDLOCK: the read and the clear are one atomic step across accounts (the account applock is per account only).
+        var row = await _db.BankSteerings
+            .FromSqlRaw("SELECT * FROM [BankSteering] WITH (UPDLOCK, ROWLOCK) WHERE [Id] = 1")
+            .SingleOrDefaultAsync(ct);
         if (row is null)
         {
             return null;

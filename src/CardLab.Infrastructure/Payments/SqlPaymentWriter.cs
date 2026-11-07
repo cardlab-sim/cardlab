@@ -189,7 +189,6 @@ internal sealed class SqlPaymentWriter : IPaymentWriter
     public void AppendEvent(PaymentEvent paymentEvent) =>
         _db.PaymentEvents.Add(new PaymentEventRow
         {
-            Id = Guid.NewGuid(),
             Reference = paymentEvent.Reference.Value,
             PaymentId = paymentEvent.Payment?.Value,
             AtUtc = paymentEvent.AtUtc.UtcDateTime,

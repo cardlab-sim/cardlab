@@ -144,7 +144,7 @@ public sealed class PaymentRow
     public bool Simulated { get; set; }
 }
 
-/// <summary>Row of <c>PaymentEvent</c>. Append-only.</summary>
+/// <summary>Row of <c>PaymentEvent</c>. Append-only; read ordered by <c>AtUtc</c>, then by insertion (sequential <c>Id</c>).</summary>
 public sealed class PaymentEventRow
 {
     /// <summary>PK.</summary>

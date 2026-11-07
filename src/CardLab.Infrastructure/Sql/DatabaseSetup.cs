@@ -129,18 +129,27 @@ public static class Seeder
             }
         }
 
-        await SeedLinkedAccountAsync(db, account.Id, options.LinkedAccount, ct);
+        await SeedLinkedAccountAsync(db, account.Id, options.LinkedAccount, services.GetService<ILoggerFactory>()?.CreateLogger(typeof(Seeder).FullName!) ?? NullLogger.Instance, ct);
         await db.SaveChangesAsync(ct);
     }
 
     // 002: the linked account, its fake bank account and the steering row, each only when missing (a restart never
-    // resets the bank, AC-22). Only the last four of the account number is kept (NFR-3). Skipped when no account number is
-    // configured, so 001-era seed options keep working.
-    private static async Task SeedLinkedAccountAsync(CardLabDbContext db, Guid accountId, SeedLinkedAccountOptions linked, CancellationToken ct)
+    // resets the bank, AC-22). Only the last four of the account number is kept (NFR-3). Skipped (with a warning) only when
+    // the whole section is unset, so 001-era seed options keep working; a section that is set but invalid stops startup.
+    private static async Task SeedLinkedAccountAsync(CardLabDbContext db, Guid accountId, SeedLinkedAccountOptions linked, ILogger logger, CancellationToken ct)
     {
-        if (linked.AccountNumber.Length < 4)
+        if (string.IsNullOrEmpty(linked.AccountNumber))
         {
-            return; // No linked account configured (pre-002 seed options): nothing to seed.
+            logger.LogWarning("Linked account not configured; payments unavailable.");
+            return;
+        }
+
+        if (linked.AccountNumber.Length < 4
+            || !linked.AccountNumber.All(char.IsAsciiDigit)
+            || linked.BankAccountRef == Guid.Empty
+            || !decimal.TryParse(linked.OpeningBalance, NumberStyles.Number, CultureInfo.InvariantCulture, out var openingBalance))
+        {
+            throw new InvalidOperationException("CardLab:Seed:LinkedAccount is invalid");
         }
 
         var lastFour = linked.AccountNumber[^4..];
@@ -163,7 +172,7 @@ public static class Seeder
             {
                 Id = linked.BankAccountRef,
                 LastFour = lastFour,
-                AvailableBalance = decimal.Parse(linked.OpeningBalance, NumberStyles.Number, CultureInfo.InvariantCulture),
+                AvailableBalance = openingBalance,
             });
         }
 

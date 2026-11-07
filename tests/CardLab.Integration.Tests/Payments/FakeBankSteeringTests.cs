@@ -64,10 +64,83 @@ public sealed class FakeBankSteeringTests : IClassFixture<SqlTestDatabase>
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => bank.RequestDebitAsync(Debit(account, "PAY-STEER012", "10.00"), Budget()));
         var notReceived = await bank.GetDebitStatusAsync(account, new PaymentReference("PAY-STEER012"), Ct);
 
-        Assert.IsType<BankOutcome.NotReceived>(notReceived);
+        Assert.Equal(new BankOutcome.NotReceived(true), notReceived);
         Assert.Single(await bank.ListRecentEntriesAsync(account, 10, Ct));
         Assert.Equal("90.00", (await bank.GetAccountAsync(account, Ct)).AvailableBalance.ToString());
         Assert.Equal(new Steering(null, null), await bank.GetAsync(Ct));
+    }
+
+    // T-I-20 · PR-05 · integration (BUG-004)
+    // Given a reference the bank never saw and no steering, When the status check runs, Then NotReceived with Simulated false; a debit steered TimeoutNotReceived and then repeated with the same reference returns the recorded NotReceived(simulated) without touching steering
+    // Catches: a steered not-received failure recorded as a genuine bank outcome, or a repeat re-sent to the bank (R-15, R-11)
+    [Fact]
+    public async Task Not_received_is_simulated_only_when_steered()
+    {
+        var (bank, account) = await NewBankAsync(100m);
+
+        var unseen = await bank.GetDebitStatusAsync(account, new PaymentReference("PAY-STEER041"), Ct);
+        await bank.SetAsync(new Steering(NextDebitOutcome.TimeoutNotReceived, null), Ct);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => bank.RequestDebitAsync(Debit(account, "PAY-STEER042", "10.00"), Budget()));
+        await bank.SetAsync(new Steering(NextDebitOutcome.Complete, null), Ct);
+        var repeated = await bank.RequestDebitAsync(Debit(account, "PAY-STEER042", "10.00"), Ct);
+
+        Assert.Equal(new BankOutcome.NotReceived(false), unseen);
+        Assert.Equal(new BankOutcome.NotReceived(true), repeated);
+        Assert.Equal(new Steering(NextDebitOutcome.Complete, null), await bank.GetAsync(Ct));
+        Assert.Empty(await bank.ListRecentEntriesAsync(account, 10, Ct));
+        Assert.Equal("100.00", (await bank.GetAccountAsync(account, Ct)).AvailableBalance.ToString());
+    }
+
+    // T-I-20 · PR-05 · integration
+    // Given a completed debit PAY-STEER031, When steering RefuseAccountUnavailable is set and PAY-STEER031 is requested again, Then the same Completed outcome returns and the steering is still set
+    // Catches: a repeat consuming the steering meant for the next new debit (Flow 6 ordering, AC-32)
+    [Fact]
+    public async Task Repeated_reference_leaves_steering_untouched()
+    {
+        var (bank, account) = await NewBankAsync(100m);
+        var first = await bank.RequestDebitAsync(Debit(account, "PAY-STEER031", "10.00"), Ct);
+        await bank.SetAsync(new Steering(NextDebitOutcome.RefuseAccountUnavailable, null), Ct);
+
+        var repeated = await bank.RequestDebitAsync(Debit(account, "PAY-STEER031", "10.00"), Ct);
+
+        Assert.Equal(first, repeated);
+        Assert.Equal(new Steering(NextDebitOutcome.RefuseAccountUnavailable, null), await bank.GetAsync(Ct));
+        Assert.Single(await bank.ListRecentEntriesAsync(account, 10, Ct));
+    }
+
+    // T-I-20 · PR-05 · integration
+    // Given balance 5.00 and steering TimeoutDebitApplied, When a 10.00 debit is requested with a 1 s token, Then it returns Refused(InsufficientFunds, simulated) at once with no entry and the balance unchanged
+    // Catches: a timeout mode hanging on a debit there is nothing to apply (R-15, Flow 6)
+    [Fact]
+    public async Task Timeout_steering_on_an_uncoverable_debit_is_refused()
+    {
+        var (bank, account) = await NewBankAsync(5m);
+        await bank.SetAsync(new Steering(NextDebitOutcome.TimeoutDebitApplied, null), Ct);
+
+        var outcome = await bank.RequestDebitAsync(Debit(account, "PAY-STEER051", "10.00"), Budget());
+
+        Assert.Equal(new BankOutcome.Refused(FailureReason.InsufficientFunds, true), outcome);
+        Assert.Empty(await bank.ListRecentEntriesAsync(account, 10, Ct));
+        Assert.Equal("5.00", (await bank.GetAccountAsync(account, Ct)).AvailableBalance.ToString());
+    }
+
+    // T-I-20 · PR-05 · integration
+    // Given 16 bank accounts and one steering value RefuseAccountUnavailable, When 16 debits run in parallel (one SqlFakeBank and context each), Then exactly one is refused
+    // Catches: the one-shot steering read and clear not atomic, so debits on different accounts all consume it (AC-32)
+    [Fact]
+    public async Task Steering_is_consumed_by_exactly_one_parallel_debit()
+    {
+        var accounts = new List<(SqlFakeBank Bank, BankAccountRef Account)>();
+        for (var i = 0; i < 16; i++)
+        {
+            accounts.Add(await NewBankAsync(100m));
+        }
+
+        await accounts[0].Bank.SetAsync(new Steering(NextDebitOutcome.RefuseAccountUnavailable, null), Ct);
+
+        var outcomes = await Task.WhenAll(accounts.Select((a, i) => Task.Run(() => a.Bank.RequestDebitAsync(Debit(a.Account, $"PAY-PAR{i:D5}", "10.00"), Ct), Ct)));
+
+        Assert.Equal(1, outcomes.Count(o => o is BankOutcome.Refused));
     }
 
     // T-I-20 · PR-05 · integration

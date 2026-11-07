@@ -20,7 +20,7 @@ namespace CardLab.Infrastructure.Sql;
 /// <remarks>
 /// <c>WithCardLockAsync</c> (DEC-4): begin a transaction; <c>EXEC @r = sp_getapplock @Resource = 'card:{id}',
 /// @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000</c> with the resource passed as a
-/// parameter; <c>@r &lt; 0</c> â†’ roll back and throw <see cref="CardLockTimeoutException"/>; run the work through a
+/// parameter; <c>@r &lt; 0</c> → roll back and throw <see cref="CardLockTimeoutException"/>; run the work through a
 /// <see cref="SqlCardWriter"/>; <c>SaveChanges</c> + commit (releases the lock); an uncommitted transaction is rolled back on dispose.
 /// Spend = <c>SUM(Amount)</c> of approved rows with <c>OccurredAt</c> in the range. Enum columns hold enum names.
 /// One instance serves one unit of work at a time (it shares its scoped DbContext).
@@ -156,7 +156,7 @@ public sealed class SqlCardStore : ICardStore
         }
 
         var payment = await _db.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.Reference == reference.Value, ct);
-        var events = await _db.PaymentEvents.AsNoTracking().Where(e => e.Reference == reference.Value).OrderBy(e => e.AtUtc).ToListAsync(ct);
+        var events = await _db.PaymentEvents.AsNoTracking().Where(e => e.Reference == reference.Value).OrderBy(e => e.AtUtc).ThenBy(e => e.Id).ToListAsync(ct);
         return ToRecord(quote, payment, events);
     }
 
@@ -169,7 +169,7 @@ public sealed class SqlCardStore : ICardStore
             from e in _db.PaymentEvents.AsNoTracking()
             join q in _db.PaymentQuotes on e.Reference equals q.Reference
             where q.CardId == id.Value
-            orderby e.AtUtc
+            orderby e.AtUtc, e.Id
             select e).ToListAsync(ct)).ToLookup(e => e.Reference);
         return quotes.Select(q => ToRecord(q, payments.GetValueOrDefault(q.Reference), events[q.Reference].ToList())).ToList();
     }

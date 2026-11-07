@@ -1,5 +1,6 @@
 using CardLab.Infrastructure.FakeBank;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ValueGeneration;
 
 namespace CardLab.Infrastructure.Model;
 
@@ -206,7 +207,7 @@ public sealed class CardLabDbContext(DbContextOptions<CardLabDbContext> options)
         {
             e.ToTable("PaymentEvent");
             e.HasKey(x => x.Id);
-            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Id).ValueGeneratedOnAdd().HasValueGenerator<SequentialGuidValueGenerator>();
             e.Property(x => x.Reference).HasMaxLength(12).IsUnicode(false).IsRequired();
             e.Property(x => x.AtUtc).HasColumnType("datetime2(3)");
             e.Property(x => x.Kind).HasMaxLength(30).IsUnicode(false).IsRequired();
