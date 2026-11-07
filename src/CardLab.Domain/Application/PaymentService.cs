@@ -133,8 +133,7 @@ public sealed class PaymentService
         {
             if (registered)
             {
-                _inFlight.Release(reference);
-                completion.TrySetException(error);
+                _inFlight.Fail(reference, completion, error);
             }
 
             throw;
@@ -179,13 +178,11 @@ public sealed class PaymentService
         }
         catch (Exception error)
         {
-            _inFlight.Release(reference);
-            completion.TrySetException(error);
+            _inFlight.Fail(reference, completion, error);
             throw;
         }
 
-        _inFlight.Release(reference);
-        completion.SetResult(result);
+        _inFlight.Complete(reference, completion, result);
         return Result<Receipt, PaymentError>.Ok(result);
     }
 
