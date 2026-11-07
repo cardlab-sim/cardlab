@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 
@@ -10,6 +11,27 @@ namespace CardLab.Infrastructure.Payments;
 /// </summary>
 public sealed class SystemPaymentReferences : IPaymentReferences
 {
+    private const string Alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
     /// <inheritdoc />
-    public PaymentReference Next() => throw new NotImplementedException("PR-05");
+    public PaymentReference Next()
+    {
+        Span<byte> bytes = stackalloc byte[5];
+        RandomNumberGenerator.Fill(bytes);
+        var bits = 0UL;
+        foreach (var b in bytes)
+        {
+            bits = (bits << 8) | b;
+        }
+
+        Span<char> text = stackalloc char[12];
+        "PAY-".CopyTo(text);
+        for (var i = 11; i >= 4; i--)
+        {
+            text[i] = Alphabet[(int)(bits & 31)];
+            bits >>= 5;
+        }
+
+        return new PaymentReference(new string(text));
+    }
 }

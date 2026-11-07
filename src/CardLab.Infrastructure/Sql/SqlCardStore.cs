@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using CardLab.Domain;
 using CardLab.Domain.Authorisation;
 using CardLab.Domain.Cards;
@@ -8,6 +8,7 @@ using CardLab.Domain.Limits;
 using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 using CardLab.Infrastructure.Model;
+using CardLab.Infrastructure.Payments;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,7 +20,7 @@ namespace CardLab.Infrastructure.Sql;
 /// <remarks>
 /// <c>WithCardLockAsync</c> (DEC-4): begin a transaction; <c>EXEC @r = sp_getapplock @Resource = 'card:{id}',
 /// @LockMode = 'Exclusive', @LockOwner = 'Transaction', @LockTimeout = 5000</c> with the resource passed as a
-/// parameter; <c>@r &lt; 0</c> → roll back and throw <see cref="CardLockTimeoutException"/>; run the work through a
+/// parameter; <c>@r &lt; 0</c> â†’ roll back and throw <see cref="CardLockTimeoutException"/>; run the work through a
 /// <see cref="SqlCardWriter"/>; <c>SaveChanges</c> + commit (releases the lock); an uncommitted transaction is rolled back on dispose.
 /// Spend = <c>SUM(Amount)</c> of approved rows with <c>OccurredAt</c> in the range. Enum columns hold enum names.
 /// One instance serves one unit of work at a time (it shares its scoped DbContext).
@@ -121,24 +122,107 @@ public sealed class SqlCardStore : ICardStore
     }
 
     /// <inheritdoc />
-    /// <remarks>Implemented in 002 PR-05 (reads <c>LinkedAccount</c>).</remarks>
-    public Task<LinkedAccount?> GetLinkedAccountAsync(CancellationToken ct = default) => throw new NotImplementedException("PR-05");
+    /// <remarks>Reads <c>LinkedAccount</c>; the system has one per business (R-2), so the first by id is the account.</remarks>
+    public async Task<LinkedAccount?> GetLinkedAccountAsync(CancellationToken ct = default)
+    {
+        var row = await _db.LinkedAccounts.AsNoTracking().OrderBy(l => l.Id).FirstOrDefaultAsync(ct);
+        return row is null ? null : new LinkedAccount(row.Id, row.DisplayName, row.LastFour, new BankAccountRef(row.BankAccountRef), row.AuthorityBasis);
+    }
 
     /// <inheritdoc />
-    /// <remarks>Implemented in 002 PR-05: two indexed SUMs (<c>IX_Transaction_Spend</c> approved rows; <c>IX_Payment_Completed</c>).</remarks>
-    public Task<CardBalance?> GetBalanceAsync(CardId id, CancellationToken ct = default) => throw new NotImplementedException("PR-05");
+    /// <remarks>Two indexed SUMs (<c>IX_Transaction_Spend</c> approved rows; <c>IX_Payment_Completed</c>); owed is <c>BalanceRules.Owed</c> of the two.</remarks>
+    public async Task<CardBalance?> GetBalanceAsync(CardId id, CancellationToken ct = default)
+    {
+        if (!await _db.Cards.AsNoTracking().AnyAsync(c => c.Id == id.Value, ct))
+        {
+            return null;
+        }
+
+        var approved = Outcome.Approved.ToString();
+        var purchases = RowMapper.ToMoney(await _db.Transactions.AsNoTracking()
+            .Where(t => t.CardId == id.Value && t.Outcome == approved)
+            .SumAsync(t => (decimal?)t.Amount, ct) ?? 0m);
+        var payments = RowMapper.ToMoney(await PaymentMapping.SumCompletedAsync(_db, id, ct));
+        return new CardBalance(purchases, payments, BalanceRules.Owed(purchases, payments));
+    }
 
     /// <inheritdoc />
-    /// <remarks>Implemented in 002 PR-05.</remarks>
-    public Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference reference, CancellationToken ct = default) => throw new NotImplementedException("PR-05");
+    public async Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference reference, CancellationToken ct = default)
+    {
+        var quote = await _db.PaymentQuotes.AsNoTracking().SingleOrDefaultAsync(q => q.Reference == reference.Value, ct);
+        if (quote is null)
+        {
+            return null;
+        }
+
+        var payment = await _db.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.Reference == reference.Value, ct);
+        var events = await _db.PaymentEvents.AsNoTracking().Where(e => e.Reference == reference.Value).OrderBy(e => e.AtUtc).ToListAsync(ct);
+        return ToRecord(quote, payment, events);
+    }
 
     /// <inheritdoc />
-    /// <remarks>Implemented in 002 PR-05.</remarks>
-    public Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default) => throw new NotImplementedException("PR-05");
+    public async Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default)
+    {
+        var quotes = await _db.PaymentQuotes.AsNoTracking().Where(q => q.CardId == id.Value).OrderByDescending(q => q.CreatedAtUtc).ToListAsync(ct);
+        var payments = (await _db.Payments.AsNoTracking().Where(p => p.CardId == id.Value).ToListAsync(ct)).ToDictionary(p => p.Reference);
+        var events = (await (
+            from e in _db.PaymentEvents.AsNoTracking()
+            join q in _db.PaymentQuotes on e.Reference equals q.Reference
+            where q.CardId == id.Value
+            orderby e.AtUtc
+            select e).ToListAsync(ct)).ToLookup(e => e.Reference);
+        return quotes.Select(q => ToRecord(q, payments.GetValueOrDefault(q.Reference), events[q.Reference].ToList())).ToList();
+    }
 
     /// <inheritdoc />
-    /// <remarks>Implemented in 002 PR-05. Never joins fake-bank (<c>Bank*</c>) tables (DEC-2).</remarks>
-    public Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default) => throw new NotImplementedException("PR-05");
+    /// <remarks>Purchases and payments are read separately (never the <c>Bank*</c> tables, DEC-2), each limited to
+    /// <paramref name="take"/> newest rows, then merged newest first.</remarks>
+    public async Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default)
+    {
+        var purchases = await _db.Transactions.AsNoTracking()
+            .Where(t => t.CardId == id.Value)
+            .OrderByDescending(t => t.DecidedAtUtc)
+            .Take(take)
+            .ToListAsync(ct);
+        var payments = await (
+            from p in _db.Payments.AsNoTracking()
+            where p.CardId == id.Value
+            join q in _db.PaymentQuotes on p.Reference equals q.Reference
+            orderby p.CreatedAtUtc descending
+            select new { Payment = p, q.Origin }).Take(take).ToListAsync(ct);
+        var entries = purchases.Select(t => new ActivityEntry(
+                RowMapper.ToInstant(t.DecidedAtUtc),
+                ActivityKind.Purchase,
+                RowMapper.ToMoney(t.Amount),
+                t.Merchant,
+                Enum.Parse<Outcome>(t.Outcome),
+                Enum.Parse<Reason>(t.Reason),
+                Enum.Parse<Category>(t.Category),
+                null,
+                null,
+                null))
+            .Concat(payments.Select(x => new ActivityEntry(
+                RowMapper.ToInstant(x.Payment.CreatedAtUtc),
+                ActivityKind.Payment,
+                RowMapper.ToMoney(x.Payment.Amount),
+                $"Payment {x.Payment.Reference}",
+                null,
+                null,
+                null,
+                Enum.Parse<PaymentState>(x.Payment.State),
+                new PaymentReference(x.Payment.Reference),
+                Enum.Parse<PaymentOrigin>(x.Origin))));
+        return entries.OrderByDescending(e => e.At).Take(take).ToList();
+    }
+
+    private static PaymentRecord ToRecord(PaymentQuoteRow quote, PaymentRow? payment, IReadOnlyList<PaymentEventRow> events) =>
+        new(
+            PaymentMapping.ToQuote(quote),
+            Enum.Parse<QuoteStatus>(quote.Status),
+            quote.RefusalReason,
+            quote.BalanceAtRefusal is { } balance ? RowMapper.ToMoney(balance) : null,
+            payment is null ? null : PaymentMapping.ToSnapshot(payment),
+            events.Select(PaymentMapping.ToEvent).ToList());
 
     private static TransactionRecord ToRecord(TransactionRow t)
     {

@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Globalization;
 using CardLab.Domain.Controls;
 using CardLab.Domain.Ports;
+using CardLab.Infrastructure.FakeBank;
 using CardLab.Infrastructure.Model;
 using CardLab.Infrastructure.Options;
 using Microsoft.Data.SqlClient;
@@ -78,7 +80,8 @@ public static class Seeder
     /// Ensures the account (by name), the admin (by <see cref="SeedOptions.AdminId"/>) and each card (by name)
     /// exist; never duplicates; recomputes every seeded card's lookup hash and last four from its number with
     /// the configured <c>ICardNumberLookup</c> (heals a key rotation). New cards start Active with no limits;
-    /// existing cards keep their status, limits and history.
+    /// existing cards keep their status, limits and history. Also seeds (002, only when missing) the linked current account,
+    /// the fake bank account at its opening balance and the steering row.
     /// </summary>
     /// <param name="services">A scoped service provider (DbContext + lookup).</param>
     /// <param name="options">Seed data.</param>
@@ -126,6 +129,41 @@ public static class Seeder
             }
         }
 
+        await SeedLinkedAccountAsync(db, account.Id, options.LinkedAccount, ct);
         await db.SaveChangesAsync(ct);
+    }
+
+    // 002: the linked account, its fake bank account and the steering row, each only when missing (a restart never
+    // resets the bank, AC-22). Only the last four of the account number is kept (NFR-3).
+    private static async Task SeedLinkedAccountAsync(CardLabDbContext db, Guid accountId, SeedLinkedAccountOptions linked, CancellationToken ct)
+    {
+        var lastFour = linked.AccountNumber[^4..];
+        if (!await db.LinkedAccounts.AnyAsync(l => l.AccountId == accountId, ct))
+        {
+            db.LinkedAccounts.Add(new LinkedAccountRow
+            {
+                Id = Guid.NewGuid(),
+                AccountId = accountId,
+                DisplayName = linked.DisplayName,
+                LastFour = lastFour,
+                BankAccountRef = linked.BankAccountRef,
+                AuthorityBasis = linked.AuthorityBasis,
+            });
+        }
+
+        if (!await db.BankAccounts.AnyAsync(b => b.Id == linked.BankAccountRef, ct))
+        {
+            db.BankAccounts.Add(new BankAccountRow
+            {
+                Id = linked.BankAccountRef,
+                LastFour = lastFour,
+                AvailableBalance = decimal.Parse(linked.OpeningBalance, NumberStyles.Number, CultureInfo.InvariantCulture),
+            });
+        }
+
+        if (!await db.BankSteerings.AnyAsync(s => s.Id == 1, ct))
+        {
+            db.BankSteerings.Add(new BankSteeringRow { Id = 1 });
+        }
     }
 }
