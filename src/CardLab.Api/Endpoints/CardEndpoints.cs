@@ -167,13 +167,18 @@ public static class CardEndpoints
     }
 
     /// <summary><c>GET /api/cards/{id}/activity?take=</c> → 200 <see cref="ActivityDto"/>[] newest first (purchases and payments, DEC-12) | 404.</summary>
-    /// <remarks><c>take</c> defaults to all.</remarks>
+    /// <remarks><c>take</c> defaults to all; below 1 → 400.</remarks>
     internal static async Task<IResult> ListActivity(Guid id, int? take, ICardStore store, CancellationToken ct)
     {
         var cardId = new CardId(id);
         if (await store.GetCardAsync(cardId, ct) is null)
         {
             return CardNotFound();
+        }
+
+        if (take is < 1)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["take"] = ["take must be at least 1."] });
         }
 
         var rows = await store.ListActivityAsync(cardId, take ?? int.MaxValue, ct);

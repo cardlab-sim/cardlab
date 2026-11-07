@@ -69,6 +69,7 @@ function activityColumns(cardId: string): readonly Column<ActivityEntry>[] {
  * @param props.entries - Rows from `listActivity`.
  */
 export function ActivitySection({ cardId, entries }: { cardId: string; entries: ActivityEntry[] }) {
+  const keys = new Map(entries.map((row, index) => [row, String(index)]));
   return (
     <section aria-labelledby="activity-heading" className={styles['section']}>
       <h2 id="activity-heading">Activity</h2>
@@ -76,7 +77,7 @@ export function ActivitySection({ cardId, entries }: { cardId: string; entries: 
         caption="Transaction history"
         columns={activityColumns(cardId)}
         rows={entries}
-        rowKey={(row) => `${entries.indexOf(row)}`}
+        rowKey={(row) => keys.get(row) ?? ''}
         emptyText="No activity yet."
       />
     </section>

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, test, vi } from 'vitest';
 import { FakeApiClient } from '../api/fakeApiClient';
@@ -446,7 +446,7 @@ class GatedCardClient extends FakeApiClient {
 
 describe('CardDetailPage (002)', () => {
   // T-W-8 · PR-07 · web unit
-  // Given a card with balanceOwed "150.50", a purchase and a completed payment, When rendered, Then the heading shows "Balance owed £150.50"; the Activity table (caption "Transaction history") lists the payment with a Payment type badge, Completed state badge and a link to its record, and the purchase with its merchant, category, outcome and reason; the Payments section lists every reference with status, state and origin badges
+  // Given a card with balanceOwed "150.50", a purchase and a completed payment, When rendered, Then the heading shows "Balance owed £20.00" (the opening £150.50 was paid, a £20.00 purchase followed); the Activity table (caption "Transaction history") lists the payment with a Payment type badge, Completed state badge and a link to its record, and the purchase with its merchant, category, outcome and reason; the Payments section lists every reference with status, state and origin badges
   // Catches: the admin unable to see the balance or tell payments from purchases (AC-1, AC-2, R-13, DEC-12)
   test('T-W-8 shows balance, activity and payments', async () => {
     const fake = new ActivityFake({ cards: [{ ...opsVan, balanceOwed: '150.50' }] });
@@ -574,8 +574,31 @@ describe('CardDetailPage (002)', () => {
     await waitFor(() => {
       expect(fake.calls.filter((call) => call === 'listPaymentRecords')).toHaveLength(2);
     });
+    // The refetch has started; let its state render so a second auto-check (if the guard were missing) would run.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(fake.calls.filter((call) => call === 'listPaymentRecords')).toHaveLength(2);
     expect(payments.getAllByRole('row')[1]).toHaveTextContent('Pending');
     expect(fake.calls.filter((call) => call === 'checkPayment')).toHaveLength(1);
+  });
+
+  // T-W-8 · PR-07 · web unit (added: review F3)
+  // Given a pending payment whose auto check is still in flight, When the admin freezes the card meanwhile and the check then settles the payment, Then the page still shows the completed payment and balance £0.00
+  // Catches: a user action during the check making the page skip the post-check refetch (AC-34, R-11)
+  test('T-W-8 a user action during the auto check does not hide the settled payment', async () => {
+    const user = userEvent.setup();
+    const fake = new SlowCheckFake({ cards: [{ ...opsVan, balanceOwed: '150.50' }] });
+    const quote = await fake.createQuote('c1');
+    fake.withBank('timeout_debit_applied');
+    await fake.confirmPayment('c1', quote.reference);
+    renderDetail(fake);
+
+    await user.click(await screen.findByRole('button', { name: 'Freeze' }));
+    expect(await screen.findByText('Frozen')).toBeInTheDocument();
+    fake.releaseCheck();
+
+    expect(await screen.findByText('Balance owed £0.00')).toBeInTheDocument();
+    const payments = within(screen.getByRole('table', { name: 'Payment references' }));
+    expect(payments.getAllByRole('row')[1]).toHaveTextContent('Completed');
   });
 });
 
@@ -634,5 +657,25 @@ class ActivityFake extends FakeApiClient {
   override async listPaymentRecords(id: string) {
     const real = await super.listPaymentRecords(id);
     return this.paymentsOverride ?? real;
+  }
+}
+
+/** ActivityFake whose status check waits for `releaseCheck()`. */
+class SlowCheckFake extends ActivityFake {
+  private open: () => void = () => {};
+  private readonly latch = new Promise<void>((resolve) => {
+    this.open = resolve;
+  });
+
+  releaseCheck(): void {
+    this.open();
+  }
+
+  override async checkPayment(
+    id: string,
+    reference: string,
+  ): ReturnType<FakeApiClient['checkPayment']> {
+    await this.latch;
+    return super.checkPayment(id, reference);
   }
 }

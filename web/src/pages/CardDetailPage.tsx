@@ -87,6 +87,13 @@ export function CardDetailPage() {
 
   // References already auto-checked on this page: an unanswered check is not repeated in a loop.
   const checked = useRef(new Set<string>());
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (state.kind !== 'loaded') {
       return;
@@ -98,12 +105,13 @@ export function CardDetailPage() {
       return;
     }
     checked.current.add(pending.reference);
-    const mine = seq.current;
     void api
       .checkPayment(id, pending.reference)
       .catch(() => undefined)
       .then(async () => {
-        if (seq.current === mine) {
+        // Only an unmount skips the refetch: a user action during the check must not hide the settled payment.
+        // refresh() itself discards superseded results.
+        if (alive.current) {
           await refresh();
         }
       });

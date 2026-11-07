@@ -125,7 +125,10 @@ describe('PaymentRecordPage', () => {
     expect(shown.getByText('Amount').nextElementSibling).toHaveTextContent('£150.50');
     expect(shown.getByText('Fee').nextElementSibling).toHaveTextContent('£0.00');
     expect(shown.getByText('Total').nextElementSibling).toHaveTextContent('£150.50');
-    expect(shown.getByText('From').nextElementSibling).toHaveTextContent('ending 7731');
+    expect(shown.getByText('From').nextElementSibling).toHaveTextContent(
+      'Brightline Supplies Ltd current account, ending 7731',
+    );
+    expect(shown.getByText('To').nextElementSibling).toHaveTextContent('Ops van card, ending 0001');
 
     const accepted = section('Acceptance');
     expect(accepted.getByText('25 Oct 2026 00:30')).toBeInTheDocument();
@@ -143,6 +146,12 @@ describe('PaymentRecordPage', () => {
     );
     expect(payment.getByText('Balance owed after').nextElementSibling).toHaveTextContent('£0.00');
     expect(payment.getByText('Effective time').nextElementSibling).toHaveTextContent(
+      '25 Oct 2026 00:30',
+    );
+    expect(payment.getByText('Settled at').nextElementSibling).toHaveTextContent(
+      '25 Oct 2026 00:30',
+    );
+    expect(payment.getByText('Bank debit time').nextElementSibling).toHaveTextContent(
       '25 Oct 2026 00:30',
     );
     expect(payment.getByText('Simulated outcome')).toBeInTheDocument();

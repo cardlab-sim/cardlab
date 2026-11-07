@@ -22,6 +22,14 @@ public sealed class PaymentRecordEndpointTests : IClassFixture<ApiFactoryWithSho
 
     public PaymentRecordEndpointTests(ApiFactoryWithShortBankTimeout fixture) => _fixture = fixture;
 
+    private static readonly Dictionary<string, string[]> ExpectedKindsAfter = new()
+    {
+        ["completed"] = ["confirm_created", "debit_requested", "bank_completed", "confirm_repeated"],
+        ["failed"] = ["confirm_created", "debit_requested", "bank_refused", "confirm_repeated"],
+        ["refused"] = ["confirm_refused", "confirm_refused"],
+        ["pending"] = ["confirm_created", "debit_requested", "bank_unanswered", "status_check_completed", "confirm_repeated"],
+    };
+
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // T-I-10 · PR-07 · integration
@@ -39,18 +47,28 @@ public sealed class PaymentRecordEndpointTests : IClassFixture<ApiFactoryWithSho
         var pending = (await api.GetPaymentRecordAsync(arranged.Card.Value, arranged.Pending)).Body!;
 
         // What was shown, for every state.
-        foreach (var (record, amount) in new[] { (completed, "150.50"), (failed, "150.50"), (refused, "150.50"), (pending, "301.00") })
+        foreach (var (record, amount, display) in new[] { (completed, "150.50", "£150.50"), (failed, "150.50", "£150.50"), (refused, "150.50", "£150.50"), (pending, "301.00", "£301.00") })
         {
             Assert.Equal(amount, record.Quote.Amount);
             Assert.Equal("0.00", record.Quote.Fee);
             Assert.Equal(amount, record.Quote.Total);
             Assert.Equal("full", record.Quote.Kind);
             Assert.Equal("v1", record.Quote.Wording.Version);
-            Assert.False(string.IsNullOrWhiteSpace(record.Quote.Wording.Heading));
-            Assert.NotEmpty(record.Quote.Wording.Lines);
-            Assert.False(string.IsNullOrWhiteSpace(record.Quote.Wording.Button));
-            Assert.Contains(amount, string.Join(' ', record.Quote.Wording.Lines));
+            Assert.Equal("Pay your full balance", record.Quote.Wording.Heading);
+            Assert.Equal(
+                new[]
+                {
+                    $"Amount: {display}",
+                    "Fee: £0.00 (no fee)",
+                    $"Total to pay: {display}",
+                    "When: normally within seconds of confirming. If your bank does not answer straight away, this payment shows as pending until we know the outcome. We never take the money twice.",
+                    "From: Brightline Supplies Ltd current account, ending 7731",
+                    "To: Ops van card, ending 0001",
+                },
+                record.Quote.Wording.Lines);
+            Assert.Equal($"Confirm payment of {display}", record.Quote.Wording.Button);
             Assert.Equal("Brightline Supplies Ltd current account, ending 7731", record.Quote.From);
+            Assert.Equal("Ops van card, ending 0001", record.Quote.To);
             Assert.Equal("cardholder", record.Acceptance.Actor.Kind);
             Assert.Equal("Priya Nair", record.Acceptance.Actor.Name);
             Assert.Equal(TestSeed.AuthorityBasis, record.Acceptance.AuthorityBasis);
@@ -59,6 +77,12 @@ public sealed class PaymentRecordEndpointTests : IClassFixture<ApiFactoryWithSho
             Assert.NotEmpty(record.Events);
             Assert.All(record.Events, e => Assert.NotEqual(default, e.At));
         }
+
+        Assert.Equal(["confirm_created", "debit_requested", "bank_completed"], completed.Events.Select(e => e.Kind).ToArray());
+        Assert.Equal(["confirm_created", "debit_requested", "bank_refused"], failed.Events.Select(e => e.Kind).ToArray());
+        Assert.True(failed.Events[2].Simulated);
+        Assert.Equal(["confirm_refused"], refused.Events.Select(e => e.Kind).ToArray());
+        Assert.Equal(["confirm_created", "debit_requested", "bank_unanswered"], pending.Events.Select(e => e.Kind).ToArray());
 
         Assert.Equal("confirmed", completed.Status);
         Assert.Equal("completed", completed.Payment!.State);
@@ -102,7 +126,11 @@ public sealed class PaymentRecordEndpointTests : IClassFixture<ApiFactoryWithSho
             before[reference] = (await api.GetPaymentRecordAsync(arranged.Card.Value, reference)).Body!;
         }
 
-        await _fixture.Services.CreateScope().ServiceProvider.GetRequiredService<PaymentService>().CheckStatusAsync(arranged.Card, new PaymentReference(arranged.Pending), Ct);
+        using (var checkScope = _fixture.Services.CreateScope())
+        {
+            await checkScope.ServiceProvider.GetRequiredService<PaymentService>().CheckStatusAsync(arranged.Card, new PaymentReference(arranged.Pending), Ct);
+        }
+
         foreach (var reference in references)
         {
             using var scope = _fixture.Services.CreateScope();
@@ -116,8 +144,8 @@ public sealed class PaymentRecordEndpointTests : IClassFixture<ApiFactoryWithSho
             var after = (await restartedApi.GetPaymentRecordAsync(arranged.Card.Value, reference)).Body!;
             Assert.Equal(Serialize(before[reference].Quote), Serialize(after.Quote));
             Assert.Equal(Serialize(before[reference].Acceptance), Serialize(after.Acceptance));
-            Assert.True(after.Events.Count >= before[reference].Events.Count);
             Assert.Equal(before[reference].Events, after.Events.Take(before[reference].Events.Count).ToList());
+            Assert.Equal(ExpectedKindsAfter[reference == arranged.Completed ? "completed" : reference == arranged.Failed ? "failed" : reference == arranged.Refused ? "refused" : "pending"], after.Events.Select(e => e.Kind).ToArray());
         }
 
         var pendingAfter = (await restartedApi.GetPaymentRecordAsync(arranged.Card.Value, arranged.Pending)).Body!;

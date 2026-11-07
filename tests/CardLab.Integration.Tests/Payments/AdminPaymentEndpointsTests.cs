@@ -81,6 +81,8 @@ public sealed class AdminPaymentEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(2, two.Body!.Count);
         Assert.Equal("payment", two.Body[0].Kind);
         Assert.Equal(HttpStatusCode.NotFound, unknown.Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.ListActivityAsync(id.Value, 0)).Status);
+        Assert.Equal(HttpStatusCode.BadRequest, (await api.ListActivityAsync(id.Value, -1)).Status);
     }
 
     // T-I-19 · PR-07 · integration
