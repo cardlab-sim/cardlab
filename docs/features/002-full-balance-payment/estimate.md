@@ -10,6 +10,12 @@ Sizes: XS, S, M, L, XL. One row per gate; the human's blind size is given before
 | Gate | Human (blind) | Agent | Committed | Override (who: reason) |
 |------|---------------|-------|-----------|------------------------|
 | 1    | M             | L     | L         |                        |
+| 2    | L             | L     | L         |                        |
 
 Gate 1: committed L decided by the human in requirements round 1 (Q-6); see
 [01-requirements.md §16](./01-requirements.md#16-t-shirt-size).
+
+Gate 2: human blind size L given in design round 1 (Q-7) before the designer's. Designer: L (no
+new infrastructure or dependency, but a new domain module with properties, a new port with a
+persisted adapter and two contract suites, five new endpoints, three cardholder pages plus an admin
+record page, additive migration; roughly eight code PRs after the skeleton). Committed L, no jump.

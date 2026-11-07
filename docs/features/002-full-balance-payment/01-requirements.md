@@ -321,6 +321,7 @@ times out (stays pending, can be checked again); a purchase approved while a pay
 | 35 | RUN 2 / CD-8: refused references are kept 6 years from the refusal; a pending payment is kept until it settles, then 6 years from its final state. | Same period as CD-5 with a clear start event. | no (human as compliance partner, gate changes) |
 | 36 | RUN 2 / B2: OB-3 applies now under CD-1 and is met trivially (one balance, one rate, no interest); no allocation logic is built. | Register scope under the chosen cohort. | no (compliance pre-read RUN 2, accepted by the human) |
 | 33 | Q-13: wording v1 (W-1..W-10) approved as the final customer-facing text, with W-1's From/To lines as `{account}` / `{card}` placeholders so one screen serves every card. | Compliance partner decision (CD-2, CD-3); the ACs quote the approved text. | no (human as compliance partner, round 3) |
+| 37 | Erratum (Gate 2, 2026-11-07): the payment record gains an additive `Origin` field (`cardholder_view` / `deploy_smoke`, DEC-15 of the tech design) not listed in R-14/§8; additive and compliance-neutral; Gate 1 stays approved. | Deploy-smoke payments on `demo` must be distinguishable from real use without deleting records (CD-5, CD-8). | no (human, Gate 2: "Erratum at gate close") |
 
 ## 14. Open questions
 | ID | Question | Blocked by | Owner |

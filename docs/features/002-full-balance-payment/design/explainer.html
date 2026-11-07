@@ -1,0 +1,451 @@
+<title>Full Balance Payment Design</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+/* Layout: one reading column (~760px) with wide figures and tables that scroll inside their own box; a sticky contents strip. */
+:root {
+  --bg: #f6f7f5; --surface: #ffffff; --fg: #1b2420; --muted: #5a6660; --line: #d5dbd7;
+  --accent: #0f6b5c; --accent-soft: #e2f0ec; --pending: #92400e; --pending-bg: #fef3c7;
+  --ok: #1d6b33; --fail: #a32a2a; --code-bg: #eef1ee;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121715; --surface: #1a211e; --fg: #e3e9e5; --muted: #9aa8a1; --line: #2e3833;
+  --accent: #5cc4ae; --accent-soft: #173029; --pending: #fbbf6a; --pending-bg: #3a2a10;
+  --ok: #6fd18a; --fail: #f08a8a; --code-bg: #202a26; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121715; --surface: #1a211e; --fg: #e3e9e5; --muted: #9aa8a1; --line: #2e3833;
+  --accent: #5cc4ae; --accent-soft: #173029; --pending: #fbbf6a; --pending-bg: #3a2a10;
+  --ok: #6fd18a; --fail: #f08a8a; --code-bg: #202a26; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 16px; line-height: 1.6; }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 32px 80px; }
+.prose { max-width: 70ch; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; line-height: 1.2; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 2.9rem); font-weight: 600; letter-spacing: -0.01em; }
+h2 { font-size: 1.65rem; font-weight: 600; padding-top: 8px; }
+h3 { font-size: 1.15rem; font-weight: 600; }
+section { display: flex; flex-direction: column; gap: 14px; padding-block: 28px; border-top: 1px solid var(--line); scroll-margin-top: 56px; }
+p { margin: 0; }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.eyebrow { font-family: var(--f-mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lede { font-size: 1.13rem; color: var(--fg); }
+code, .mono { font-family: var(--f-mono); font-size: 0.88em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { background: var(--code-bg); padding: 14px 16px; border-radius: 6px; overflow-x: auto; font-family: var(--f-mono); font-size: 0.85rem; line-height: 1.55; margin: 0; }
+ul, ol { margin: 0; padding-left: 1.3em; display: flex; flex-direction: column; gap: 6px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 0.9rem; color: var(--muted); }
+.meta b { color: var(--fg); font-weight: 600; }
+.toc { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.toc .inner { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 8px; display: flex; gap: 14px; overflow-x: auto; white-space: nowrap; font-size: 0.86rem; }
+.toc a { color: var(--muted); text-decoration: none; }
+.toc a:hover { color: var(--accent); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.cols > * { min-width: 0; }
+.box { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+.box h3 { font-size: 1rem; }
+.callout { background: var(--accent-soft); border-left: 3px solid var(--accent); padding: 14px 18px; border-radius: 0 6px 6px 0; display: flex; flex-direction: column; gap: 8px; }
+.callout.warn { background: var(--pending-bg); border-left-color: var(--pending); }
+figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; color: var(--fg); }
+.fig svg { display: block; width: 100%; height: auto; min-width: 640px; }
+figcaption { font-size: 0.9rem; color: var(--muted); max-width: 75ch; }
+.table { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-family: var(--f-mono); font-size: 0.74rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.badge { display: inline-block; font-family: var(--f-mono); font-size: 0.74rem; padding: 1px 7px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.b-pending { color: var(--pending); background: var(--pending-bg); }
+.b-ok { color: var(--ok); }
+.b-fail { color: var(--fail); }
+.b-acc { color: var(--accent); }
+.steps { counter-reset: s; list-style: none; padding: 0; }
+.steps li { counter-increment: s; position: relative; padding-left: 34px; }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 1px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-family: var(--f-mono); font-size: 0.78rem; display: grid; place-items: center; }
+/* review-screen mock: the one screen compliance cares about */
+.screen { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 20px 22px; max-width: 520px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 1px 0 var(--line); }
+.screen dl { display: grid; grid-template-columns: 7.5em 1fr; gap: 6px 14px; margin: 0; font-size: 0.93rem; }
+.screen dt { color: var(--muted); }
+.screen dd { margin: 0; font-variant-numeric: tabular-nums; }
+.screen .btn { align-self: flex-start; background: var(--accent); color: var(--bg); border-radius: 6px; padding: 10px 16px; font-weight: 600; font-size: 0.95rem; min-height: 44px; display: inline-flex; align-items: center; }
+.small { font-size: 0.88rem; color: var(--muted); }
+dl.gloss { display: grid; grid-template-columns: minmax(9em, 14em) 1fr; gap: 8px 18px; margin: 0; }
+dl.gloss dt { font-family: var(--f-mono); font-size: 0.86rem; }
+dl.gloss dd { margin: 0; min-width: 0; }
+@media (max-width: 560px) { dl.gloss { grid-template-columns: 1fr; } dl.gloss dd { margin-bottom: 8px; } .screen dl { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<nav class="toc" aria-label="Contents"><div class="inner">
+  <a href="#what">What &amp; why</a><a href="#arch">Architecture</a><a href="#flow">Confirm flow</a><a href="#states">States</a><a href="#other-flows">Other flows</a><a href="#screen">Review screen</a><a href="#decisions">Decisions</a><a href="#data">Data</a><a href="#api">API</a><a href="#use">How to use</a><a href="#tests">Testing</a><a href="#risks">Risks &amp; open</a><a href="#glossary">Glossary</a>
+</div></nav>
+
+<main class="wrap">
+  <header style="display:flex;flex-direction:column;gap:14px;padding-bottom:24px">
+    <span class="eyebrow">CardLab · feature 002 · CL-3 slice 1 · tech design (Gate 2)</span>
+    <h1>Pay the full card balance from the linked current account</h1>
+    <p class="lede prose">A cardholder opens their card, sees what they owe, reviews one screen and confirms. Money leaves the business's current account and clears the card. Both sides always agree, and the same payment can never be sent twice or applied only halfway, even when the bank goes silent.</p>
+    <div class="meta"><span>Lane <b>M</b></span><span>Size <b>L</b> (your blind L · designer L · committed L)</span><span>Risk class <b>R2</b></span><span>ADRs <b>006, 007</b></span><span>Source <code>02-tech-design.md</code></span></div>
+  </header>
+
+  <section id="what">
+    <span class="eyebrow">01 · Scope</span>
+    <h2>What is being built, and why</h2>
+    <p class="prose">CardLab had no idea of a balance, a current account or a payment before this slice. This design adds them, plus an external bank behind a port with one adapter: a fake bank shipped to every environment that can be told to complete, refuse or time out.</p>
+    <div class="cols">
+      <div class="box"><h3>In this slice</h3><ul>
+        <li>Per-card <b>balance owed</b> = approved purchases − completed payments, floored at £0.00</li>
+        <li>A no-login cardholder view for each seeded card</li>
+        <li>One review screen, confirm, receipt (wording v1, W-1..W-10)</li>
+        <li>Pending / completed / failed lifecycle, exactly once per reference</li>
+        <li>Timeout → pending, with <i>Check status</i> and an automatic check on open</li>
+        <li>A compliance record of what was shown and accepted, kept 6 years</li>
+        <li>Fake bank with a visible one-shot steering control</li>
+      </ul></div>
+      <div class="box"><h3>Later slices (forward constraints only)</h3><ul>
+        <li><b>Slice 2:</b> minimum and chosen-amount payments</li>
+        <li><b>Slice 3:</b> cash draw from the card, fee shown before confirming</li>
+        <li><b>Slice 4:</b> transfer history and notifications</li>
+      </ul><h3>Out of scope</h3><ul>
+        <li>Interest, statements, purchases checking the available limit</li>
+        <li>Recurring or third-party transfers, multi-currency</li>
+        <li>Login (the actor comes from the card)</li>
+      </ul></div>
+    </div>
+    <div class="callout"><p><b>Why the hard part is hard.</b> 001 protects each card with a 5-second database lock (ADR-002). A bank can take up to 10 seconds to answer, or never answer. Holding the card lock across the bank call would block every purchase on that card. So this design calls the bank <b>outside</b> the lock and uses a <i>pending</i> payment to guard the gap.</p></div>
+  </section>
+
+  <section id="arch">
+    <span class="eyebrow">02 · Architecture</span>
+    <h2>Components and seams</h2>
+    <p class="prose">There are no new projects, hosted services or dependencies (DEC-2). Payments are new folders in the existing three projects. The fake bank lives in <code>Infrastructure/FakeBank</code> with its own <code>Bank*</code> tables, which are never joined with card tables, so it behaves like an external system.</p>
+    <figure>
+      <div class="fig">
+      <svg viewBox="0 0 900 400" role="img" aria-label="The API calls PaymentService, which uses pure domain rules, the card store through ICardStore, and the fake bank through the ICurrentAccountBank port. Card, payment and bank tables share one SQL database, but bank tables are never joined with card tables.">
+        <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <g font-family="IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="currentColor">
+          <!-- browsers -->
+          <rect x="10" y="60" width="130" height="50" rx="6" fill="none" stroke="currentColor"/>
+          <text x="75" y="82" text-anchor="middle" font-weight="600">Cardholder</text><text x="75" y="99" text-anchor="middle" font-size="11">/cardholder/:id</text>
+          <rect x="10" y="150" width="130" height="50" rx="6" fill="none" stroke="currentColor"/>
+          <text x="75" y="172" text-anchor="middle" font-weight="600">Admin</text><text x="75" y="189" text-anchor="middle" font-size="11">/cards/:id</text>
+          <rect x="10" y="240" width="130" height="50" rx="6" fill="none" stroke="currentColor" stroke-dasharray="4 3"/>
+          <text x="75" y="262" text-anchor="middle" font-weight="600">Fake-bank panel</text><text x="75" y="279" text-anchor="middle" font-size="11">steer next outcome</text>
+          <!-- host -->
+          <rect x="175" y="20" width="520" height="300" rx="10" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+          <text x="190" y="42" font-size="11" opacity="0.75">CardLab host · one App Service F1 (ADR-001)</text>
+          <rect x="195" y="60" width="130" height="230" rx="6" fill="none" stroke="currentColor"/>
+          <text x="260" y="82" text-anchor="middle" font-weight="600">Api</text>
+          <text x="260" y="104" text-anchor="middle" font-size="11">/api/cardholder</text>
+          <text x="260" y="122" text-anchor="middle" font-size="11">/api/cards</text>
+          <text x="260" y="262" text-anchor="middle" font-size="11">/api/fake-bank</text>
+          <rect x="365" y="60" width="150" height="70" rx="6" fill="none" stroke="#0f6b5c" stroke-width="2"/>
+          <text x="440" y="86" text-anchor="middle" font-weight="600">PaymentService</text>
+          <text x="440" y="104" text-anchor="middle" font-size="11">quote · confirm · check</text>
+          <text x="440" y="119" text-anchor="middle" font-size="11">+ InFlightPayments</text>
+          <rect x="365" y="160" width="150" height="60" rx="6" fill="none" stroke="currentColor"/>
+          <text x="440" y="184" text-anchor="middle" font-weight="600">Domain.Payments</text>
+          <text x="440" y="202" text-anchor="middle" font-size="11">pure rules + WordingV1</text>
+          <rect x="545" y="60" width="135" height="60" rx="6" fill="none" stroke="currentColor"/>
+          <text x="612" y="84" text-anchor="middle" font-weight="600">SqlCardStore</text>
+          <text x="612" y="102" text-anchor="middle" font-size="11">+ SqlPaymentWriter</text>
+          <rect x="545" y="230" width="135" height="60" rx="6" fill="none" stroke="currentColor" stroke-dasharray="4 3"/>
+          <text x="612" y="254" text-anchor="middle" font-weight="600">SqlFakeBank</text>
+          <text x="612" y="272" text-anchor="middle" font-size="11">the only adapter</text>
+          <!-- arrows -->
+          <line x1="140" y1="85" x2="193" y2="85" stroke="currentColor" marker-end="url(#a1)"/>
+          <line x1="140" y1="175" x2="193" y2="175" stroke="currentColor" marker-end="url(#a1)"/>
+          <line x1="140" y1="265" x2="193" y2="265" stroke="currentColor" marker-end="url(#a1)"/>
+          <line x1="325" y1="95" x2="363" y2="95" stroke="currentColor" marker-end="url(#a1)"/>
+          <line x1="440" y1="130" x2="440" y2="158" stroke="currentColor" marker-end="url(#a1)"/>
+          <text x="448" y="148" font-size="11">decides</text>
+          <line x1="515" y1="80" x2="543" y2="80" stroke="currentColor" marker-end="url(#a1)"/>
+          <text x="520" y="73" font-size="10.5">ICardStore</text>
+          <path d="M515,115 C540,140 560,190 590,228" fill="none" stroke="#0f6b5c" stroke-width="2" marker-end="url(#a1)"/>
+          <text x="515" y="150" font-size="10.5" fill="#0f6b5c" font-weight="600">ICurrentAccountBank</text>
+          <text x="530" y="164" font-size="10.5" fill="#0f6b5c">outside the lock</text>
+          <line x1="325" y1="265" x2="543" y2="265" stroke="currentColor" stroke-dasharray="4 3" marker-end="url(#a1)"/>
+          <text x="345" y="258" font-size="10.5">IFakeBankSteering</text>
+          <!-- database -->
+          <rect x="730" y="40" width="160" height="290" rx="10" fill="none" stroke="currentColor"/>
+          <text x="810" y="62" text-anchor="middle" font-weight="600">SQL Server</text>
+          <text x="810" y="92" text-anchor="middle" font-size="11">Card · Transaction</text>
+          <text x="810" y="108" text-anchor="middle" font-size="11">LinkedAccount</text>
+          <text x="810" y="124" text-anchor="middle" font-size="11">PaymentQuote · Payment</text>
+          <text x="810" y="140" text-anchor="middle" font-size="11">PaymentEvent</text>
+          <line x1="745" y1="185" x2="875" y2="185" stroke="currentColor" stroke-dasharray="3 3"/>
+          <text x="810" y="203" text-anchor="middle" font-size="10" opacity="0.8">never joined across</text>
+          <text x="810" y="240" text-anchor="middle" font-size="11">BankAccount · BankEntry</text>
+          <text x="810" y="256" text-anchor="middle" font-size="11">BankDebitRequest</text>
+          <text x="810" y="272" text-anchor="middle" font-size="11">BankSteering</text>
+          <line x1="680" y1="90" x2="728" y2="110" stroke="currentColor" marker-end="url(#a1)"/>
+          <line x1="680" y1="260" x2="728" y2="255" stroke="currentColor" marker-end="url(#a1)"/>
+          <text x="190" y="350" font-size="11" opacity="0.75">Dashed = the simulated bank side. The real-bank story holds as long as nothing crosses the dotted line in the database.</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption>PaymentService owns the flow. Domain rules are pure (no I/O) and decide everything. The store and the bank are ports, each with an in-memory fake for unit tests and a shared contract suite that both fake and real adapters must pass.</figcaption>
+    </figure>
+    <div class="table"><table>
+      <thead><tr><th>Module</th><th>Job</th></tr></thead>
+      <tbody>
+        <tr><td><code>BalanceRules</code></td><td>Owed amount (floors at £0.00); availability: nothing to pay, above £1,000,000.00, payment pending, or available</td></tr>
+        <tr><td><code>QuoteRules</code> / <code>Quote</code></td><td>The immutable shown-and-accepted part: amount, fee £0.00, total, From/To labels, actor, authority basis, rendered wording</td></tr>
+        <tr><td><code>ConfirmRules.Decide</code></td><td>Create · Repeat · refuse (balance changed, already refused, other payment pending)</td></tr>
+        <tr><td><code>PaymentStateMachine</code></td><td>Pending → Completed / Failed; terminal states reject every outcome; <i>Unknown</i> leaves Pending</td></tr>
+        <tr><td><code>WordingV1</code></td><td>Renders W-1..W-10 on the server; the SPA shows the exact strings and the record stores the same bytes (DEC-10)</td></tr>
+        <tr><td><code>ICurrentAccountBank</code></td><td>Get account, recent entries, <code>RequestDebitAsync</code>, <code>GetDebitStatusAsync</code>. Contract: a reference is never applied twice; a call may never return</td></tr>
+        <tr><td><code>IPaymentReferences</code></td><td>Mints <code>PAY-7F3K2QH9</code>-style references (fake: sequential)</td></tr>
+        <tr><td><code>InFlightPayments</code></td><td>In-process registry so a second confirm of the same reference joins the first one's bank call (DEC-5)</td></tr>
+      </tbody></table></div>
+  </section>
+
+  <section id="flow">
+    <span class="eyebrow">03 · The main mechanism</span>
+    <h2>Confirm in three steps, bank outside the lock</h2>
+    <p class="prose">This is DEC-3 / ADR-006, the choice everything else rests on. The figure compares it with the rejected alternative of holding the card lock across the bank call.</p>
+    <figure>
+      <div class="fig">
+      <svg viewBox="0 0 900 300" role="img" aria-label="Comparison over time. Chosen design: lock 1 for milliseconds, then the bank call unlocked for up to 10 seconds while purchases still go through, then lock 2 for milliseconds. Rejected design: the lock is held for the whole bank call, so purchases wait and hit the 5 second lock timeout.">
+        <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <g font-family="IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="currentColor">
+          <line x1="150" y1="270" x2="880" y2="270" stroke="currentColor" marker-end="url(#a2)"/>
+          <text x="150" y="290" font-size="11">confirm pressed</text><text x="820" y="290" font-size="11" text-anchor="end">time →  (bank budget 10 s)</text>
+          <text x="10" y="50" font-weight="600">Chosen (A)</text>
+          <text x="10" y="68" font-size="11" opacity="0.8">three steps</text>
+          <rect x="150" y="35" width="60" height="40" rx="4" fill="#0f6b5c"/>
+          <text x="180" y="60" text-anchor="middle" font-size="11" fill="#ffffff" font-weight="600">lock #1</text>
+          <rect x="215" y="35" width="520" height="40" rx="4" fill="none" stroke="currentColor" stroke-dasharray="5 4"/>
+          <text x="475" y="53" text-anchor="middle">step 2: RequestDebitAsync, unlocked</text>
+          <text x="475" y="68" text-anchor="middle" font-size="11" opacity="0.8">payment row is already Pending; it guards the card</text>
+          <rect x="740" y="35" width="60" height="40" rx="4" fill="#0f6b5c"/>
+          <text x="770" y="60" text-anchor="middle" font-size="11" fill="#ffffff" font-weight="600">lock #2</text>
+          <text x="150" y="98" font-size="11">insert Payment(Pending), commit</text>
+          <text x="800" y="98" font-size="11" text-anchor="end">settle Completed / Failed, or stay Pending</text>
+          <line x1="330" y1="110" x2="330" y2="126" stroke="#1d6b33" stroke-width="2"/><line x1="450" y1="110" x2="450" y2="126" stroke="#1d6b33" stroke-width="2"/><line x1="600" y1="110" x2="600" y2="126" stroke="#1d6b33" stroke-width="2"/>
+          <text x="475" y="142" text-anchor="middle" font-size="11" fill="#1d6b33">purchases on this card keep going through</text>
+          <text x="10" y="200" font-weight="600">Rejected (B)</text>
+          <text x="10" y="218" font-size="11" opacity="0.8">lock across bank</text>
+          <rect x="150" y="185" width="650" height="40" rx="4" fill="#a32a2a" fill-opacity="0.18" stroke="#a32a2a"/>
+          <text x="475" y="210" text-anchor="middle">card lock held for the whole bank call (up to 10 s)</text>
+          <line x1="330" y1="232" x2="330" y2="248" stroke="#a32a2a" stroke-width="2"/><line x1="450" y1="232" x2="450" y2="248" stroke="#a32a2a" stroke-width="2"/>
+          <text x="475" y="262" text-anchor="middle" font-size="11" fill="#a32a2a">purchases wait, then 503 at the 5 s lock timeout</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption>Each lock is held for a few milliseconds. Between them, the Pending row and a filtered unique index (one Pending payment per card) stop a second payment from starting. A crash at any point after step 1 leaves a Pending payment that the status check settles by reference.</figcaption>
+    </figure>
+    <ol class="steps">
+      <li><b>Lock #1:</b> load the quote and any pending payment, sum approved purchases and completed payments, and run <code>ConfirmRules.Decide</code>. On <i>Create</i>, insert <code>Payment(Pending)</code> with a <code>ConfirmCreated</code> event, mark the quote Confirmed, and commit.</li>
+      <li><b>Unlocked:</b> <code>RequestDebitAsync(ref, amount)</code> with a 10-second budget token. The fake bank is idempotent on the reference.</li>
+      <li><b>Lock #2:</b> recompute the sums for <i>balance before/after</i>, then settle Completed or Failed. If the bank didn't answer, append <code>BankUnanswered</code> and leave the payment Pending (receipt W-5).</li>
+    </ol>
+    <p class="small prose">A client disconnect doesn't count as "unanswered". Only the budget token decides that, and lock #2 runs with <code>CancellationToken.None</code>. If lock #2 times out, it retries once after 500 ms; after that the payment stays Pending and the next check settles it.</p>
+  </section>
+
+  <section id="states">
+    <span class="eyebrow">04 · Lifecycle</span>
+    <h2>Quote and payment states</h2>
+    <figure>
+      <div class="fig">
+      <svg viewBox="0 0 900 260" role="img" aria-label="A quote starts Open. Confirm moves it to Confirmed and creates a Pending payment, or to Refused when the balance changed. A Pending payment becomes Completed or Failed when the bank answers, and stays Pending when the bank does not answer. Completed and Failed are terminal.">
+        <defs><marker id="a3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+        <g font-family="IBM Plex Sans, system-ui, sans-serif" font-size="13" fill="currentColor">
+          <text x="20" y="24" font-size="11" opacity="0.75">QUOTE (minted at review, holds the reference)</text>
+          <rect x="20" y="40" width="110" height="40" rx="20" fill="none" stroke="currentColor"/><text x="75" y="65" text-anchor="middle">Open</text>
+          <rect x="230" y="40" width="120" height="40" rx="20" fill="none" stroke="currentColor"/><text x="290" y="65" text-anchor="middle">Confirmed</text>
+          <rect x="230" y="110" width="120" height="40" rx="20" fill="none" stroke="#a32a2a"/><text x="290" y="135" text-anchor="middle" fill="#a32a2a">Refused</text>
+          <line x1="130" y1="60" x2="228" y2="60" stroke="currentColor" marker-end="url(#a3)"/><text x="180" y="52" text-anchor="middle" font-size="11">confirm</text>
+          <path d="M120,78 C160,120 190,130 228,130" fill="none" stroke="currentColor" marker-end="url(#a3)"/><text x="130" y="128" font-size="11">balance changed (W-6)</text>
+          <line x1="350" y1="60" x2="448" y2="60" stroke="currentColor" stroke-dasharray="4 3" marker-end="url(#a3)"/><text x="400" y="52" text-anchor="middle" font-size="11">creates</text>
+          <text x="450" y="24" font-size="11" opacity="0.75">PAYMENT (at most one per reference, one Pending per card)</text>
+          <rect x="450" y="40" width="120" height="40" rx="20" fill="#fef3c7" stroke="#92400e"/><text x="510" y="65" text-anchor="middle" fill="#92400e" font-weight="600">Pending</text>
+          <rect x="730" y="40" width="130" height="40" rx="20" fill="none" stroke="#1d6b33" stroke-width="2"/><text x="795" y="65" text-anchor="middle" fill="#1d6b33">Completed</text>
+          <rect x="730" y="150" width="130" height="40" rx="20" fill="none" stroke="#a32a2a" stroke-width="2"/><text x="795" y="175" text-anchor="middle" fill="#a32a2a">Failed</text>
+          <line x1="570" y1="60" x2="728" y2="60" stroke="currentColor" marker-end="url(#a3)"/><text x="650" y="52" text-anchor="middle" font-size="11">bank / check: completed</text>
+          <path d="M560,80 C600,150 660,170 728,170" fill="none" stroke="currentColor" marker-end="url(#a3)"/><text x="600" y="190" font-size="11">refused · not received</text>
+          <path d="M490,82 C470,130 550,130 530,84" fill="none" stroke="currentColor" marker-end="url(#a3)"/><text x="510" y="146" text-anchor="middle" font-size="11">no answer (W-5 / W-10)</text>
+          <text x="795" y="105" text-anchor="middle" font-size="11" opacity="0.8">terminal</text>
+          <text x="795" y="215" text-anchor="middle" font-size="11" opacity="0.8">terminal</text>
+          <text x="20" y="230" font-size="11" opacity="0.8">A refused or used reference can never start a payment; a new review mints a new one.</text>
+        </g>
+      </svg>
+      </div>
+      <figcaption>Only Completed payments reduce the balance. Pending and Failed never count, and neither do declined purchases.</figcaption>
+    </figure>
+  </section>
+
+  <section id="other-flows">
+    <span class="eyebrow">05 · Edge paths</span>
+    <h2>The other flows</h2>
+    <div class="cols">
+      <div class="box"><h3>Bank silent, then Check status</h3>
+        <p>The budget expires and the payment stays <span class="badge b-pending">pending</span> with W-5. <i>Check status</i> (the button, or the SPA automatically when it sees a pending payment, DEC-13) calls <code>GetDebitStatusAsync</code> outside the lock. Then:</p>
+        <ul><li>Completed → effective time = bank debit time, or the settle time if the bank gives none (AC-38)</li><li>Refused / not received → Failed</li><li>Still silent → stays pending, W-10</li></ul>
+        <p class="small">Nothing is ever re-sent.</p></div>
+      <div class="box"><h3>Balance moved since review</h3>
+        <p>A purchase landed between review and confirm. Lock #1 sees owed ≠ quote amount, refuses the quote, records the event and returns W-6 with the new balance. There is no bank call. Confirming that reference again gets the same refusal (AC-30).</p></div>
+      <div class="box"><h3>Two confirms at once</h3>
+        <p>Both pass through lock #1 one after the other. The first registers its bank call in <code>InFlightPayments</code>. The second logs <code>ConfirmRepeated</code>, awaits that same task and returns the identical receipt. There is exactly one bank call. After a restart, it returns the stored receipt instead.</p></div>
+      <div class="box"><h3>Crash between steps</h3>
+        <p>The payment is Pending with no bank event. The next view open triggers the check. The bank says <i>not received</i> (it never got the request) or <i>completed</i> (it got and applied it). Both sides agree either way.</p></div>
+      <div class="box"><h3>Purchase while pending (AC-36)</h3>
+        <p>Pending £150.50, then a £20.00 purchase is approved, then the bank completes. The balance owed is £20.00. The record shows £150.50 settled, with £170.50 before and £20.00 after.</p></div>
+      <div class="box"><h3>Fake bank's own debit</h3>
+        <p>The fake bank takes its own <code>bank:{account}</code> lock. A known reference returns the stored outcome. Otherwise it reads and clears the steering setting, refuses if the amount exceeds the available balance, and writes the ledger. "Timeout, debit applied" writes and then hangs; "timeout, not received" writes nothing and hangs.</p></div>
+    </div>
+  </section>
+
+  <section id="screen">
+    <span class="eyebrow">06 · The screen compliance cares about</span>
+    <h2>Review screen (W-1, wording v1)</h2>
+    <p class="prose">This is one page holding the lines and the button, with no link, tab or step between them, and no fake-bank control (AC-6, AC-33). The server renders the strings and the record stores the same text with <code>version v1</code>. Below is an example for the seeded Ops van card with a £150.50 balance.</p>
+    <div class="screen" aria-label="Example review screen">
+      <h3 style="font-size:1.25rem">Pay your full balance</h3>
+      <dl>
+        <dt>Amount</dt><dd>£150.50</dd>
+        <dt>Fee</dt><dd>£0.00 (no fee)</dd>
+        <dt>Total to pay</dt><dd>£150.50</dd>
+        <dt>When</dt><dd>Normally within seconds of confirming. If your bank does not answer straight away, this payment shows as pending until we know the outcome. We never take the money twice.</dd>
+        <dt>From</dt><dd>Brightline Supplies Ltd current account, ending 7731</dd>
+        <dt>To</dt><dd>Ops van card, ending 0001</dd>
+      </dl>
+      <span class="btn">Confirm payment of £150.50</span>
+    </div>
+    <p class="small prose">Receipt and outcome messages W-2..W-10 follow one template: what happened, whether money moved, the balance now, and what to do next. Pages: cardholder view <code>/cardholder/:id</code> → review <code>/cardholder/:id/pay</code> → receipt <code>/cardholder/:id/payments/:ref</code> (reloadable). The admin gets a balance, an Activity table, a Payments list and a read-only record page.</p>
+  </section>
+
+  <section id="decisions">
+    <span class="eyebrow">07 · Decisions</span>
+    <h2>What was chosen, and what was turned down</h2>
+    <div class="table"><table>
+      <thead><tr><th>ID</th><th>Chosen</th><th>Rejected, and why</th></tr></thead>
+      <tbody>
+        <tr><td>DEC-2</td><td>New folders in the existing three projects</td><td>New projects (+2 csproj, DI, CI for no requirement); a separate service (NFR-6 bans new services)</td></tr>
+        <tr><td>DEC-3 · ADR-006</td><td>Three steps, bank outside the 5 s card lock</td><td>Lock across the bank call (purchases blocked → 503); outbox + worker (F1 sleeps, 3 s receipt hard, timing tests)</td></tr>
+        <tr><td>DEC-4</td><td><code>ICardWriter.Payments : IPaymentWriter</code>, same unit of work</td><td>Flat extension of 001 interfaces (merge contention); separate store (cross-store transaction leaks EF into the domain)</td></tr>
+        <tr><td>DEC-5</td><td>Second confirm joins the in-flight bank call</td><td>Return current state (different receipts break AC-10); poll the DB (timing-sensitive)</td></tr>
+        <tr><td>DEC-6 · ADR-007</td><td>Fake bank in Infrastructure, own tables, real hang cancelled by the budget</td><td>Instant "unknown" (budget path never exercised); separate project and DbContext (+ a day, two migration histories)</td></tr>
+        <tr><td>DEC-7</td><td>Second one-shot control: <i>Next status check</i></td><td>Testing AC-16 only below E2E</td></tr>
+        <tr><td>DEC-8</td><td><code>PAY-</code> + 8 Crockford base32 (40 random bits)</td><td>GUID (unreadable on a receipt); sequence (leaks volume)</td></tr>
+        <tr><td>DEC-9</td><td>Actor derived from the card</td><td>A scoped <code>ICurrentActor</code> reading the route (plumbing to restate the card row)</td></tr>
+        <tr><td>DEC-10</td><td>Wording rendered on the server, stored verbatim</td><td>Client rendering posted back (the record would trust the client)</td></tr>
+        <tr><td>DEC-11</td><td>Same SPA, three single-column routes</td><td>Inline panels (the "one screen" sits beside the fake-bank control; reload loses the receipt); a second SPA</td></tr>
+        <tr><td>DEC-12</td><td>New <code>GET /api/cards/{id}/activity</code>; <code>/transactions</code> unchanged</td><td>Mixing payment rows into 001's contract; merging in the browser</td></tr>
+        <tr><td>DEC-13</td><td>SPA triggers <code>POST …/check</code> when it sees a pending payment</td><td>A GET with side effects (up to 10 s render); a host timer (F1 has no Always On)</td></tr>
+        <tr><td>DEC-14 / 15</td><td>Deploy smoke pays once on demo; records marked <code>Origin = deploy_smoke</code> via header</td><td>CI-only timing (AC-26 says demo); inferring smoke from the simulated flag; deleting smoke records (breaks retention)</td></tr>
+      </tbody></table></div>
+  </section>
+
+  <section id="data">
+    <span class="eyebrow">08 · Data</span>
+    <h2>Tables (migration <code>AddPayments</code>, additive)</h2>
+    <div class="table"><table>
+      <thead><tr><th>Table</th><th>Holds</th><th>Rules</th></tr></thead>
+      <tbody>
+        <tr><td><code>LinkedAccount</code></td><td>Display name, last four (7731), bank ref, authority basis</td><td>One per business; the full account number is never stored</td></tr>
+        <tr><td><code>PaymentQuote</code></td><td>Reference, amounts, labels, wording version + rendered lines, actor, authority, origin, status</td><td>Only status/refusal columns ever change</td></tr>
+        <tr><td><code>Payment</code></td><td>State, amounts, times (created, settled, effective, bank debited), reason, balance before/after, simulated</td><td>Unique reference; <b>filtered unique index: one Pending per card</b></td></tr>
+        <tr><td><code>PaymentEvent</code></td><td>Every confirm attempt, bank outcome and status check</td><td>Append-only</td></tr>
+        <tr><td><code>Bank*</code> (fake)</td><td>Account (£25,000.00 seeded), debit requests, ledger entries, steering row</td><td>Never joined with card tables</td></tr>
+      </tbody></table></div>
+    <p class="small prose">Balance owed = <code>SUM(approved Transaction)</code> − <code>SUM(completed Payment)</code>, floored at £0.00. Spend limits still sum only purchases, so payments never free up a category limit (AC-19). No product path deletes payment records. Only the test reset does, and it exists only when <code>CardLab:TestEndpoints=true</code>, which is never on demo.</p>
+  </section>
+
+  <section id="api">
+    <span class="eyebrow">09 · Interfaces</span>
+    <h2>Endpoints</h2>
+    <div class="table"><table>
+      <thead><tr><th>Call</th><th>Does</th></tr></thead>
+      <tbody>
+        <tr><td><code>GET /api/cardholder/cards/{id}</code></td><td>Whole cardholder view in one pure read: balance, availability, pending receipt, account, both activity lists (≤ 10)</td></tr>
+        <tr><td><code>POST /api/cardholder/cards/{id}/quotes</code></td><td>Mints the reference and stores the quote; 409 for nothing to pay, above limit, or payment pending</td></tr>
+        <tr><td><code>POST …/payments/{ref}/confirm</code></td><td>The three-step flow; 200 receipt (<code>repeated</code> on a repeat), 409 balance changed or pending</td></tr>
+        <tr><td><code>POST …/payments/{ref}/check</code></td><td>Status check by reference; W-10 when still silent</td></tr>
+        <tr><td><code>GET …/payments/{ref}</code></td><td>Receipt (page reload)</td></tr>
+        <tr><td><code>GET</code> / <code>PUT /api/fake-bank[/steering]</code></td><td>Read the fake bank; set the next debit outcome and the next status check (one-shot)</td></tr>
+        <tr><td><code>GET /api/cards/{id}/activity</code>, <code>/payments</code>, <code>/payments/{ref}</code></td><td>Admin history, payment list, full record (what was shown, acceptance, events)</td></tr>
+      </tbody></table></div>
+<pre>PUT /api/fake-bank/steering
+{ "nextDebitOutcome": "timeout_debit_applied", "nextStatusCheck": "answers" }
+
+POST /api/cardholder/cards/{id}/payments/PAY-7F3K2QH9/confirm
+→ 200 { "reference": "PAY-7F3K2QH9", "state": "pending", "amount": "150.50", "fee": "0.00",
+        "message": "Payment pending. Your bank has not confirmed this payment yet, …", "repeated": false }</pre>
+    <p class="small">Steering values: <code>complete</code> · <code>refuse_insufficient_funds</code> · <code>refuse_account_unavailable</code> · <code>timeout_debit_applied</code> · <code>timeout_not_received</code>; status check <code>answers</code> · <code>does_not_answer</code>.</p>
+  </section>
+
+  <section id="use">
+    <span class="eyebrow">10 · How to use</span>
+    <h2>Run it and try every outcome</h2>
+<pre>dotnet run --project src/CardLab.Api -- --webroot ../../web/dist   # local host + SPA
+dotnet test tests/CardLab.Domain.Tests && npm test --prefix web -- --run   # unit
+dotnet test tests/CardLab.Integration.Tests                         # integration (SQL)
+npm run e2e --prefix tests/e2e                                       # E2E (smoke: -- --project smoke)</pre>
+    <ol class="steps">
+      <li>Open the admin card list and follow <i>Cardholder view</i> on a card.</li>
+      <li>In the <b>Fake bank (simulation control)</b> section at the bottom, pick the next outcome and press <i>Set</i>. It applies once, then reverts.</li>
+      <li>Press <i>Pay full balance</i>, read the review screen and confirm. The receipt shows the outcome; pending payments offer <i>Check status</i>.</li>
+      <li>As admin, open the card's Payments list and a record to see what was shown, who accepted it, and every event. Outcomes from steering carry the simulated flag, and deploy-smoke payments carry an <span class="badge b-acc">origin: smoke</span> badge.</li>
+    </ol>
+    <p class="small">Config: <code>CardLab:Payments:BankTimeoutSeconds</code> (default 10; integration tests use 1), <code>CardLab:Payments:SettleLockRetryMs</code> (500), <code>CardLab:Seed:LinkedAccount:*</code>. No new secrets or Azure resources.</p>
+  </section>
+
+  <section id="tests">
+    <span class="eyebrow">11 · Verification</span>
+    <h2>Testing strategy</h2>
+    <div class="table"><table>
+      <thead><tr><th>Layer</th><th>What</th><th>Budget</th></tr></thead>
+      <tbody>
+        <tr><td>Domain unit + FsCheck</td><td>Balance, quote, confirm rules, state machine, wording; properties: ≤ 1 payment per reference, ≤ 1 pending per card, terminal states stay terminal</td><td class="num">≈ 45 + 4 · ~4 s</td></tr>
+        <tr><td>Application unit</td><td>PaymentService with a scripted <code>FakeBank</code> (<code>NextDebit</code>, <code>Hang</code>, <code>Gate</code> for two confirms in flight)</td><td class="num">≈ 25 · ~2 s</td></tr>
+        <tr><td>Web unit</td><td>Cardholder, review, receipt, fake-bank panel and record pages against <code>FakeApiClient</code></td><td class="num">≈ 15 · ~6 s</td></tr>
+        <tr><td>Integration</td><td>Real SQL. <code>PaymentStoreContractTests</code> and <code>CurrentAccountBankContractTests</code> run on fake and real adapters; 20 parallel confirms; timeout with a 1 s budget; privacy; logs</td><td class="num">≈ 30 · ~2 min</td></tr>
+        <tr><td>E2E</td><td>Journeys J-1..J-3, axe and keyboard; one spec waits the real 10 s; the smoke on demo asserts the receipt in ≤ 3 s</td><td class="num">≈ 6 + smoke · ~4 min</td></tr>
+      </tbody></table></div>
+    <p class="small prose">Every acceptance criterion from AC-1 to AC-38 maps to at least one test id in §15.3 of the design. On purpose, these are not tested: SQL Server's own index semantics, the real 10 s wait below E2E, and the fake bank as a model of a real bank (only the port contract is tested).</p>
+  </section>
+
+  <section id="risks">
+    <span class="eyebrow">12 · Risks and open items</span>
+    <h2>What could go wrong, and what still needs your call</h2>
+    <div class="callout warn">
+      <p><b>Your decision at this gate (DEC-15):</b> marking smoke records adds a record field <code>Origin</code> (<code>cardholder_view</code> / <code>deploy_smoke</code>) that the approved requirements (R-14, §8) don't list. You can either:</p>
+      <ul><li><b>(a)</b> accept it as a one-line erratum in the requirements decisions log when the gate closes. This is the designer's recommendation: the change is additive and compliance-neutral, and it adds to the record rather than taking anything away.</li><li><b>(b)</b> reopen the requirements for an amendment before approving the design.</li></ul>
+    </div>
+    <div class="table"><table>
+      <thead><tr><th>Risk</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr><td>Lock #2 times out after the bank completed</td><td>One retry after 500 ms; otherwise the payment stays Pending and the next open settles it</td></tr>
+        <tr><td>Steering is global; demo users can affect each other</td><td>Accepted for a lab; every steered outcome is marked simulated</td></tr>
+        <tr><td>The fake-bank boundary (no joins) erodes</td><td>Reviewer rule, separate namespace, <code>Bank</code> table prefix</td></tr>
+        <tr><td><code>InFlightPayments</code> assumes one host</td><td>Documented; the status check still guarantees exactly once on scale-out</td></tr>
+        <tr><td>Register has no entry for a debit initiator (CQ-12)</td><td>Register-owner follow-up before any real bank adapter</td></tr>
+      </tbody></table></div>
+  </section>
+
+  <section id="glossary">
+    <span class="eyebrow">13 · Terms</span>
+    <h2>Glossary</h2>
+    <dl class="gloss">
+      <dt>Balance owed</dt><dd>Approved purchases minus completed payments on one card, never below £0.00.</dd>
+      <dt>Linked current account</dt><dd>The business's one account at an external bank, used to pay cards (seeded: ending 7731, £25,000.00).</dd>
+      <dt>Quote</dt><dd>What the review screen showed, stored when the review opens. It carries the reference and never changes.</dd>
+      <dt>Reference</dt><dd><code>PAY-XXXXXXXX</code>. It is the idempotency key: single-use and scoped to its card.</dd>
+      <dt>Pending</dt><dd>The bank's answer isn't known yet. It blocks new payments on the card and never counts toward the balance.</dd>
+      <dt>Check status</dt><dd>Asks the bank about a reference without re-sending it. It runs from the button or automatically on page open.</dd>
+      <dt>Steering</dt><dd>A one-shot setting on the fake bank that picks the next debit or status-check outcome.</dd>
+      <dt>Simulated</dt><dd>A flag on bank outcomes produced by steering.</dd>
+      <dt>Origin</dt><dd><code>cardholder_view</code> or <code>deploy_smoke</code>, which marks payments made by the deploy check (DEC-15).</dd>
+      <dt>Wording v1</dt><dd>The approved customer strings W-1..W-10, rendered on the server and stored verbatim.</dd>
+      <dt>Card lock</dt><dd>001's per-card database lock (<code>sp_getapplock</code>, 5 s timeout), held only for local steps.</dd>
+      <dt>R2</dt><dd>The risk class that requires PM and compliance-partner approval: this is the first money movement, with confirmation wording and records.</dd>
+    </dl>
+  </section>
+</main>
