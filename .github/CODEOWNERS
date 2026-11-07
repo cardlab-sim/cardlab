@@ -1,0 +1,16 @@
+# Review ownership by risk area. With one maintainer every line maps to the same person;
+# at scale each line is a team (@org/payments-core, @org/platform, @org/product-owners).
+
+# tier 3: money, limits, authorisation, migrations, infrastructure, CI
+src/CardLab.Domain/**            @dj-niobium
+src/**/Migrations/**             @dj-niobium
+infra/**                         @dj-niobium
+.github/**                       @dj-niobium
+
+# tier 2: API and data access
+src/CardLab.Api/**               @dj-niobium
+src/CardLab.Infrastructure/**    @dj-niobium
+
+# gates: requirements, design and plan documents are reviewed PRs
+docs/features/**                 @dj-niobium
+docs/sdlc/**                     @dj-niobium

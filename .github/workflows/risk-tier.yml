@@ -1,0 +1,53 @@
+# Risk tier label from changed paths, and a required check that counts human approvals per tier.
+name: risk-tier
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    outputs:
+      tier: ${{ steps.tier.outputs.tier }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: tier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr diff "$PR" --name-only > changed.txt
+          tier=$(python3 tools/risk_tier.py docs/sdlc/review-tiers.json < changed.txt)
+          echo "tier=$tier" >> "$GITHUB_OUTPUT"
+          echo "changed files -> tier $tier"
+          for t in 1 2 3; do
+            if [ "$t" != "$tier" ]; then gh pr edit "$PR" --remove-label "risk:$t" >/dev/null 2>&1 || true; fi
+          done
+          gh pr edit "$PR" --add-label "risk:$tier"
+
+  approvals:
+    needs: label
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Count approvals against the tier's requirement
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          TIER: ${{ needs.label.outputs.tier }}
+        run: |
+          need=$(jq -r --arg t "$TIER" '.required_approvals[$t]' docs/sdlc/review-tiers.json)
+          have=$(gh pr view "$PR" --json reviews --jq '
+            [ .reviews[] | select(.author.login | endswith("[bot]") | not) ]
+            | group_by(.author.login) | map(last) | map(select(.state == "APPROVED")) | length')
+          echo "tier $TIER needs $need human approval(s); has $have"
+          if [ "$have" -lt "$need" ]; then
+            echo "::error::tier $TIER needs $need approval(s), has $have"; exit 1
+          fi
