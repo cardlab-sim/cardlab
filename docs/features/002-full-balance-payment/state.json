@@ -82,7 +82,7 @@
       "depends_on": [
         "PR-04"
       ],
-      "status": "review",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/04f-fix-bug-006",
       "url": "https://github.com/cardlab-sim/cardlab/pull/41"
     },
@@ -105,7 +105,7 @@
         "PR-04",
         "PR-05"
       ],
-      "status": "review",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/06-cardholder-api",
       "url": "https://github.com/cardlab-sim/cardlab/pull/43"
     },
@@ -138,7 +138,8 @@
   ],
   "bugs_open": [
     "BUG-006",
-    "BUG-007"
+    "BUG-007",
+    "BUG-008"
   ],
   "resume": null,
   "history": [

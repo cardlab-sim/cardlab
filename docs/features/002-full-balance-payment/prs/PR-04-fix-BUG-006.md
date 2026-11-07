@@ -25,6 +25,12 @@ operation the service calls before `SetResult` / `TrySetException`, or the regis
 own source with the result it was handed); keep the DEC-5 guarantees (registered before step 1 commits; a repeat always
 finds the task while it runs; joiners get the same outcome). Do not weaken the test by polling.
 
+## Added scope: BUG-008 (human, 2026-11-07)
+Cut every instant that reaches a receipt or record to millisecond precision at its source in `PaymentService` (`now` in
+`ValidateAsync` / `SettleAsync`, and the bank's reported debit time), so the first receipt equals every later read on the
+wire (AC-9, AC-10). Unit test first (a clock with sub-ms ticks → first receipt == reloaded receipt), then tighten T-I-4 to
+exact equality and add the outcome-equality assertion to T-I-5.
+
 ## Acceptance criteria covered
 | AC | Covers | Given | When | Then |
 |----|--------|-------|------|------|
@@ -38,7 +44,8 @@ finds the task while it runs; joiners get the same outcome). Do not weaken the t
 | src/CardLab.Domain/Application/InFlightPayments.cs | complete (PR-04) | remove the entry before completion is observable |
 | src/CardLab.Domain/Application/PaymentService.cs | complete (PR-04) | call the removal at the right point if needed |
 | tests/CardLab.Domain.Tests/Application/InFlightPaymentsTests.cs | complete (PR-04) | regression test |
-| tests/CardLab.Domain.Tests/Application/PaymentServiceTests.cs | complete (PR-04) | only if a helper is needed; keep line-382 assertion |
+| tests/CardLab.Domain.Tests/Application/PaymentServiceTests.cs | complete (PR-04) | BUG-008 unit test; keep line-382 assertion |
+| tests/CardLab.Integration.Tests/Payments/IdempotencyTests.cs | complete (PR-06) | BUG-008: T-I-4 / T-I-5 assert exact receipt equality (drop the 1 ms tolerance) |
 
 ## Tests
 | # | Test | File | Then | Catches |
