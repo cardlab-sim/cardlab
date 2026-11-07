@@ -15,8 +15,12 @@ export class ReviewPage {
       main.getByRole('heading', { level: 1, name: 'Pay your full balance' }),
     ).toBeVisible();
     const heading = (await main.getByRole('heading', { level: 1 }).innerText()).trim();
-    const items = await main.locator('dl > div').allInnerTexts();
-    return [heading, ...items.map((item) => item.replace(/\s+/g, ' ').trim())];
+    const terms = await main.getByRole('term').allInnerTexts();
+    const definitions = await main.getByRole('definition').allInnerTexts();
+    const lines = terms.map((term, index) =>
+      `${term} ${definitions[index] ?? ''}`.replace(/\s+/g, ' ').trim(),
+    );
+    return [heading, ...lines];
   }
 
   /** Clicks the confirm button (named "Confirm payment of £…"). */

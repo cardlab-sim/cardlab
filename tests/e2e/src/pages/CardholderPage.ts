@@ -75,12 +75,6 @@ export class CardholderPage {
     await expect(this.page).toHaveURL(/\/cardholder\/[^/]+\/pay$/);
   }
 
-  /** Presses "Check status" in the Pending payment region and waits until the check has finished. */
-  async checkStatus(): Promise<void> {
-    await this.pendingRegion.getByRole('button', { name: 'Check status' }).click();
-    await expect(this.page.getByRole('button', { name: 'Checking…' })).toHaveCount(0);
-  }
-
   /** Recent card activity rows, newest first. */
   async readActivity(): Promise<ActivityRow[]> {
     const rows = await this.cells('Recent card activity');

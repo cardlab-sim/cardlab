@@ -45,11 +45,14 @@ test('T-E-3 J-3 timeout then automatic status check', async ({ page, request }) 
   await api.setStatusCheck('does_not_answer');
   await page.getByRole('link', { name: 'Back to your card' }).click();
   await view.waitUntilLoaded(20_000);
-  await expect(view.pendingRegion).toContainText(`Reference ${reference}`);
+  await expect(view.pendingRegion).toContainText(
+    `Payment pending. Your bank has not confirmed this payment yet, so the money may or may not have left your account; we never take it twice. Your card balance shows £150.50 until we know the outcome. Choose Check status to ask your bank now; we also check each time you open this page. Reference ${reference}.`,
+  );
   await expect(view.pendingRegion.getByRole('button', { name: 'Check status' })).toBeVisible();
   await expect(view.balanceRegion).toContainText(
     `A payment of £150.50 (reference ${reference}) is still pending. You cannot make another payment until we know its outcome. Choose Check status.`,
   );
+  await expect(view.balanceRegion.getByRole('button', { name: 'Check status' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Pay full balance' })).toHaveCount(0);
   expect(await view.balance()).toBe('£150.50');
 

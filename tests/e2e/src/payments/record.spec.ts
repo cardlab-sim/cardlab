@@ -81,7 +81,7 @@ test('T-E-6 admin sees balance, activity and each payment record', async ({ page
   // Opening the admin card detail runs the automatic status check (AC-34): the debit the bank applied settles the
   // pending payment, so the balance owed drops to £0.00 and the record shows it completed.
   await page.goto(`/cards/${opsVan}`);
-  await expect(page.getByText('Balance owed £0.00')).toBeVisible();
+  await expect(page.getByText('Balance owed £0.00', { exact: true })).toBeVisible();
   const activity = page
     .getByRole('table', { name: 'Transaction history' })
     .getByRole('row')
@@ -96,6 +96,10 @@ test('T-E-6 admin sees balance, activity and each payment record', async ({ page
   await record.goto(opsVan, pending);
   const settled = await record.section('Payment');
   expect(settled).toContain('Completed');
+  expect(await record.shown()).toEqual({ lines: wording('£70.00'), version: 'v1' });
+  expect(await record.section('Acceptance')).toContain(
+    `${seed.cards.opsVan.cardholderName} (cardholder)`,
+  );
   expect(settled).toMatch(/Balance owed before\s+£70\.00/);
   expect(settled).toMatch(/Balance owed after\s+£0\.00/);
   expect(await record.simulated()).toBe(true);

@@ -19,12 +19,17 @@ test('T-E-4 control placement and no full numbers', async ({ page, request }) =>
   const opsVan = await api.cardId(seed.cards.opsVan.name);
   await api.simulatePurchase(opsVan, '150.50');
   const apiBodies: { where: string; text: string }[] = [];
+  const reads: Promise<void>[] = [];
   page.on('response', (response) => {
     const url = new URL(response.url());
     if (url.pathname.startsWith('/api/')) {
-      void response.text().then(
-        (text) => apiBodies.push({ where: `${response.request().method()} ${url.pathname}`, text }),
-        () => undefined,
+      reads.push(
+        response.text().then(
+          (text) => {
+            apiBodies.push({ where: `${response.request().method()} ${url.pathname}`, text });
+          },
+          () => undefined,
+        ),
       );
     }
   });
@@ -69,6 +74,12 @@ test('T-E-4 control placement and no full numbers', async ({ page, request }) =>
   await capture('admin card');
 
   await page.waitForLoadState('networkidle');
+  await Promise.all(reads);
+  const seen = apiBodies.map((b) => b.where);
+  expect(seen).toContain(`POST /api/cardholder/cards/${opsVan}/quotes`);
+  expect(
+    seen.some((w) => /^POST \/api\/cardholder\/cards\/[^/]+\/payments\/[^/]+\/confirm$/.test(w)),
+  ).toBe(true);
   expect(pageTexts.length, 'page texts captured').toBeGreaterThan(5);
   for (const { where, text } of pageTexts) {
     expectNoFullNumbers(text, where);

@@ -18,6 +18,7 @@ test('T-E-7 smoke on demo: pay the full balance within 3 s', async ({ page, requ
   const opsVan = await api.cardId(seed.cards.opsVan.name);
   await api.simulatePurchase(opsVan, '1.00');
   await api.setBankOutcome('complete');
+  await api.setStatusCheck('answers');
 
   const view = new CardholderPage(page);
   await view.goto(opsVan);

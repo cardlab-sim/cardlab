@@ -50,8 +50,15 @@ test('T-E-1 J-1 pay the full balance end to end', async ({ page, request }) => {
   await expect(confirm).toBeVisible();
   await expect(page.getByRole('region', { name: 'Fake bank (simulation control)' })).toHaveCount(0);
 
+  const confirms: string[] = [];
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().endsWith('/confirm')) {
+      confirms.push(r.url());
+    }
+  });
   await confirm.dblclick();
   await page.waitForURL(/\/cardholder\/[^/]+\/payments\/PAY-/);
+  expect(confirms, 'confirm requests sent by a double click').toHaveLength(1);
   const receipt = new ReceiptPage(page);
   const reference = receipt.reference();
   const fields = await receipt.fields();
