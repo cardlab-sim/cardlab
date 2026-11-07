@@ -2,9 +2,8 @@
 # Rollback = Actions → deploy → the last green run → "Re-run all jobs" (within 30 days; otherwise revert on main). Schema is forward-only.
 name: deploy
 
+# Azure parked; DORA-lite uses dora-deploy.yml.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

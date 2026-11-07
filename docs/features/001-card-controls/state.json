@@ -2,7 +2,7 @@
   "feature": "001-card-controls",
   "title": "Card controls: freeze/unfreeze and per-category spend limits",
   "lane": "L",
-  "phase": "validate",
+  "phase": "done",
   "base_branch": "main",
   "feature_branch": "feat/001-card-controls",
   "gates": {
@@ -204,11 +204,7 @@
       "url": "https://github.com/cardlab-sim/cardlab/pull/18"
     }
   ],
-  "bugs_open": [
-    "BUG-001",
-    "BUG-008",
-    "BUG-012"
-  ],
+  "bugs_open": [],
   "resume": null,
   "history": [
     {
@@ -362,11 +358,16 @@
     {
       "at": "2026-11-06T02:00Z",
       "event": "validation DELIVERED WITH CAVEATS: 36 pass, 0 fail, 4 pending-human (AC-27, AC-28, AC-34 on demo, AC-36); BUG-011 fixed (PR-14 #18), BUG-012 wording fixed, setting left to human; autopilot stops: only PENDING-HUMAN checks remain"
+    },
+    {
+      "at": "2026-11-07T00:00Z",
+      "event": "BUG-012 fixed (human R-1 done); BUG-001, BUG-008, BUG-012 closed; feature closed: delivered with caveats: AC-27/28/34/36 need Azure, cut; deploy.yml parked to workflow_dispatch only"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
   "ticket": {
     "key": "CL-1",
     "url": "https://github.com/cardlab-sim/cardlab/issues/1"
-  }
+  },
+  "note": "delivered with caveats: AC-27/28/34/36 need Azure, cut"
 }

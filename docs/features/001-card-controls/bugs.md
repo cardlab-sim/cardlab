@@ -15,7 +15,7 @@
 | BUG-009 | reviewer (feature F-7) | S3 | NFR-6 | Only Chrome is exercised; Edge and Firefox support is untraced | design | fix-now (PR-13: add Firefox project; Edge via shared Chromium engine) | fixed | build (PR-13) | | 2026-11-05 |
 | BUG-010 | reviewer (PR-13) | S3 | AC-37, NFR-6 | Keyboard focus falls to the page body after every pending action | design | fix-now (PR-13 fix round) | fixed | build (PR-13) | | 2026-11-05 |
 | BUG-011 | validator | S4 | R-10 | deploy.yml header documents an impossible rollback (re-run workflow_dispatch on an old commit) | code (comment) | fix-now (PR-14, text only) | fixed | build (PR-14) | | 2026-11-06 |
-| BUG-012 | validator | S3 | AC-29, NFR-4 | GitHub secret scanning and push protection are disabled; setup guide implies they are on | environment | fix-now: guide wording (PR-14); turning the setting on is the human's (run sheet R-1) | approved | validate (human R-1) | | 2026-11-06 |
+| BUG-012 | validator | S3 | AC-29, NFR-4 | GitHub secret scanning and push protection are disabled; setup guide implies they are on | environment | fix-now: guide wording (PR-14); turning the setting on is the human's (run sheet R-1) | fixed | validate (human R-1 done 2026-11-07) | | 2026-11-07 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
