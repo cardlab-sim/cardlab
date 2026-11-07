@@ -32,8 +32,9 @@ jobs:
                   bad.append(f"line {n}: {line.rstrip()!r}")
           if bad:
               print("::error::CODEOWNERS rules without an owner (or an owner without a pattern):")
-              print("
-".join(bad)); sys.exit(1)
+              for b in bad:
+                  print(b)
+              sys.exit(1)
           print("CODEOWNERS ok")
           EOF
 
