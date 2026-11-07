@@ -1,0 +1,40 @@
+{
+  "_comment": "Per-repo SDLC settings for CardLab (created by the 001-card-controls design). Commands run from the repo root. auto_merge_feature_prs: null = ask the first time, then true/false.",
+  "base_branch": "main",
+  "language": "csharp + typescript",
+  "commands": {
+    "install": "dotnet restore CardLab.sln && npm ci --prefix web && npm ci --prefix tests/e2e",
+    "unit": "dotnet test tests/CardLab.Domain.Tests && npm test --prefix web -- --run",
+    "unit_single": "dotnet test tests/CardLab.Domain.Tests --filter \"FullyQualifiedName~{file}\"",
+    "integration": "dotnet test tests/CardLab.Integration.Tests",
+    "e2e": "npm run e2e --prefix tests/e2e",
+    "e2e_smoke": "npm run e2e --prefix tests/e2e -- --project smoke",
+    "lint": "dotnet format CardLab.sln --verify-no-changes && npm run lint --prefix web && npm run lint --prefix tests/e2e",
+    "typecheck": "npm run typecheck --prefix web && npm run typecheck --prefix tests/e2e",
+    "build": "dotnet build CardLab.sln -warnaserror && npm run build --prefix web",
+    "dev": "dotnet run --project src/CardLab.Api -- --webroot ../../web/dist"
+  },
+  "gate_on_coder_stop": [
+    "build",
+    "unit",
+    "lint",
+    "typecheck"
+  ],
+  "test_stub_marker": "[Fact(Skip = \"todo\")] / [Property(Skip = \"todo\")] in C#; test.todo in TypeScript",
+  "doc_comment_style": "C#: XML doc comments (<summary> <param> <returns> <exception>); TypeScript: TSDoc (@param @returns @throws)",
+  "paths": {
+    "src": "src",
+    "web": "web/src",
+    "unit_tests": "tests/CardLab.Domain.Tests",
+    "web_unit_tests": "web/src/**/*.test.ts?(x)",
+    "integration_tests": "tests/CardLab.Integration.Tests",
+    "e2e_tests": "tests/e2e",
+    "harness": "tests/CardLab.TestKit",
+    "high_risk": "src/CardLab.Domain"
+  },
+  "env": {
+    "CARDLAB_TEST_CONNECTION": "SQL Server connection string for integration/E2E (default: LocalDB)"
+  },
+  "max_parallel_coders": 4,
+  "auto_merge_feature_prs": true
+}

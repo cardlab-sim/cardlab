@@ -1,0 +1,111 @@
+# Deploy to the free Azure `demo` environment (design §14, DEC-3, DEC-10). OIDC only: no stored cloud credentials.
+# Rollback = Actions → deploy → the last green run → "Re-run all jobs" (within 30 days; otherwise revert on main). Schema is forward-only.
+name: deploy
+
+# Azure parked; DORA-lite uses dora-deploy.yml.
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-demo
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 30
+    environment: demo
+    env:
+      DOTNET_NOLOGO: 'true'
+      AZURE_WEBAPP_NAME: ${{ vars.AZURE_WEBAPP_NAME }}
+      AZURE_SQL_SERVER_NAME: ${{ vars.AZURE_SQL_SERVER_NAME }}
+      AZURE_SQL_ADMIN_LOGIN: ${{ vars.AZURE_SQL_ADMIN_LOGIN }}
+      AZURE_SQL_ADMIN_OBJECT_ID: ${{ vars.AZURE_SQL_ADMIN_OBJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build the SPA
+        run: |
+          npm ci --prefix web
+          npm run build --prefix web
+
+      - name: Publish the self-contained host (with the SPA as wwwroot)
+        run: >
+          dotnet publish src/CardLab.Api -c Release -r linux-x64 --self-contained true
+          -p:SourceRevisionId=${{ github.sha }} -o publish
+
+      - name: Log in to Azure (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Apply the infrastructure (idempotent)
+        run: >
+          az deployment group create
+          --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
+          --template-file infra/main.bicep
+          --parameters infra/demo.bicepparam
+
+      - name: Deploy the package
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_WEBAPP_NAME }}
+          package: publish
+
+      # Merge semantics: only these keys are touched, so CardLab__LookupKey (set once by the human) survives.
+      # The commit app setting is deliberately never set: health reports the commit stamped into the build by
+      # SourceRevisionId, so it identifies the deployed binaries. Runs after the package so the restart loads the new files.
+      - name: Set non-secret app settings
+        run: >
+          az webapp config appsettings set
+          --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}"
+          --name "$AZURE_WEBAPP_NAME"
+          --settings
+          "ConnectionStrings__CardLab=Server=tcp:${AZURE_SQL_SERVER_NAME}.database.windows.net;Database=cardlab;Authentication=Active Directory Default;Encrypt=True;Connect Timeout=60;Connect Retry Count=3;Connect Retry Interval=10"
+          "ASPNETCORE_ENVIRONMENT=Production"
+          "ASPNETCORE_FORWARDEDHEADERS_ENABLED=true"
+          --output none
+
+      - name: Wait for the new build to report healthy
+        env:
+          DEMO_URL: ${{ vars.DEMO_URL }}
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: |
+          deadline=$((SECONDS+300))
+          attempt=0
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            attempt=$((attempt+1))
+            body=$(curl -sS --max-time 60 "${DEMO_URL%/}/api/health" || true)
+            echo "attempt $attempt: $body"
+            commit=$(printf '%s' "$body" | jq -r '.commit // empty' 2>/dev/null || true)
+            database=$(printf '%s' "$body" | jq -r '.database // empty' 2>/dev/null || true)
+            if [ "$commit" = "$EXPECTED_COMMIT" ] && [ "$database" = "ok" ]; then
+              echo "Healthy on $commit"; exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Health did not report commit $EXPECTED_COMMIT with database ok within 5 minutes"
+          exit 1
+
+      - name: Install the e2e dependencies
+        run: |
+          npm ci --prefix tests/e2e
+          npx --prefix tests/e2e playwright install --with-deps chromium
+
+      - name: Smoke test against demo
+        env:
+          DEMO_URL: ${{ vars.DEMO_URL }}
+        run: npm run e2e --prefix tests/e2e -- --project smoke

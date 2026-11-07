@@ -1,0 +1,49 @@
+/* Design tokens (§4.1, DEC-17): the only place raw colour values may appear. */
+:root {
+  --color-primary: #0f172a;
+  --color-on-primary: #ffffff;
+  --color-secondary: #1e3a8a;
+  --color-accent: #a16207;
+  --color-on-accent: #ffffff;
+  --color-background: #f8fafc;
+  --color-foreground: #020617;
+  --color-card: #ffffff;
+  --color-muted: #e8ecf1;
+  --color-muted-foreground: #475569;
+  --color-border: #e2e8f0;
+  --color-destructive: #dc2626;
+  --color-on-destructive: #ffffff;
+  --color-ring: #0f172a;
+
+  --color-status-active: #166534;
+  --color-status-active-bg: #dcfce7;
+  --color-status-frozen: #1e3a8a;
+  --color-status-frozen-bg: #dbeafe;
+  --color-status-approved: #166534;
+  --color-status-approved-bg: #dcfce7;
+  --color-status-declined: #991b1b;
+  --color-status-declined-bg: #fee2e2;
+
+  --font-family: 'Inter', system-ui, sans-serif;
+  --font-size-sm: 14px;
+  --font-size-base: 16px;
+  --font-size-lg: 20px;
+  --font-size-xl: 24px;
+  --font-size-2xl: 32px;
+  --line-height: 1.5;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --radius: 4px;
+  --border-width: 1px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --transition: 150ms ease-out;
+  --content-max-width: 1200px;
+}

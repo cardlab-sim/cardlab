@@ -1,0 +1,373 @@
+{
+  "feature": "001-card-controls",
+  "title": "Card controls: freeze/unfreeze and per-category spend limits",
+  "lane": "L",
+  "phase": "done",
+  "base_branch": "main",
+  "feature_branch": "feat/001-card-controls",
+  "gates": {
+    "requirements": {
+      "approved_at": "2026-11-04T21:56Z",
+      "note": "Approve"
+    },
+    "design": {
+      "approved_at": "2026-11-04T22:19Z",
+      "note": "Approve"
+    },
+    "plan": {
+      "approved_at": "2026-11-04T23:20Z",
+      "note": "Approve"
+    }
+  },
+  "discovery": [],
+  "prs": [
+    {
+      "id": "PR-00",
+      "title": "Skeleton & harness scaffolding",
+      "wave": 0,
+      "depends_on": [],
+      "status": "merged",
+      "branch": "pr/001-card-controls/00-skeleton",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/2"
+    },
+    {
+      "id": "PR-00b",
+      "title": "Host starts with or without the built SPA (BUG-002)",
+      "wave": 2,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/00b-wwwroot",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/11"
+    },
+    {
+      "id": "PR-01",
+      "title": "Test harness and domain vocabulary (Money, wire names)",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/01-harness",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/6"
+    },
+    {
+      "id": "PR-02",
+      "title": "Web foundation: tokens, primitives, formatters, API clients, card list",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/02-web-foundation",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/5"
+    },
+    {
+      "id": "PR-03",
+      "title": "Azure infrastructure and deploy workflow (OIDC, Bicep, smoke)",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/03-deploy",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/4"
+    },
+    {
+      "id": "PR-04",
+      "title": "Domain decision core: periods, validation, decider, properties",
+      "wave": 2,
+      "depends_on": [
+        "PR-01"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/04-decision-core",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/9"
+    },
+    {
+      "id": "PR-05",
+      "title": "Card controls: freeze, unfreeze and limit changes with audit",
+      "wave": 2,
+      "depends_on": [
+        "PR-01"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/05-card-controls",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/8"
+    },
+    {
+      "id": "PR-06",
+      "title": "SQL store, schema, seed and integration harness",
+      "wave": 2,
+      "depends_on": [
+        "PR-01"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/06-sql-store",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/10"
+    },
+    {
+      "id": "PR-07",
+      "title": "Card detail page: status, limits, audit, simulate, transactions",
+      "wave": 2,
+      "depends_on": [
+        "PR-02"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/07-card-detail",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/7"
+    },
+    {
+      "id": "PR-08",
+      "title": "Authorisation service and endpoints (processor and simulate)",
+      "wave": 3,
+      "depends_on": [
+        "PR-04",
+        "PR-06"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/08-authorisation",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/12"
+    },
+    {
+      "id": "PR-09",
+      "title": "Admin API: card endpoints, health, test reset, security headers",
+      "wave": 3,
+      "depends_on": [
+        "PR-05",
+        "PR-06"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/09-admin-api",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/13"
+    },
+    {
+      "id": "PR-10",
+      "title": "End-to-end journeys, accessibility checks and CI e2e + ZAP",
+      "wave": 4,
+      "depends_on": [
+        "PR-07",
+        "PR-08",
+        "PR-09"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/10-e2e",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/15"
+    },
+    {
+      "id": "PR-11",
+      "title": "Cross-path integration checks: limit changes, privacy, log events",
+      "wave": 4,
+      "depends_on": [
+        "PR-08",
+        "PR-09"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/11-cross-path-checks",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/14"
+    },
+    {
+      "id": "PR-12",
+      "title": "Feature review fixes: startup retry, limit order, HSTS, build version (BUG-008)",
+      "wave": 5,
+      "depends_on": [
+        "PR-10",
+        "PR-11"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/12-fix-feature-backend",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/17"
+    },
+    {
+      "id": "PR-13",
+      "title": "Feature review fixes: keyboard simulate, Firefox, CI commit chain, README (BUG-009)",
+      "wave": 5,
+      "depends_on": [
+        "PR-10",
+        "PR-11"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/13-fix-feature-e2e",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/16"
+    },
+    {
+      "id": "PR-14",
+      "title": "Fix rollback comment and secret-scanning setup wording (BUG-011, BUG-012)",
+      "wave": 5,
+      "depends_on": [
+        "PR-12",
+        "PR-13"
+      ],
+      "status": "merged",
+      "branch": "pr/001-card-controls/14-fix-validation-docs",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/18"
+    }
+  ],
+  "bugs_open": [],
+  "resume": null,
+  "history": [
+    {
+      "at": "2026-11-04T21:35Z",
+      "event": "feature created"
+    },
+    {
+      "at": "2026-11-04T21:36Z",
+      "event": "lane L chosen by human"
+    },
+    {
+      "at": "2026-11-04T21:50Z",
+      "event": "autopilot started \u00e2\u20ac\u201d standing instruction: 'make all decisions in requirements and tech design including as recommended'"
+    },
+    {
+      "at": "2026-11-04T21:56Z",
+      "event": "gate requirements approved"
+    },
+    {
+      "at": "2026-11-04T22:19Z",
+      "event": "gate design approved"
+    },
+    {
+      "at": "2026-11-04T23:20Z",
+      "event": "gate plan approved; issue CL-1 created; PR-00 merged (#2)"
+    },
+    {
+      "at": "2026-11-05T00:05Z",
+      "event": "human allowed draft integration PR #3 and automatic merges into feat/001-card-controls; wave 1 dispatched"
+    },
+    {
+      "at": "2026-11-05T09:50Z",
+      "event": "PR-03 review CHANGES; BUG-001 (design, S3) decided option A by orchestrator under standing instruction"
+    },
+    {
+      "at": "2026-11-05T10:10Z",
+      "event": "PR-03 fixes verified by orchestrator, merged (#4); BUG-001 fixed"
+    },
+    {
+      "at": "2026-11-05T10:30Z",
+      "event": "PR-02 review APPROVE WITH FIXES; doc-only plan amend (owned files +2, PR-10 names); coder fix round"
+    },
+    {
+      "at": "2026-11-05T10:45Z",
+      "event": "PR-01 review CHANGES (contract suite seams); doc-only amends to PR-06/PR-08 briefs; coder fix round"
+    },
+    {
+      "at": "2026-11-05T11:00Z",
+      "event": "PR-02 fixes verified by orchestrator (TZ mutation), merged (#5)"
+    },
+    {
+      "at": "2026-11-05T11:30Z",
+      "event": "PR-01 fixes verified (no-lock mutation), merged (#6); wave 1 complete; PR-04, PR-05, PR-06 dispatched"
+    },
+    {
+      "at": "2026-11-05T12:30Z",
+      "event": "PR-05 and PR-07 reviews CHANGES; BUG-002 (skeleton wwwroot, S2) \u2192 PR-00b; BUG-003 (fake audit format) folded into PR-07; brief amends PR-05/06/07/08/09/10"
+    },
+    {
+      "at": "2026-11-05T13:00Z",
+      "event": "PR-05 fixes verified (constant-unfreeze mutation), merged (#8); PR-00b merged (#11, wwwroot/.gitkeep, repro before/after by coder); BUG-002 fixed"
+    },
+    {
+      "at": "2026-11-05T13:30Z",
+      "event": "PR-07 fixes verified (no-refetch mutation), merged (#7); BUG-003 fixed"
+    },
+    {
+      "at": "2026-11-05T13:45Z",
+      "event": "PR-04 review APPROVE WITH FIXES; BUG-004 (timestamp validation, design erratum) decided option A by orchestrator under standing instruction"
+    },
+    {
+      "at": "2026-11-05T14:00Z",
+      "event": "PR-06 review APPROVE WITH FIXES; CardStoreContractTests.cs released to PR-06 for one contract case (M-2)"
+    },
+    {
+      "at": "2026-11-05T14:30Z",
+      "event": "PR-04 fixes verified (timestamp bound mutation), merged (#9); BUG-004 fixed"
+    },
+    {
+      "at": "2026-11-05T15:00Z",
+      "event": "PR-06 fixes verified (truncation mutation; integration 18 passed with web/dist built), merged (#10); wave 2 complete; integrated branch: build 0/0, domain 128 passed, integration 18 passed, web 56 passed; earlier feature CI red was the pre-PR-06 NotImplemented stub; PR-08, PR-09 dispatched"
+    },
+    {
+      "at": "2026-11-05T15:40Z",
+      "event": "PR-08 verified (lock-removal mutation fails T-I-6), PR-09 verified (nosniff mutation); both in review; feature CI green on 907593d"
+    },
+    {
+      "at": "2026-11-05T16:10Z",
+      "event": "PR-08 review APPROVE WITH FIXES; BUG-005 (merchant PAN, option A) and BUG-006 (binding errors \u2192 PR-09) decided by orchestrator under standing instruction"
+    },
+    {
+      "at": "2026-11-05T16:30Z",
+      "event": "PR-09 review CHANGES (health commit format B-1, COEP header); BUG-006 and Program.cs release folded into PR-09 fix round"
+    },
+    {
+      "at": "2026-11-05T17:00Z",
+      "event": "PR-08 fixes verified (merchant-rule mutation fails 6), merged (#12); BUG-005 fixed"
+    },
+    {
+      "at": "2026-11-05T17:40Z",
+      "event": "PR-09 fixes verified (ThrowOnBadRequest mutation), merged (#13); BUG-006 fixed; wave 3 complete; PR-10, PR-11 dispatched"
+    },
+    {
+      "at": "2026-11-05T18:20Z",
+      "event": "PR-11 pr-light review APPROVE WITH FIXES; InMemoryLogExporter.cs released to PR-11 (m-4)"
+    },
+    {
+      "at": "2026-11-05T18:50Z",
+      "event": "PR-11 fixes verified (suppressed-log mutation fails T-I-7), merged (#14)"
+    },
+    {
+      "at": "2026-11-05T19:10Z",
+      "event": "PR-10 PARTIAL: BUG-007 (DataTable focusable scroll region) found by axe; DataTable files released to PR-10"
+    },
+    {
+      "at": "2026-11-05T20:10Z",
+      "event": "PR-10 verified (BUG-007 attribute-removal mutation; PR CI all green incl. e2e 7 passed and ZAP FAIL 0/WARN 0); in review"
+    },
+    {
+      "at": "2026-11-05T20:40Z",
+      "event": "PR-10 review APPROVE WITH FIXES (focus-ring check, axe on every spec, stale PR body)"
+    },
+    {
+      "at": "2026-11-05T21:20Z",
+      "event": "PR-10 fixes verified (focus-ring E2E mutation), merged (#15); BUG-007 fixed; all PRs merged"
+    },
+    {
+      "at": "2026-11-05T22:00Z",
+      "event": "feature review CHANGES (2 major, 11 minor); BUG-008 (DB resume) and BUG-009 (browsers) decided by orchestrator under standing instruction; fix PRs PR-12, PR-13 dispatched; F-8/F-9 doc sync by orchestrator; F-11 tooling references kept (no confidential names)"
+    },
+    {
+      "at": "2026-11-05T22:50Z",
+      "event": "PR-12 pr-light APPROVE WITH FIXES (give-up path test); reviewer confirmed F-1 through real Program.cs, HSTS with forwarded proto, service.version = sha"
+    },
+    {
+      "at": "2026-11-05T23:20Z",
+      "event": "PR-13 verified (keyboard mutation fails on Chrome and Firefox; PR CI green incl. BUG-001 chain step); in pr-light review; design \u00a715.3 AC-37 note updated"
+    },
+    {
+      "at": "2026-11-05T23:50Z",
+      "event": "PR-12 fixes verified (log-deletion mutation), merged (#17); BUG-008 fixed (live warm-up after idle still to be measured on demo)"
+    },
+    {
+      "at": "2026-11-06T00:10Z",
+      "event": "PR-13 pr-light APPROVE WITH FIXES; BUG-010 (focus lost after actions) decided by orchestrator under standing instruction, folded into PR-13"
+    },
+    {
+      "at": "2026-11-06T00:50Z",
+      "event": "PR-13 fixes verified (focus mutation on both browsers), merged (#16); BUG-009, BUG-010 fixed; all feature-review findings addressed; phase validate"
+    },
+    {
+      "at": "2026-11-06T02:00Z",
+      "event": "validation DELIVERED WITH CAVEATS: 36 pass, 0 fail, 4 pending-human (AC-27, AC-28, AC-34 on demo, AC-36); BUG-011 fixed (PR-14 #18), BUG-012 wording fixed, setting left to human; autopilot stops: only PENDING-HUMAN checks remain"
+    },
+    {
+      "at": "2026-11-07T00:00Z",
+      "event": "BUG-012 fixed (human R-1 done); BUG-001, BUG-008, BUG-012 closed; feature closed: delivered with caveats: AC-27/28/34/36 need Azure, cut; deploy.yml parked to workflow_dispatch only"
+    }
+  ],
+  "design_artifact": "https://claude.ai/artifact/NG6roAmY5Yw7jhePv6bnof",
+  "ticket": {
+    "key": "CL-1",
+    "url": "https://github.com/cardlab-sim/cardlab/issues/1"
+  },
+  "note": "delivered with caveats: AC-27/28/34/36 need Azure, cut"
+}

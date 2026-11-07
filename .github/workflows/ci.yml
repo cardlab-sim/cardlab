@@ -1,0 +1,175 @@
+# CI (design §14, DEC-5, DEC-18, DEC-21). Skeleton from PR-00: ticket-key, backend and web are complete;
+# the e2e job (published host + mssql + Playwright + ZAP baseline) is completed by PR-10, which owns this file.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main, 'feat/**']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ticket-key:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the ticket key in the PR title and body
+        env:
+          PATTERN: ${{ vars.TICKET_KEY_PATTERN || 'CL-\d+' }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          status=0
+          if ! printf '%s' "$TITLE" | grep -Pq -- "$PATTERN"; then
+            echo "::error::PR title does not contain a ticket key matching $PATTERN"; status=1
+          fi
+          if ! printf '%s' "$BODY" | grep -Pq -- "$PATTERN"; then
+            echo "::error::PR body does not contain a ticket key matching $PATTERN"; status=1
+          fi
+          exit $status
+
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          # Ephemeral per-run password for a throwaway container; not a stored credential (design §11).
+          MSSQL_SA_PASSWORD: Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!' -Q 'SELECT 1' -b"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+    env:
+      DOTNET_NOLOGO: 'true'
+      CARDLAB_TEST_CONNECTION: Server=localhost,1433;User Id=sa;Password=Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!;TrustServerCertificate=True
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet restore CardLab.sln
+      - name: Format
+        run: dotnet format CardLab.sln --verify-no-changes --no-restore
+      - name: Build
+        run: dotnet build CardLab.sln -warnaserror --no-restore
+      - name: Unit tests
+        run: dotnet test tests/CardLab.Domain.Tests --no-build
+      - name: Integration tests
+        run: dotnet test tests/CardLab.Integration.Tests --no-build
+      - name: Bicep build
+        run: |
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          if [ -f infra/demo.bicepparam ]; then az bicep build-params --file infra/demo.bicepparam --stdout > /dev/null; fi
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            tests/e2e/package-lock.json
+      - run: npm ci --prefix web
+      - run: npm run lint --prefix web
+      - run: npm run typecheck --prefix web
+      - run: npm test --prefix web -- --run
+      - run: npm run build --prefix web
+      - run: npm ci --prefix tests/e2e
+      - run: npm run lint --prefix tests/e2e
+      - run: npm run typecheck --prefix tests/e2e
+
+  e2e:
+    needs: [backend, web]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: 'Y'
+          # Ephemeral per-run password for a throwaway container; not a stored credential (design §11).
+          MSSQL_SA_PASSWORD: Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P 'Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!' -Q 'SELECT 1' -b"
+          --health-interval 10s --health-timeout 5s --health-retries 12
+    env:
+      DOTNET_NOLOGO: 'true'
+      BASE_URL: http://localhost:5080
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            web/package-lock.json
+            tests/e2e/package-lock.json
+      - name: Build the SPA
+        run: |
+          npm ci --prefix web
+          npm run build --prefix web
+      - name: Publish the host (with the SPA as wwwroot)
+        run: dotnet publish src/CardLab.Api -c Release -o publish -p:SourceRevisionId=${{ github.sha }}
+      - name: Start the host
+        env:
+          ASPNETCORE_URLS: http://localhost:5080
+          ASPNETCORE_ENVIRONMENT: Production
+          ConnectionStrings__CardLab: Server=localhost,1433;Database=CardLab;User Id=sa;Password=Ci-${{ github.run_id }}-${{ github.run_attempt }}-Aa1!;TrustServerCertificate=True
+          CardLab__TestEndpoints: 'true'
+        run: |
+          # The committed development key protects only fictional card numbers (DEC-8).
+          export CardLab__LookupKey="$(jq -r .CardLab.LookupKey src/CardLab.Api/appsettings.Development.json)"
+          cd publish
+          nohup dotnet CardLab.Api.dll > "$GITHUB_WORKSPACE/host.log" 2>&1 &
+          cd "$GITHUB_WORKSPACE"
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:5080/api/health > /dev/null; then echo "host is up"; exit 0; fi
+            sleep 2
+          done
+          echo "::error::host did not become healthy"; cat host.log; exit 1
+      - name: Health reports the published commit (BUG-001 chain)
+        run: test "$(curl -fsS http://localhost:5080/api/health | jq -r .commit)" = "${{ github.sha }}"
+      - run: npm ci --prefix tests/e2e
+      - run: npx --prefix tests/e2e playwright install --with-deps chromium firefox
+      - name: Playwright (projects local and local-firefox)
+        run: npm run e2e --prefix tests/e2e -- --project local --project local-firefox
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            tests/e2e/playwright-report
+            tests/e2e/test-results
+          retention-days: 7
+      - name: ZAP baseline
+        uses: zaproxy/action-baseline@v0.15.0
+        with:
+          target: http://localhost:5080
+          rules_file_name: .zap/rules.tsv
+          fail_action: true
+          allow_issue_writing: false
+      - name: Upload the host log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-log
+          path: host.log
+          retention-days: 7
