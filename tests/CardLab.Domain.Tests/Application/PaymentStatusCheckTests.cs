@@ -213,4 +213,52 @@ public sealed class PaymentStatusCheckTests
         Assert.Equal(0, f.Bank.StatusChecks);
         Assert.Single(f.Bank.DebitRequests);
     }
+
+    // Catches: a check failing with the in-flight confirm's fault instead of carrying on with the stored state (AC-9, R-11)
+    [Fact(Timeout = 5000)]
+    public async Task Check_survives_the_in_flight_confirms_failure()
+    {
+        var faults = new PaymentServiceTests.LockFaults();
+        var f = await PaymentFixture.CreateAsync(decorate: store => new PaymentServiceTests.LockFaultingStore(store, faults));
+        var quote = await f.QuoteOkAsync();
+        var gate = new TaskCompletionSource();
+        f.Bank.HoldDebitsUntil(gate.Task);
+        faults.Error = () => new InvalidOperationException("database unavailable");
+        faults.FailCalls(2);
+
+        var confirm = f.Service.ConfirmAsync(f.Card.Id, quote.Reference, Ct);
+        var check = f.Service.CheckStatusAsync(f.Card.Id, quote.Reference, Ct);
+        Assert.False(check.IsCompleted);
+        gate.SetResult();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => confirm);
+        var result = await check;
+        Assert.Equal(PaymentState.Completed, result.Value!.State);
+        Assert.Single(f.Bank.DebitRequests);
+    }
+
+    // Catches: a check waiting on an in-flight confirm without bound, or asking the bank while the debit call is open (BUG-003, R-9, NFR-2)
+    [Fact(Timeout = 5000)]
+    public async Task Check_wait_on_an_in_flight_confirm_is_bounded_by_the_check_budget()
+    {
+        var gated = new GatedStore();
+        var f = await PaymentFixture.CreateAsync(decorate: store => gated.Wrap(store), bankTimeoutSeconds: 0);
+        var quote = await f.QuoteOkAsync();
+        var release = new TaskCompletionSource();
+        gated.PauseBefore(2, release.Task);
+
+        var confirm = f.Service.ConfirmAsync(f.Card.Id, quote.Reference, Ct);
+        var result = await f.Service.CheckStatusAsync(f.Card.Id, quote.Reference, Ct);
+
+        var receipt = result.Value!;
+        Assert.Equal(PaymentState.Pending, receipt.State);
+        Assert.Equal(PaymentFixture.W10, receipt.Message);
+        Assert.Equal(0, f.Bank.StatusChecks);
+        var record = await f.RecordAsync(quote.Reference);
+        Assert.Equal(PaymentEventKind.StatusCheckUnanswered, record.Events[^1].Kind);
+        Assert.Equal("status", (string)f.Logger.Events("BankCallUnanswered")[0].Fields["Call"]!);
+
+        release.SetResult();
+        Assert.Equal(PaymentState.Completed, (await confirm).Value!.State);
+    }
 }

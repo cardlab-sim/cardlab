@@ -164,6 +164,7 @@ public sealed class PaymentServiceTests
 
         var again = await f.Service.ConfirmAsync(f.Card.Id, quote.Reference, Ct);
 
+        Assert.Equal(["refused_balance_changed", "refused_already_refused"], f.Logger.Events("PaymentConfirmAttempt").Select(e => (string)e.Fields["Result"]!).ToArray());
         var error = Assert.IsType<PaymentError.QuoteRefused>(again.Error);
         Assert.Equal("Payment not made. Your card balance changed while you were reviewing. No money has moved. Your card balance is now £170.50. Review the new amount and confirm again if you want to pay it.", error.Message);
         Assert.Equal(TestMoney.Of("170.50"), error.BalanceOwed);
@@ -343,7 +344,8 @@ public sealed class PaymentServiceTests
         Assert.Single(f.Bank.DebitRequests);
     }
 
-    [Fact]
+    // Catches: the budget not reaching the bank (a call that never answers would hang the confirm) or a plain timeout leaking exception jargon into the record (NFR-2, AC-13, design §9)
+    [Fact(Timeout = 5000)]
     public async Task Bank_call_is_bounded_by_the_budget()
     {
         var f = await PaymentFixture.CreateAsync(bankTimeoutSeconds: 0);
@@ -355,28 +357,78 @@ public sealed class PaymentServiceTests
         Assert.Equal(PaymentState.Pending, result.Value!.State);
         var record = await f.RecordAsync(quote.Reference);
         Assert.Equal(PaymentEventKind.BankUnanswered, record.Events[^1].Kind);
+        Assert.Null(record.Events[^1].Detail);
     }
 
-    [Fact]
-    public async Task Client_disconnect_never_marks_the_payment_unanswered_or_failed()
+    // Catches: a client disconnect cancelling the debit or leaving the payment half-applied (BUG-002, NFR-2)
+    [Fact(Timeout = 5000)]
+    public async Task Client_disconnect_never_cancels_the_debit_and_the_payment_settles()
     {
         var f = await PaymentFixture.CreateAsync();
         var quote = await f.QuoteOkAsync();
-        f.Bank.HoldDebitsUntil(new TaskCompletionSource().Task);
+        var gate = new TaskCompletionSource();
+        f.Bank.HoldDebitsUntil(gate.Task);
         using var cts = new CancellationTokenSource();
 
-        var pending = f.Service.ConfirmAsync(f.Card.Id, quote.Reference, cts.Token);
+        var confirm = f.Service.ConfirmAsync(f.Card.Id, quote.Reference, cts.Token);
         await cts.CancelAsync();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+        gate.SetResult();
+        var result = await confirm;
 
+        Assert.Equal(PaymentState.Completed, result.Value!.State);
         var record = await f.RecordAsync(quote.Reference);
-        Assert.Equal(PaymentState.Pending, record.Payment!.State);
-        Assert.Equal([PaymentEventKind.ConfirmCreated, PaymentEventKind.DebitRequested], Kinds(record));
+        Assert.Equal([PaymentEventKind.ConfirmCreated, PaymentEventKind.DebitRequested, PaymentEventKind.BankCompleted], Kinds(record));
         Assert.Empty(f.Logger.Events("BankCallUnanswered"));
         Assert.False(f.InFlight.TryGet(quote.Reference, out _));
-        var repeat = await f.Service.ConfirmAsync(f.Card.Id, quote.Reference, Ct);
-        Assert.Equal(PaymentState.Pending, repeat.Value!.State);
-        Assert.True(repeat.Value.Repeated);
+        Assert.Single(f.Bank.Entries);
+    }
+
+    // Catches: a joined repeat confirm failing with the first caller's fault instead of answering from the stored state (AC-9, AC-10)
+    [Fact(Timeout = 5000)]
+    public async Task Joined_repeat_survives_the_first_callers_failure()
+    {
+        var faults = new LockFaults();
+        var f = await PaymentFixture.CreateAsync(decorate: store => new LockFaultingStore(store, faults));
+        var quote = await f.QuoteOkAsync();
+        var gate = new TaskCompletionSource();
+        f.Bank.HoldDebitsUntil(gate.Task);
+        faults.Error = () => new InvalidOperationException("database unavailable");
+        faults.FailCalls(3);
+
+        var first = f.Service.ConfirmAsync(f.Card.Id, quote.Reference, Ct);
+        var second = f.Service.ConfirmAsync(f.Card.Id, quote.Reference, Ct);
+        gate.SetResult();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => first);
+        var joined = (await second).Value!;
+        Assert.Equal(PaymentState.Pending, joined.State);
+        Assert.True(joined.Repeated);
+        Assert.Equal(PaymentFixture.W5, joined.Message);
+    }
+
+    // Catches: the in-flight task registered after lock #1 commits, so a confirm entering in between misses it and answers Pending (DEC-5, AC-10)
+    [Fact(Timeout = 5000)]
+    public async Task In_flight_task_is_registered_before_the_first_confirm_commits()
+    {
+        var gated = new GatedStore();
+        var f = await PaymentFixture.CreateAsync(decorate: store => gated.Wrap(store));
+        var quote = await f.QuoteOkAsync();
+        var committed = new TaskCompletionSource();
+        var resume = new TaskCompletionSource();
+        var gate = new TaskCompletionSource();
+        f.Bank.HoldDebitsUntil(gate.Task);
+        gated.PauseAfter(1, committed, resume.Task);
+
+        var first = f.Service.ConfirmAsync(f.Card.Id, quote.Reference, Ct);
+        await committed.Task;
+        var second = f.Service.ConfirmAsync(f.Card.Id, quote.Reference, Ct);
+        resume.SetResult();
+        gate.SetResult();
+        var results = await Task.WhenAll(first, second);
+
+        Assert.All(results, r => Assert.Equal(PaymentState.Completed, r.Value!.State));
+        Assert.Equal(1, f.Store.PaymentCount);
+        Assert.Single(f.Bank.DebitRequests);
     }
 
     // T-U-27 · PR-04 · unit (application)
@@ -476,7 +528,7 @@ public sealed class PaymentServiceTests
         Assert.Equal([PaymentEventKind.ConfirmCreated, PaymentEventKind.DebitRequested, PaymentEventKind.BankUnanswered], Kinds(record));
         Assert.Equal("settle_lock_timeout", record.Events[^1].Detail);
         Assert.Single(f.Bank.DebitRequests);
-        Assert.Single(f.Logger.Events("BankCallUnanswered"));
+        Assert.Empty(f.Logger.Events("BankCallUnanswered"));
 
         var healed = await f.Service.CheckStatusAsync(f.Card.Id, quote.Reference, Ct);
         Assert.Equal(PaymentState.Completed, healed.Value!.State);
@@ -552,11 +604,13 @@ public sealed class PaymentServiceTests
         Assert.Empty(f.Bank.DebitRequests);
     }
 
-    private sealed class LockFaults
+    internal sealed class LockFaults
     {
         private readonly object _gate = new();
         private HashSet<int> _failing = [];
         private int _calls;
+
+        public Func<Exception> Error { get; set; } = () => new CardLockTimeoutException("scripted");
 
         public void FailCalls(params int[] calls)
         {
@@ -577,7 +631,7 @@ public sealed class PaymentServiceTests
         }
     }
 
-    private sealed class LockFaultingStore(ICardStore inner, LockFaults faults) : ICardStore
+    internal sealed class LockFaultingStore(ICardStore inner, LockFaults faults) : ICardStore
     {
         public Task<IReadOnlyList<CardLab.Domain.Cards.CardSummary>> ListCardsAsync(CancellationToken ct = default) => inner.ListCardsAsync(ct);
 
@@ -587,8 +641,86 @@ public sealed class PaymentServiceTests
 
         public Task<T> WithCardLockAsync<T>(CardId id, Func<ICardWriter, Task<T>> work, CancellationToken ct = default) =>
             faults.ShouldFail()
-                ? throw new CardLockTimeoutException("scripted")
+                ? throw faults.Error()
                 : inner.WithCardLockAsync(id, work, ct);
+
+        public Task<IReadOnlyList<CardLab.Domain.Cards.TransactionRecord>> ListTransactionsAsync(CardId id, CancellationToken ct = default) => inner.ListTransactionsAsync(id, ct);
+
+        public Task<IReadOnlyList<CardLab.Domain.Cards.AuditRecord>> ListAuditAsync(CardId id, CancellationToken ct = default) => inner.ListAuditAsync(id, ct);
+
+        public Task<LinkedAccount?> GetLinkedAccountAsync(CancellationToken ct = default) => inner.GetLinkedAccountAsync(ct);
+
+        public Task<CardBalance?> GetBalanceAsync(CardId id, CancellationToken ct = default) => inner.GetBalanceAsync(id, ct);
+
+        public Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference reference, CancellationToken ct = default) => inner.GetPaymentRecordAsync(reference, ct);
+
+        public Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default) => inner.ListPaymentRecordsAsync(id, ct);
+
+        public Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default) => inner.ListActivityAsync(id, take, ct);
+    }
+}
+
+/// <summary>Store decorator that can pause a unit of work before it starts or after it has committed (counted from arming).</summary>
+internal sealed class GatedStore
+{
+    private readonly object _gate = new();
+    private int _calls;
+    private int _pauseBefore;
+    private Task? _beforeGate;
+    private int _pauseAfter;
+    private TaskCompletionSource? _committed;
+    private Task? _afterGate;
+
+    public ICardStore Wrap(ICardStore inner) => new Store(this, inner);
+
+    public void PauseBefore(int call, Task gate)
+    {
+        lock (_gate)
+        {
+            (_calls, _pauseBefore, _beforeGate) = (0, call, gate);
+        }
+    }
+
+    public void PauseAfter(int call, TaskCompletionSource committed, Task resume)
+    {
+        lock (_gate)
+        {
+            (_calls, _pauseAfter, _committed, _afterGate) = (0, call, committed, resume);
+        }
+    }
+
+    private sealed class Store(GatedStore owner, ICardStore inner) : ICardStore
+    {
+        public Task<IReadOnlyList<CardLab.Domain.Cards.CardSummary>> ListCardsAsync(CancellationToken ct = default) => inner.ListCardsAsync(ct);
+
+        public Task<CardLab.Domain.Cards.CardDetail?> GetCardAsync(CardId id, CancellationToken ct = default) => inner.GetCardAsync(id, ct);
+
+        public Task<CardId?> FindByLookupAsync(LookupHash hash, CancellationToken ct = default) => inner.FindByLookupAsync(hash, ct);
+
+        public async Task<T> WithCardLockAsync<T>(CardId id, Func<ICardWriter, Task<T>> work, CancellationToken ct = default)
+        {
+            int call;
+            Task? before;
+            lock (owner._gate)
+            {
+                call = ++owner._calls;
+                before = call == owner._pauseBefore ? owner._beforeGate : null;
+            }
+
+            if (before is not null)
+            {
+                await before;
+            }
+
+            var result = await inner.WithCardLockAsync(id, work, ct);
+            if (call == owner._pauseAfter)
+            {
+                owner._committed!.SetResult();
+                await owner._afterGate!;
+            }
+
+            return result;
+        }
 
         public Task<IReadOnlyList<CardLab.Domain.Cards.TransactionRecord>> ListTransactionsAsync(CardId id, CancellationToken ct = default) => inner.ListTransactionsAsync(id, ct);
 

@@ -13,8 +13,8 @@ namespace CardLab.Domain.Application;
 /// <remarks>
 /// Rules come from <c>CardLab.Domain.Payments</c>; this class only orchestrates ports. The bank is never called inside
 /// the card lock: lock #1 validates and creates the pending payment, the bank call runs unlocked with a budget of
-/// <see cref="PaymentOptions.BankTimeoutSeconds"/> (a <c>CancellationTokenSource</c> linked to the request token; only
-/// the budget firing, or an adapter failure, means "unanswered"), lock #2 settles with <c>CancellationToken.None</c>.
+/// <see cref="PaymentOptions.BankTimeoutSeconds"/> (its own <c>CancellationTokenSource</c>, not linked to the request
+/// token, BUG-002; only the budget firing, or an adapter failure, means "unanswered"), lock #2 settles with <c>CancellationToken.None</c>.
 /// Logs <c>PaymentStateChanged</c> once per state change (incl. none → pending), <c>PaymentConfirmAttempt</c> per
 /// confirm and <c>BankCallUnanswered</c> per unanswered call (design §12). Actor = the card's cardholder (DEC-9). No
 /// <c>AuditEvent</c> rows (DEC-1).
@@ -103,8 +103,8 @@ public sealed class PaymentService
     /// <summary>Confirms a reference: exactly once, one in flight per card, bank called outside the lock (R-5..R-11).</summary>
     /// <param name="cardId">Card.</param>
     /// <param name="reference">Reference from the review screen.</param>
-    /// <param name="ct">Request cancellation (a client disconnect never marks the payment unanswered: the payment stays
-    /// pending, the cancellation propagates, and the next status check settles it).</param>
+    /// <param name="ct">Request cancellation. It applies only until the payment is created in lock #1: after that a client
+    /// disconnect never cancels the debit and steps 2-3 run to completion (BUG-002); a joiner's own token only stops its wait.</param>
     /// <returns>The receipt (Completed W-2 / Failed W-3, W-4 / Pending W-5; <c>Repeated</c> for a repeat), or
     /// CardNotFound / ReferenceNotFound / BalanceChanged / QuoteRefused / PaymentPending.</returns>
     public async Task<Result<Receipt, PaymentError>> ConfirmAsync(CardId cardId, PaymentReference reference, CancellationToken ct = default)
@@ -151,15 +151,29 @@ public sealed class PaymentService
 
         if (step.Created is null)
         {
-            var receipt = step.Join is not null ? (await step.Join.WaitAsync(ct)) with { Repeated = true } : step.Stored!;
-            return Result<Receipt, PaymentError>.Ok(receipt);
+            if (step.Join is null)
+            {
+                return Result<Receipt, PaymentError>.Ok(step.Stored!);
+            }
+
+            try
+            {
+                return Result<Receipt, PaymentError>.Ok((await step.Join.WaitAsync(ct)) with { Repeated = true });
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                // The first caller's confirm failed after the debit was requested: answer from the stored state
+                // (still Pending; the next status check settles it) instead of rethrowing someone else's fault.
+                var stored = await FindPaymentAsync(cardId, reference, ct);
+                return Result<Receipt, PaymentError>.Ok((await StoredReceiptAsync(stored!, ct)) with { Repeated = true });
+            }
         }
 
         Receipt result;
         try
         {
             CardLabEvents.PaymentStateChanged(_logger, step.Created.Id.Value.ToString(), cardId.Value.ToString(), cardRef.LastFour, PaymentWireNames.ToWire(step.Quote!.Kind), step.Created.Amount.ToString(), NoneState, PaymentWireNames.ToWire(PaymentState.Pending), NoReason, ElapsedMs(started));
-            var outcome = await RequestDebitAsync(account, step.Quote, ct);
+            var outcome = await RequestDebitAsync(account, step.Quote);
             result = await SettleConfirmAsync(cardRef, step.Quote, step.Created, step.Owed, outcome, started);
         }
         catch (Exception error)
@@ -174,7 +188,9 @@ public sealed class PaymentService
 
     /// <summary>Asks the bank for a pending payment's outcome and settles it (R-11; flow 2). No-op for a settled payment.</summary>
     /// <remarks>A confirm of the same reference that is still in flight is awaited first, so a check never asks the bank
-    /// about a debit that has not been answered yet. Never re-sends the debit.</remarks>
+    /// about a debit that has not been answered yet; the wait is bounded by the check's own budget (BUG-003): on expiry
+    /// the check records <c>StatusCheckUnanswered</c>, stays Pending and answers W-10 without calling the bank.
+    /// Never re-sends the debit.</remarks>
     /// <param name="cardId">Card.</param>
     /// <param name="reference">Payment reference.</param>
     /// <param name="ct">Request cancellation.</param>
@@ -188,15 +204,36 @@ public sealed class PaymentService
             return Result<Receipt, PaymentError>.Fail(new PaymentError.CardNotFound());
         }
 
-        if (_inFlight.TryGet(reference, out var inFlight))
-        {
-            await inFlight.WaitAsync(ct);
-        }
-
         var record = await FindPaymentAsync(cardId, reference, ct);
         if (record is null)
         {
             return Result<Receipt, PaymentError>.Fail(new PaymentError.ReferenceNotFound());
+        }
+
+        var waitExpired = false;
+        if (_inFlight.TryGet(reference, out var inFlight))
+        {
+            // Never ask the bank while the debit call is open (R-9); the wait is bounded by this check's own budget (BUG-003).
+            using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            budget.CancelAfter(TimeSpan.FromSeconds(_options.BankTimeoutSeconds));
+            try
+            {
+                await inFlight.WaitAsync(budget.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested && budget.IsCancellationRequested)
+            {
+                waitExpired = true;
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                // The first caller failed; carry on with the stored state.
+            }
+
+            record = await FindPaymentAsync(cardId, reference, ct);
+            if (record is null)
+            {
+                return Result<Receipt, PaymentError>.Fail(new PaymentError.ReferenceNotFound());
+            }
         }
 
         if (record.Payment!.State != PaymentState.Pending)
@@ -204,10 +241,18 @@ public sealed class PaymentService
             return Result<Receipt, PaymentError>.Ok(await StoredReceiptAsync(record, ct));
         }
 
-        var account = await RequireAccountAsync(ct);
-        var (outcome, detail) = await AskBankAsync(
-            budget => _bank.GetDebitStatusAsync(account.BankRef, reference, budget),
-            ct);
+        BankOutcome outcome;
+        string? detail;
+        if (waitExpired)
+        {
+            (outcome, detail) = (new BankOutcome.Unknown(false), null);
+        }
+        else
+        {
+            var account = await RequireAccountAsync(ct);
+            (outcome, detail) = await AskBankAsync(budget => _bank.GetDebitStatusAsync(account.BankRef, reference, budget));
+        }
+
         var cardRef = new CardRef(cardId, card.LastFour);
         var settled = await _store.WithCardLockAsync(
             cardId,
@@ -345,28 +390,28 @@ public sealed class PaymentService
     private static PaymentEvent Event(PaymentReference reference, PaymentId? payment, DateTimeOffset at, PaymentEventKind kind, PaymentState? from, PaymentState? to, string? detail, bool simulated = false) =>
         new(reference, payment, at, kind, from, to, detail, simulated);
 
-    private async Task<BankOutcomeWithDetail> RequestDebitAsync(LinkedAccount account, Quote quote, CancellationToken ct)
+    private async Task<BankOutcomeWithDetail> RequestDebitAsync(LinkedAccount account, Quote quote)
     {
         var request = new DebitRequest(account.BankRef, quote.Reference, quote.Amount, "CardLab card payment " + quote.Reference.Value);
-        var (outcome, detail) = await AskBankAsync(budget => _bank.RequestDebitAsync(request, budget), ct);
+        var (outcome, detail) = await AskBankAsync(budget => _bank.RequestDebitAsync(request, budget));
         return new BankOutcomeWithDetail(outcome, detail);
     }
 
     /// <summary>
-    /// Runs a bank call with the time budget. The budget firing or any adapter failure is "unknown" (design §9); the
-    /// request token being cancelled is a client disconnect and propagates.
+    /// Runs a bank call with the time budget. The budget token is NOT linked to the request token (BUG-002): a client
+    /// disconnect never cancels the call. The budget firing is "unknown" with no detail; an adapter failure is "unknown"
+    /// with the exception type name (design §9).
     /// </summary>
-    private async Task<(BankOutcome Outcome, string? Detail)> AskBankAsync(Func<CancellationToken, Task<BankOutcome>> call, CancellationToken ct)
+    private async Task<(BankOutcome Outcome, string? Detail)> AskBankAsync(Func<CancellationToken, Task<BankOutcome>> call)
     {
-        using var budget = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        budget.CancelAfter(TimeSpan.FromSeconds(_options.BankTimeoutSeconds));
+        using var budget = new CancellationTokenSource(TimeSpan.FromSeconds(_options.BankTimeoutSeconds));
         try
         {
             return (await call(budget.Token), null);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (budget.IsCancellationRequested)
         {
-            throw;
+            return (new BankOutcome.Unknown(false), null);
         }
         catch (Exception error)
         {
@@ -392,7 +437,11 @@ public sealed class PaymentService
             catch (CardLockTimeoutException)
             {
                 await TryRecordSettleLockTimeoutAsync(card.Id, quote.Reference, created.Id);
-                CardLabEvents.BankCallUnanswered(_logger, quote.Reference.Value, "debit");
+                if (outcome is BankOutcome.Unknown)
+                {
+                    CardLabEvents.BankCallUnanswered(_logger, quote.Reference.Value, "debit");
+                }
+
                 return BuildReceipt(quote, created, owedAtConfirm, repeated: false);
             }
         }
