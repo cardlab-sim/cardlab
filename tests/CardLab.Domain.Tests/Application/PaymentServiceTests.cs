@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using CardLab.Domain.Application;
 using CardLab.Domain.Cards;
 using CardLab.Domain.Common;
