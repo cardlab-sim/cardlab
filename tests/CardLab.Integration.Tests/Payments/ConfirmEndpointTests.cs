@@ -43,7 +43,18 @@ public sealed class ConfirmEndpointTests : IClassFixture<ApiFactory>
         Assert.Equal("0.00", receipt.Body.Fee);
         Assert.Equal("0.00", receipt.Body.BalanceOwed);
         Assert.False(receipt.Body.Repeated);
+        Assert.Equal(reference, receipt.Body.Reference);
+        Assert.Equal("150.50", receipt.Body.Amount);
+        Assert.Equal("Brightline Supplies Ltd current account, ending 7731", receipt.Body.From);
+        Assert.Equal("Ops van card, ending 0001", receipt.Body.To);
         Assert.Equal($"Payment complete. £150.50 has left your current account and paid your card. Your card balance is now £0.00. Reference {reference}.", receipt.Body.Message);
+
+        var reloaded = await client.GetReceiptAsync(id, reference);
+        Assert.Equal(HttpStatusCode.OK, reloaded.Status);
+        Assert.Equal("completed", reloaded.Body!.State);
+        Assert.Equal(reference, reloaded.Body.Reference);
+        Assert.Equal(receipt.Body.Message, reloaded.Body.Message);
+        Assert.False(reloaded.Body.Repeated);
 
         var view = (await client.GetCardholderViewAsync(id)).Body!;
         Assert.Equal("0.00", view.BalanceOwed);

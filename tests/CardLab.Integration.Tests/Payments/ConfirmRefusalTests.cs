@@ -61,6 +61,10 @@ public sealed class ConfirmRefusalTests : IClassFixture<ApiFactory>
         var opsVan = (await _fixture.Database.CardIdAsync(TestSeed.OpsVan.Name)).Value;
         var fieldSales = (await _fixture.Database.CardIdAsync(TestSeed.FieldSales.Name)).Value;
 
+        var view = (await client.GetCardholderViewAsync(opsVan)).Body!;
+        Assert.Equal("nothing_to_pay", view.Availability);
+        Assert.Equal("Nothing to pay. Your card balance is £0.00.", view.AvailabilityMessage);
+
         var nothing = await client.CreateQuoteAsync(opsVan);
 
         Assert.Equal(HttpStatusCode.Conflict, nothing.Status);
@@ -71,7 +75,7 @@ public sealed class ConfirmRefusalTests : IClassFixture<ApiFactory>
 
         await client.SimulatePurchaseAsync(fieldSales, new SimulatedPurchase("10.00", "fuel", "Shell", null));
         var otherCardsReference = (await client.CreateQuoteAsync(fieldSales)).Body!.Reference;
-        foreach (var reference in new[] { "not-a-reference", "pay-abcdefgh", "PAY-UNKNOWN1".Replace("U", "V"), otherCardsReference })
+        foreach (var reference in new[] { "not-a-reference", "pay-abcdefgh", "PAY-ZZZZZZZZ", otherCardsReference })
         {
             Assert.Equal(HttpStatusCode.NotFound, (await client.ConfirmAsync(opsVan, reference)).Status);
             Assert.Equal(HttpStatusCode.NotFound, (await client.CheckAsync(opsVan, reference)).Status);

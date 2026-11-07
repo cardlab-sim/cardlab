@@ -38,6 +38,11 @@ public sealed class FakeBankEndpointTests : IClassFixture<ApiFactory>
         Assert.Equal("refuse_insufficient_funds", silent.Body!.NextDebitOutcome);
         Assert.Equal("does_not_answer", silent.Body.NextStatusCheck);
 
+        var debitOnly = await client.SetSteeringAsync("complete");
+        Assert.Equal("complete", debitOnly.Body!.NextDebitOutcome);
+        Assert.Equal("does_not_answer", debitOnly.Body.NextStatusCheck);
+        await client.SetSteeringAsync("refuse_insufficient_funds");
+
         var junk = await client.SetSteeringAsync("explode");
         Assert.Equal(HttpStatusCode.BadRequest, junk.Status);
         var after = await client.GetFakeBankAsync();
