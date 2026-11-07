@@ -147,7 +147,7 @@ bounded by the check's own 10 s budget; on expiry the check appends `StatusCheck
 |---|---|---|---|
 | Fits requirements | R-15 (ledger persists, reset to seed), AC-13 (within 10 s + 2 s), NFR-2 budget exercised for real | R-15 yes; the budget code path is never exercised end to end | memory loses the ledger on restart (AC-22 fails); file storage on App Service is fragile |
 | Code we write | 4 tables, one adapter, one steering endpoint | same minus the delay | + project, migrations history, DI |
-| Test effort & harness | integration tests set `CardLab:Payments:BankTimeoutSeconds=1` so the wait is 1 s; E2E uses the real 10 s once | fast but hollow | more fixtures |
+| Test effort & harness | integration tests set `CardLab:Payments:BankTimeoutSeconds=1` so the wait is 1 s; E2E uses the real 10 s where a scenario needs a pending state (4 waits: T-E-3 twice, T-E-5, T-E-6; PR-08 review F8) | fast but hollow | more fixtures |
 | Complexity | low | low | medium |
 | Maintainability | one migrations history | one | two |
 | Run cost | £0 | £0 | £0 |
@@ -593,7 +593,7 @@ No new secrets; the fake adapter needs none (NFR-3). No new repo variables or Bi
 | Unit (application) | `PaymentService`, `CardholderViewService`, `InFlightPayments` | services | `InMemoryCardStore` (+ payments), `FakeBank`, `FakePaymentReferences`, `FakeClock`, `CapturingLogger<T>` | < 50 ms (bank timeout tests use a `FakeBank` that throws `OperationCanceledException` on the budget token immediately) | `tests/CardLab.Domain.Tests/Application/` | same |
 | Unit (web) | cardholder pages, review, receipt, fake-bank panel, admin record page | components | `FakeApiClient` | < 100 ms | `web/src/**/*.test.tsx` | `npm test --prefix web -- --run` |
 | Integration | `SqlPaymentWriter` + `SqlCardStore` payment reads via the contract suite; `SqlFakeBank` via the bank contract suite; cardholder/admin/fake-bank endpoints through `ApiFactory`; concurrency (AC-10, AC-21-style); timeout path with `BankTimeoutSeconds=1`; logging; privacy; reset | SQL Server, EF Core, Kestrel in-process | nothing (the fake bank *is* the adapter under test) | < 2 s each; timeout tests ~1 s | `tests/CardLab.Integration.Tests/Payments/` | `dotnet test tests/CardLab.Integration.Tests` |
-| E2E | J-1, J-2, J-3 in a browser; axe; keyboard; smoke on `demo` | whole system | nothing | seconds; one spec waits 10 s | `tests/e2e/src/payments/` | `npm run e2e --prefix tests/e2e` |
+| E2E | J-1, J-2, J-3 in a browser; axe; keyboard; smoke on `demo` | whole system | nothing | seconds; four real 10 s waits (T-E-3 ×2, T-E-5, T-E-6) | `tests/e2e/src/payments/` | `npm run e2e --prefix tests/e2e` |
 
 Rules (as 001): unit tests never touch disk, network, clock or random; integration tests own a
 fresh database per class; E2E resets through `/api/test/reset` before each journey except `smoke`.
@@ -686,7 +686,7 @@ Test ids: `T-U-n` unit, `T-P-n` property, `T-W-n` web unit, `T-I-n` integration,
 
 ### 15.5 Not tested (on purpose)
 - SQL Server's filtered unique index semantics (we test our use: two pending inserts, one fails).
-- The 10 s real wait in unit and integration layers (budget set to 1 s there; one E2E spec waits).
+- The 10 s real wait in unit and integration layers (budget set to 1 s there; E2E waits the real 10 s four times: T-E-3 ×2, T-E-5, T-E-6).
 - `CancellationTokenSource` behaviour; EF Core; React Router.
 - The fake bank as a model of a real bank: only the port contract is tested.
 - Retention (6 years) as time passes: tested as "no delete path exists" (review) and AC-37.
@@ -742,6 +742,7 @@ clock.
 ## Change log
 | Date | Change | Reason |
 |------|--------|--------|
+| 2026-11-07 | Doc correction (PR-08 review F8): the E2E layer waits the real 10 s bank budget four times (T-E-3 twice, T-E-5, T-E-6), not once; DEC-6 table, §15 layer table and non-goals updated. No behaviour change. | PR-08 review |
 | 2026-11-07 | Erratum BUG-009 (human, via /sdlc:bugs): the activity list shows a purchase at its processor timestamp (as 001's transaction history, AC-38) while ordering stays by decision time; §5 `ListActivityAsync`. Gate 2 stays approved. | PR-08 found 001's formatting E2E red |
 | 2026-11-07 | Errata from build reviews (Gate 2 stays approved; decisions by the human via /sdlc:bugs): BUG-002 §13 bank budget not linked to the request token, a disconnect never cancels the debit; BUG-003 DEC-5 / Flow 2 a check awaits an in-flight confirm within its own 10 s budget; BUG-004 Flow 6 / §6 *time out, not received* records a simulated NotReceived request; BUG-005 DEC-15 / §6 Origin stored as the enum name. | PR-04 / PR-05 reviews (F3, F4; F4, F8) |
 | 2026-11-07 | Round 2 answers: Q-9..Q-12 as recommended → DEC-11..DEC-14 chosen; DEC-15 origin marker added on the human's condition (smoke records distinguishable: `Origin` column, header, badges; requirements note for the gate). Open questions empty; ADR-006, ADR-007 written; designer's size L in estimate.md. Ready for Gate 2. | round 2 answers (human) |
