@@ -82,7 +82,7 @@
       "depends_on": [
         "PR-02"
       ],
-      "status": "coding",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/05-sql-and-fake-bank",
       "url": "https://github.com/cardlab-sim/cardlab/pull/40"
     },
@@ -125,9 +125,7 @@
       "url": null
     }
   ],
-  "bugs_open": [
-    "BUG-004"
-  ],
+  "bugs_open": [],
   "resume": null,
   "history": [
     {

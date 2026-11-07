@@ -9,7 +9,7 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 
 | BUG-002 | reviewer (PR-04, F4) | S3 | NFR-2, R-9 | Client disconnect cancels the bank call (budget linked to request token), contrary to design §13 | design | fix-now (option A: code matches design) | fixed | build (PR-04 fix round) | | 2026-11-07 |
 | BUG-003 | reviewer (PR-04, F3) | S4 | R-9 | Status check awaiting an in-flight confirm is undocumented and unbounded | design | fix-now (option A: record + cap at 10 s) | fixed | build (PR-04 fix round) | | 2026-11-07 |
-| BUG-004 | reviewer (PR-05, F4) | S2 | R-15 | Steered "time out, not received" failure is not marked simulated | design | fix-now (option A: amend design + code) | in-progress | build (PR-05 fix round) | | 2026-11-07 |
+| BUG-004 | reviewer (PR-05, F4) | S2 | R-15 | Steered "time out, not received" failure is not marked simulated | design | fix-now (option A: amend design + code) | fixed | build (PR-05 fix round) | | 2026-11-07 |
 | BUG-005 | reviewer (PR-05, F8) | S4 | DEC-15 | Origin stored as enum name, design text said deploy_smoke | design | fix-now (amend design text) | fixed | — | | 2026-11-07 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -59,7 +59,7 @@ design: Flow 6 / DEC-6 omitted recording the steered not-received request.
 ### Decision (human, 2026-11-07)
 "A. Amend design + code (Recommended)": record `BankDebitRequest` Outcome NotReceived, Simulated = 1, no ledger entry, no balance change; status check returns NotReceived(simulated). Design Flow 6 / §6 erratum.
 ### Resolution
-…
+PR-05 (#40, head 4ab098e): simulated NotReceived request row under steering; status check reads it back. Orchestrator mutation: recorded NotReceived mapped to not-simulated fails 2 integration tests. Moves to verified after validation (AC-33 / R-15 path).
 
 ## BUG-005
 **Repro:** `SqlPaymentWriter.cs:125` stores `Origin` as the enum name (`DeploySmoke`); design §6 / DEC-15 said `deploy_smoke`.
