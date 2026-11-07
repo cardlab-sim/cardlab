@@ -48,7 +48,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "coding",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/02-test-harness",
       "url": "https://github.com/cardlab-sim/cardlab/pull/36"
     },

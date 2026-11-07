@@ -5,7 +5,7 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 
 | BUG | Found by | Severity | AC/R | Title | Root-cause layer | Decision | Status | Resume at | Issue | Updated |
 |-----|----------|----------|------|-------|------------------|----------|--------|-----------|-------|---------|
-| BUG-001 | reviewer (PR-02, F3) | S3 | AC-3 | Store contract P-1 expects the test's own linked account id, which the shared SQL test database cannot return | plan | fix-now (option A) | in-progress | build (PR-02 fix round) | | 2026-11-07 |
+| BUG-001 | reviewer (PR-02, F3) | S3 | AC-3 | Store contract P-1 expects the test's own linked account id, which the shared SQL test database cannot return | plan | fix-now (option A) | fixed | build (PR-02 fix round) | | 2026-11-07 |
 
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
@@ -22,4 +22,4 @@ Options: (A) P-1 asserts the fields every row shares (builder defaults = seed: D
 ### Decision (human, 2026-11-07)
 "A. Loosen P-1 (Recommended)": P-1 asserts the fields every linked-account row shares (DisplayName, LastFour 7731, BankRef = Seed.BankAccountRef, AuthorityBasis) plus a non-empty id. The P-1 rule lives in the PR-02-owned stub comment of `PaymentStoreContractTests.cs`, so the PR-02 coder changes comment and test together; no brief text names the id.
 ### Resolution
-…
+PR-02 (#36) fix round, head a03d3ff: P-1 asserts the shared fields plus a non-empty id; reviewer recheck PASSED (mutations: wrong AuthorityBasis or empty BankRef fail P-1, random Id passes). Moves to verified once P-1 passes on SQL in PR-05 (T-I-16).
