@@ -1,4 +1,3 @@
-import { notImplemented } from '../notImplemented';
 import { ApiError, type ApiClient } from './apiClient';
 import type {
   ActivityEntry,
@@ -92,46 +91,57 @@ export class HttpApiClient implements ApiClient {
     throw await this.toError(response);
   }
 
-  // ---- 002 (stubs; implemented in PR-03)
+  // ---- 002 full balance payment (design §7)
 
   getCardholderView(id: string): Promise<CardholderView> {
-    return notImplemented('PR-03', id);
+    return this.json<CardholderView>('GET', this.cardholderPath(id));
   }
 
   createQuote(id: string): Promise<Quote> {
-    return notImplemented('PR-03', id);
+    return this.json<Quote>('POST', `${this.cardholderPath(id)}/quotes`);
   }
 
   confirmPayment(id: string, reference: string): Promise<Receipt> {
-    return notImplemented('PR-03', id, reference);
+    return this.json<Receipt>('POST', `${this.receiptPath(id, reference)}/confirm`);
   }
 
   checkPayment(id: string, reference: string): Promise<Receipt> {
-    return notImplemented('PR-03', id, reference);
+    return this.json<Receipt>('POST', `${this.receiptPath(id, reference)}/check`);
   }
 
   getReceipt(id: string, reference: string): Promise<Receipt> {
-    return notImplemented('PR-03', id, reference);
+    return this.json<Receipt>('GET', this.receiptPath(id, reference));
   }
 
   getFakeBank(): Promise<FakeBank> {
-    return notImplemented('PR-03');
+    return this.json<FakeBank>('GET', '/api/fake-bank');
   }
 
   setFakeBank(steering: SteeringInput): Promise<FakeBank> {
-    return notImplemented('PR-03', steering);
+    return this.json<FakeBank>('PUT', '/api/fake-bank/steering', steering);
   }
 
   listActivity(id: string): Promise<ActivityEntry[]> {
-    return notImplemented('PR-03', id);
+    return this.json<ActivityEntry[]>('GET', `${this.cardPath(id)}/activity`);
   }
 
   listPaymentRecords(id: string): Promise<PaymentListItem[]> {
-    return notImplemented('PR-03', id);
+    return this.json<PaymentListItem[]>('GET', `${this.cardPath(id)}/payments`);
   }
 
   getPaymentRecord(id: string, reference: string): Promise<PaymentRecord> {
-    return notImplemented('PR-03', id, reference);
+    return this.json<PaymentRecord>(
+      'GET',
+      `${this.cardPath(id)}/payments/${encodeURIComponent(reference)}`,
+    );
+  }
+
+  private cardholderPath(id: string): string {
+    return `/api/cardholder/cards/${encodeURIComponent(id)}`;
+  }
+
+  private receiptPath(id: string, reference: string): string {
+    return `${this.cardholderPath(id)}/payments/${encodeURIComponent(reference)}`;
   }
 
   private cardPath(id: string): string {
