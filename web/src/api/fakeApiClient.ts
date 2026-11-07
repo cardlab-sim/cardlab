@@ -17,6 +17,7 @@ import type {
   NextDebitOutcome,
   NextStatusCheck,
   PaymentListItem,
+  PaymentOrigin,
   PaymentProblemCode,
   PaymentRecord,
   PaymentState,
@@ -58,8 +59,17 @@ interface PaymentRec {
   debitedAt: string | null;
 }
 
-type ActivityItem =
-  { kind: 'purchase'; at: string; cents: number } | { kind: 'payment'; reference: string };
+interface PurchaseItem {
+  kind: 'purchase';
+  at: string;
+  cents: number;
+  description: string;
+  category: Category;
+  outcome: Decision['outcome'];
+  reason: Decision['reason'];
+}
+
+type ActivityItem = PurchaseItem | { kind: 'payment'; reference: string; at: string };
 
 const MAX_PAYABLE_CENTS = 100000000;
 const AUTHORITY_BASIS =
@@ -105,8 +115,8 @@ function limitValue(category: Category, period: Period, amount: string): string 
  * resolves with a card_not_found decision like the API. Audit `atUtc` and the default `occurredAt` come from
  * `Date` (pin with `vi.setSystemTime`). `calls` records method names.
  * 002: simulates the cardholder payment flow (quote, confirm, check, receipt) with the §17 wording, a one-shot next debit
- * outcome (`withBank`), the status-check steering (`withStatusCheck`) and `addPurchase`; balance owed = purchases minus
- * completed payments. Each payment record carries the events of its attempts
+ * outcome (`withBank`), the status-check steering (`withStatusCheck`) and `addPurchase`; balance owed = approved purchases minus
+ * completed payments (R-1); activity lists approved and declined purchases (by decision time) and payments (by confirm time) newest first, like design §5; `withQuoteOrigin` sets the next quote's origin. Each payment record carries the events of its attempts
  * and `simulated` (true when a fake-bank steering value produced its outcome); steering is one-shot (DEC-6, DEC-7).
  * Every method can be made to hang with `hold()` to test pending states. Results are copies, so callers
  * cannot mutate the fake's state.
@@ -132,6 +142,7 @@ export class FakeApiClient implements ApiClient {
   private nextStatusCheck: NextStatusCheck = 'answers';
   private debitSteered = false;
   private checkSteered = false;
+  private nextQuoteOrigin: PaymentOrigin = 'cardholder_view';
 
   constructor(seed: FakeSeed = { cards: [] }) {
     this.cards = new Map(seed.cards.map((card) => [card.id, structuredClone(card)]));
@@ -150,7 +161,15 @@ export class FakeApiClient implements ApiClient {
       ];
       this.activity.set(
         id,
-        amounts.map((amount): ActivityItem => ({ kind: 'purchase', at, cents: toCents(amount) })),
+        amounts.map((amount): ActivityItem => ({
+          kind: 'purchase',
+          at,
+          cents: toCents(amount),
+          description: 'Card purchase',
+          category: 'other',
+          outcome: 'approved',
+          reason: 'approved',
+        })),
       );
     }
     this.account = {
@@ -181,7 +200,17 @@ export class FakeApiClient implements ApiClient {
       kind: 'purchase',
       at: new Date().toISOString(),
       cents: toCents(amount),
+      description: 'Card purchase',
+      category: 'other',
+      outcome: 'approved',
+      reason: 'approved',
     });
+  }
+
+  /** Sets the origin of the next quote (one-shot, e.g. 'deploy_smoke' for DEC-15 badges); returns the fake for chaining. */
+  withQuoteOrigin(origin: PaymentOrigin): this {
+    this.nextQuoteOrigin = origin;
+    return this;
   }
 
   /** Makes every subsequent call stay pending until the returned release function is called. */
@@ -317,6 +346,15 @@ export class FakeApiClient implements ApiClient {
       reason: decision.reason,
     };
     this.transactions.set(id, [transaction, ...(this.transactions.get(id) ?? [])]);
+    this.activityOf(id).unshift({
+      kind: 'purchase',
+      at: new Date().toISOString(),
+      cents: toCents(input.amount),
+      description: input.merchant,
+      category: input.category,
+      outcome: decision.outcome,
+      reason: decision.reason,
+    });
     return { ...structuredClone(decision), transactionId };
   }
 
@@ -365,8 +403,9 @@ export class FakeApiClient implements ApiClient {
         button: `Confirm payment of ${formatMoney(amount)}`,
       },
       createdAt: new Date().toISOString(),
-      origin: 'cardholder_view',
+      origin: this.nextQuoteOrigin,
     };
+    this.nextQuoteOrigin = 'cardholder_view';
     this.payments.set(reference, {
       reference,
       cardId: id,
@@ -421,7 +460,7 @@ export class FakeApiClient implements ApiClient {
     this.nextDebitOutcome = 'complete';
     this.debitSteered = false;
     rec.simulated = steered;
-    this.activityOf(id).unshift({ kind: 'payment', reference });
+    this.activityOf(id).unshift({ kind: 'payment', reference, at: now });
     this.addEvent(rec, 'confirm_created', null, 'pending', null, false);
     this.addEvent(rec, 'debit_requested', null, null, null, false);
     if (outcome === 'complete' && rec.cents > this.account.balanceCents) {
@@ -516,7 +555,7 @@ export class FakeApiClient implements ApiClient {
         createdAt: rec.createdAt,
         settledAt: rec.state === 'pending' ? null : rec.effectiveAt,
         failureReason: rec.failureReason,
-        origin: 'cardholder_view',
+        origin: rec.quote.origin,
       }));
   }
 
@@ -544,7 +583,7 @@ export class FakeApiClient implements ApiClient {
         at: rec.state === null ? null : rec.createdAt,
         actor: { kind: 'cardholder', name: card.cardholderName },
         authorityBasis: AUTHORITY_BASIS,
-        origin: 'cardholder_view',
+        origin: q.origin,
       },
       payment:
         rec.state === null
@@ -581,13 +620,14 @@ export class FakeApiClient implements ApiClient {
   }
 
   private owed(id: string): number {
-    return this.activityOf(id).reduce((sum, item) => {
+    const total = this.activityOf(id).reduce((sum, item) => {
       if (item.kind === 'purchase') {
-        return sum + item.cents;
+        return item.outcome === 'approved' ? sum + item.cents : sum;
       }
       const rec = this.payments.get(item.reference);
       return rec?.state === 'completed' ? sum - rec.cents : sum;
     }, 0);
+    return Math.max(0, total);
   }
 
   private pendingOf(id: string): PaymentRec | undefined {
@@ -689,40 +729,42 @@ export class FakeApiClient implements ApiClient {
       message,
       balanceOwed: fromCents(this.owed(rec.cardId)),
       repeated: false,
-      origin: 'cardholder_view',
+      origin: rec.quote.origin,
     };
   }
 
   private activityEntries(id: string): ActivityEntry[] {
-    return this.activityOf(id).map((item): ActivityEntry => {
+    const entries = this.activityOf(id).map((item): ActivityEntry => {
       if (item.kind === 'purchase') {
         return {
           at: item.at,
           kind: 'purchase',
           amount: fromCents(item.cents),
-          description: 'Card purchase',
-          outcome: 'approved',
+          description: item.description,
+          outcome: item.outcome,
           state: null,
           reference: null,
           origin: null,
-          category: 'other',
-          reason: 'approved',
+          category: item.category,
+          reason: item.reason,
         };
       }
       const rec = this.payments.get(item.reference);
       return {
-        at: rec?.effectiveAt ?? rec?.createdAt ?? '',
+        at: item.at,
         kind: 'payment',
         amount: fromCents(rec?.cents ?? 0),
         description: `Payment ${item.reference}`,
         outcome: null,
         state: rec?.state ?? 'pending',
         reference: item.reference,
-        origin: 'cardholder_view',
+        origin: rec?.quote.origin ?? 'cardholder_view',
         category: null,
         reason: null,
       };
     });
+    // Newest first by time; the stable sort keeps insertion order (newest first) for equal times.
+    return entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   }
 
   private view(id: string): CardholderView {

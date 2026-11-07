@@ -539,4 +539,99 @@ describe('FakeApiClient (002)', () => {
       expect(((await rejection(call)) as ApiError).status).toBe(404);
     }
   });
+
+  // T-W-10 · PR-03f · web unit (BUG-007)
+  // Given purchases of £150.50, When a £12.50 purchase is simulated, Then balance owed is £163.00 and activity lists it first
+  // Catches: the fake drifting from R-1 (simulated purchases not feeding balance or activity)
+  test('T-W-10 a simulated purchase appears in activity and raises the balance owed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-07-01T12:00:00Z') });
+    const fake = seeded();
+
+    await fake.simulatePurchase('ops-1', purchase);
+
+    expect((await fake.getCard('ops-1')).balanceOwed).toBe('163.00');
+    expect((await fake.getCardholderView('ops-1')).balanceOwed).toBe('163.00');
+    const activity = await fake.listActivity('ops-1');
+    expect(activity.map((a) => [a.description, a.amount, a.category])).toEqual([
+      ['Shell', '12.50', 'fuel'],
+      ['Card purchase', '150.50', 'other'],
+    ]);
+    expect(activity[0]).toMatchObject({
+      kind: 'purchase',
+      outcome: 'approved',
+      reason: 'approved',
+      at: '2026-07-01T12:00:00.000Z',
+    });
+  });
+
+  // T-W-10 · PR-03f · web unit (BUG-007)
+  // Given a declined simulated purchase, When listing, Then it shows in activity with its outcome and reason but the balance owed is unchanged
+  // Catches: declined purchases billed to the card
+  test('T-W-10 a declined simulated purchase is listed but does not raise the balance', async () => {
+    const fake = seeded();
+    fake.nextDecision = exceeded;
+
+    await fake.simulatePurchase('ops-1', purchase);
+
+    expect((await fake.getCard('ops-1')).balanceOwed).toBe('150.50');
+    expect((await fake.listActivity('ops-1'))[0]).toMatchObject({
+      description: 'Shell',
+      amount: '12.50',
+      outcome: 'declined',
+      reason: 'limit_exceeded',
+    });
+  });
+
+  // T-W-10 · PR-03f · web unit (BUG-007)
+  // Given purchases decided and a payment confirmed at different times, When listing, Then activity is newest first by decision time (purchases, ignoring a client timestamp) and confirm time (payments, unmoved by a later status check), like design §5
+  // Catches: rows in insertion order; a client-supplied timestamp or the settlement time used as the activity time
+  test('T-W-10 activity is ordered newest first by decision and confirm time', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-07-01T12:00:00Z') });
+    const fake = seeded();
+    vi.setSystemTime(new Date('2026-07-01T12:03:00Z'));
+    await fake.simulatePurchase('ops-1', { ...purchase, merchant: 'Early' });
+    const quote = await fake.createQuote('ops-1');
+    vi.setSystemTime(new Date('2026-07-01T12:05:00Z'));
+    fake.withBank('timeout_not_received');
+    await fake.confirmPayment('ops-1', quote.reference);
+    vi.setSystemTime(new Date('2026-07-01T12:10:00Z'));
+    await fake.simulatePurchase('ops-1', {
+      ...purchase,
+      merchant: 'Late',
+      timestamp: '2026-06-01T08:00:00Z',
+    });
+    vi.setSystemTime(new Date('2026-07-01T12:20:00Z'));
+    await fake.checkPayment('ops-1', quote.reference);
+
+    const activity = await fake.listActivity('ops-1');
+
+    expect(activity.map((a) => [a.description, a.at])).toEqual([
+      ['Late', '2026-07-01T12:10:00.000Z'],
+      [`Payment ${quote.reference}`, '2026-07-01T12:05:00.000Z'],
+      ['Early', '2026-07-01T12:03:00.000Z'],
+      ['Card purchase', '2026-07-01T12:00:00.000Z'],
+    ]);
+    expect((await fake.getCard('ops-1')).balanceOwed).toBe('175.50');
+  });
+
+  // T-W-10 · PR-03f · web unit (BUG-007)
+  // Given the next quote origin is deploy_smoke, When quoted and confirmed, Then origin shows on the record, receipt, activity and payments list; the following quote is back to cardholder_view
+  // Catches: a hard-coded origin
+  test('T-W-10 a quote origin of deploy_smoke round-trips and is one-shot', async () => {
+    const fake = seeded();
+    fake.withQuoteOrigin('deploy_smoke');
+    const quote = await fake.createQuote('ops-1');
+    expect(quote.origin).toBe('deploy_smoke');
+    const receipt = await fake.confirmPayment('ops-1', quote.reference);
+
+    expect(receipt.origin).toBe('deploy_smoke');
+    expect((await fake.getPaymentRecord('ops-1', quote.reference)).acceptance.origin).toBe(
+      'deploy_smoke',
+    );
+    expect((await fake.listPaymentRecords('ops-1'))[0]?.origin).toBe('deploy_smoke');
+    expect((await fake.listActivity('ops-1'))[0]?.origin).toBe('deploy_smoke');
+
+    await fake.simulatePurchase('ops-1', purchase);
+    expect((await fake.createQuote('ops-1')).origin).toBe('cardholder_view');
+  });
 });
