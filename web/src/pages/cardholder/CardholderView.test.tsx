@@ -27,7 +27,12 @@ const opsVan: CardDetail = {
 function Later({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    setReady(true);
+    const timer = setTimeout(() => {
+      setReady(true);
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+    };
   }, []);
   return ready ? children : null;
 }
