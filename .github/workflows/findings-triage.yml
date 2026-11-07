@@ -1,0 +1,32 @@
+# A human replies /fixed, /dismiss <reason> or /bug on a finding thread. No model: the script from main
+# verifies, records the decision as a structured reply, resolves the thread and re-sets ai-blockers.
+name: findings-triage
+
+on:
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+jobs:
+  triage:
+    if: github.event.comment.in_reply_to_id && startsWith(github.event.comment.body, '/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_USER: ${{ github.event.comment.user.login }}
+          COMMENT_ASSOC: ${{ github.event.comment.author_association }}
+          IN_REPLY_TO: ${{ github.event.comment.in_reply_to_id }}
+        run: python3 tools/findings.py triage

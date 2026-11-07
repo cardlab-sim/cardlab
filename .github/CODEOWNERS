@@ -14,3 +14,6 @@ src/CardLab.Infrastructure/**    @dj-niobium
 # gates: requirements, design and plan documents are reviewed PRs
 docs/features/**                 @dj-niobium
 docs/sdlc/**                     @dj-niobium
+
+# the enforcement scripts (findings, tiers) are controls too
+tools/**                         @dj-niobium
