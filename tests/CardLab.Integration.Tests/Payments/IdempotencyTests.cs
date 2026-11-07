@@ -38,8 +38,7 @@ public sealed class IdempotencyTests : IClassFixture<ApiFactory>
         {
             Assert.Equal(HttpStatusCode.OK, repeat.Status);
             Assert.True(repeat.Body!.Repeated);
-            Assert.Equal(first.Body with { Repeated = true, Time = default }, repeat.Body with { Time = default });
-            Assert.True((first.Body.Time - repeat.Body.Time).Duration() < TimeSpan.FromMilliseconds(1), "the repeated receipt time is the stored time (the store keeps milliseconds)");
+            Assert.Equal(first.Body with { Repeated = true }, repeat.Body);
         }
 
         Assert.Equal(1, await _fixture.Database.CountRowsAsync("Payment"));
@@ -69,6 +68,7 @@ public sealed class IdempotencyTests : IClassFixture<ApiFactory>
             Assert.Equal("completed", r.Body!.State);
             Assert.Equal(reference, r.Body.Reference);
         });
+        Assert.Single(responses.Select(r => r.Body! with { Repeated = false }).Distinct());
         Assert.Equal(1, await _fixture.Database.CountRowsAsync("Payment"));
         Assert.Equal(1, await _fixture.Database.CountRowsAsync("BankEntry"));
     }

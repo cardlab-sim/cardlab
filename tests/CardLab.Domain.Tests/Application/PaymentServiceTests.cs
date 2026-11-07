@@ -77,6 +77,36 @@ public sealed class PaymentServiceTests
         Assert.Equal(0, f.Store.QuoteCount);
     }
 
+    // Catches: a receipt or record carrying a sub-millisecond instant that the store (milliseconds) would round, so repeats differ on the wire (BUG-008, AC-9, AC-10)
+    [Fact]
+    public async Task Instants_reaching_receipt_and_record_are_cut_to_milliseconds()
+    {
+        var f = await PaymentFixture.CreateAsync();
+        f.Clock.Set(PaymentFixture.T0.AddTicks(7777));
+        var quote = await f.QuoteOkAsync();
+        f.Clock.Set(PaymentFixture.T0.AddTicks(12345));
+
+        var receipt = await f.ConfirmOkAsync(quote.Reference);
+
+        Assert.Equal(PaymentFixture.T0.AddMilliseconds(1), receipt.Time);
+        var settlement = (await f.RecordAsync(quote.Reference)).Payment!.Settlement!;
+        Assert.Equal(PaymentFixture.T0.AddMilliseconds(1), settlement.SettledAtUtc);
+        Assert.Equal(PaymentFixture.T0.AddMilliseconds(1), settlement.EffectiveAtUtc);
+    }
+
+    // Catches: the bank's reported debit time reaching the receipt with sub-millisecond ticks (BUG-008)
+    [Fact]
+    public async Task Bank_debit_time_is_cut_to_milliseconds()
+    {
+        var f = await PaymentFixture.CreateAsync();
+        var quote = await f.QuoteOkAsync();
+        f.Bank.NextDebit(BankOutcomes.Completed(PaymentFixture.T0.AddSeconds(3).AddTicks(9999)));
+
+        var receipt = await f.ConfirmOkAsync(quote.Reference);
+
+        Assert.Equal(PaymentFixture.T0.AddSeconds(3), receipt.Time);
+    }
+
     // T-U-10 · PR-04 · unit (application)
     // Given a £150.50 quote and the bank completing naturally, When ConfirmAsync, Then Ok receipt Completed, fee £0.00, Time = effective time, W-2 with £150.50 and £0.00, BalanceOwed £0.00, Repeated false; store balance £0.00; quote Confirmed; events ConfirmCreated, DebitRequested, BankCompleted in order; bank available £24,849.50 with one entry for the reference
     // Catches: a confirm that moves money on one side only, or a receipt that misstates the outcome (AC-7, R-9, R-12)
