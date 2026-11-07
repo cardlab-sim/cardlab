@@ -1,4 +1,4 @@
-import { notImplemented } from '../notImplemented';
+import { formatMoney } from '../format/money';
 import { ApiError, type ApiClient } from './apiClient';
 import type {
   ActivityEntry,
@@ -10,12 +10,20 @@ import type {
   CardSummary,
   Category,
   Decision,
+  AccountEntry,
+  FailureReason,
   FakeBank,
   Limit,
+  NextDebitOutcome,
+  NextStatusCheck,
   PaymentListItem,
+  PaymentProblemCode,
   PaymentRecord,
+  PaymentState,
   Period,
+  ProblemDetails,
   Quote,
+  QuoteStatus,
   Receipt,
   SimulatePurchaseInput,
   SteeringInput,
@@ -27,6 +35,49 @@ export interface FakeSeed {
   cards: CardDetail[];
   transactions?: Record<string, Transaction[]>;
   audit?: Record<string, AuditEntry[]>;
+  /** 002: purchase amounts per card id, newest first (added to the card's seeded `balanceOwed`). */
+  purchases?: Record<string, string[]>;
+  /** 002: the linked current account (defaults: "Brightline Supplies Ltd current account", 7731, 25000.00). */
+  account?: { displayName?: string; lastFour?: string; availableBalance?: string };
+}
+
+/** One payment attempt: the quote and, once confirmed, the payment. */
+interface PaymentRec {
+  reference: string;
+  cardId: string;
+  cents: number;
+  quote: Quote;
+  quoteStatus: QuoteStatus;
+  refusal: { balanceCents: number } | null;
+  simulated: boolean;
+  events: PaymentRecord['events'];
+  state: PaymentState | null;
+  failureReason: FailureReason | null;
+  createdAt: string;
+  effectiveAt: string | null;
+  debitedAt: string | null;
+}
+
+type ActivityItem =
+  { kind: 'purchase'; at: string; cents: number } | { kind: 'payment'; reference: string };
+
+const MAX_PAYABLE_CENTS = 100000000;
+const AUTHORITY_BASIS =
+  'Standing authority from Brightline Supplies Ltd to pay this card from this account.';
+const WHEN_LINE =
+  'When: normally within seconds of confirming. If your bank does not answer straight away, this payment shows as pending until we know the outcome. We never take the money twice.';
+
+function toCents(amount: string): number {
+  const [whole = '0', fraction = ''] = amount.split('.');
+  return Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+}
+
+function fromCents(cents: number): string {
+  return `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}`;
+}
+
+function conflict(code: PaymentProblemCode, message: string, extra: ProblemDetails = {}): ApiError {
+  return new ApiError(409, { title: 'Conflict', status: 409, code, message, ...extra });
 }
 
 const AMOUNT_PATTERN = /^\d+(\.\d{1,2})?$/;
@@ -53,6 +104,10 @@ function limitValue(category: Category, period: Period, amount: string): string 
  * card_not_found prepends a transaction. Unknown ids reject with ApiError 404, except simulatePurchase, which
  * resolves with a card_not_found decision like the API. Audit `atUtc` and the default `occurredAt` come from
  * `Date` (pin with `vi.setSystemTime`). `calls` records method names.
+ * 002: simulates the cardholder payment flow (quote, confirm, check, receipt) with the §17 wording, a one-shot next debit
+ * outcome (`withBank`), the status-check steering (`withStatusCheck`) and `addPurchase`; balance owed = purchases minus
+ * completed payments. Each payment record carries the events of its attempts
+ * and `simulated` (true when a fake-bank steering value produced its outcome); steering is one-shot (DEC-6, DEC-7).
  * Every method can be made to hang with `hold()` to test pending states. Results are copies, so callers
  * cannot mutate the fake's state.
  */
@@ -68,6 +123,15 @@ export class FakeApiClient implements ApiClient {
   private readonly audit: Map<string, AuditEntry[]>;
   private gate: Promise<void> | null = null;
   private nextId = 1;
+  private nextReference = 1;
+  private readonly activity = new Map<string, ActivityItem[]>();
+  private readonly payments = new Map<string, PaymentRec>();
+  private readonly ledger: AccountEntry[] = [];
+  private readonly account: { displayName: string; lastFour: string; balanceCents: number };
+  private nextDebitOutcome: NextDebitOutcome = 'complete';
+  private nextStatusCheck: NextStatusCheck = 'answers';
+  private debitSteered = false;
+  private checkSteered = false;
 
   constructor(seed: FakeSeed = { cards: [] }) {
     this.cards = new Map(seed.cards.map((card) => [card.id, structuredClone(card)]));
@@ -77,6 +141,47 @@ export class FakeApiClient implements ApiClient {
     this.audit = new Map(
       Object.entries(seed.audit ?? {}).map(([id, list]) => [id, structuredClone(list)]),
     );
+    const at = new Date().toISOString();
+    for (const [id, card] of this.cards) {
+      const opening = toCents(card.balanceOwed);
+      const amounts = [
+        ...(seed.purchases?.[id] ?? []),
+        ...(opening > 0 ? [fromCents(opening)] : []),
+      ];
+      this.activity.set(
+        id,
+        amounts.map((amount): ActivityItem => ({ kind: 'purchase', at, cents: toCents(amount) })),
+      );
+    }
+    this.account = {
+      displayName: seed.account?.displayName ?? 'Brightline Supplies Ltd current account',
+      lastFour: seed.account?.lastFour ?? '7731',
+      balanceCents: toCents(seed.account?.availableBalance ?? '25000.00'),
+    };
+  }
+
+  /** Sets the next debit outcome (one-shot, same wire values as the fake bank); returns the fake for chaining. */
+  withBank(outcome: NextDebitOutcome): this {
+    this.nextDebitOutcome = outcome;
+    this.debitSteered = true;
+    return this;
+  }
+
+  /** Sets whether status checks are answered (one-shot like the debit outcome: applies to the next status check that reaches the bank, then reverts to answers); returns the fake for chaining. */
+  withStatusCheck(check: NextStatusCheck): this {
+    this.nextStatusCheck = check;
+    this.checkSteered = true;
+    return this;
+  }
+
+  /** Adds an approved purchase to the card's activity (raises the balance owed, e.g. between quote and confirm). */
+  addPurchase(id: string, amount: string): void {
+    this.find(id);
+    this.activityOf(id).unshift({
+      kind: 'purchase',
+      at: new Date().toISOString(),
+      cents: toCents(amount),
+    });
   }
 
   /** Makes every subsequent call stay pending until the returned release function is called. */
@@ -109,7 +214,7 @@ export class FakeApiClient implements ApiClient {
 
   async getCard(id: string): Promise<CardDetail> {
     await this.enter('getCard');
-    return structuredClone(this.find(id));
+    return { ...structuredClone(this.find(id)), balanceOwed: fromCents(this.owed(id)) };
   }
 
   async freeze(id: string): Promise<{ status: CardStatus }> {
@@ -215,46 +320,460 @@ export class FakeApiClient implements ApiClient {
     return { ...structuredClone(decision), transactionId };
   }
 
-  // ---- 002 (stubs; implemented in PR-03)
+  // ---- 002 full balance payment
 
-  getCardholderView(id: string): Promise<CardholderView> {
-    return notImplemented('PR-03', id);
+  async getCardholderView(id: string): Promise<CardholderView> {
+    await this.enter('getCardholderView');
+    return this.view(id);
   }
 
-  createQuote(id: string): Promise<Quote> {
-    return notImplemented('PR-03', id);
+  async createQuote(id: string): Promise<Quote> {
+    await this.enter('createQuote');
+    const card = this.find(id);
+    const pending = this.pendingOf(id);
+    if (pending !== undefined) {
+      throw this.pendingConflict(pending);
+    }
+    const owed = this.owed(id);
+    if (owed === 0) {
+      throw conflict('nothing_to_pay', this.nothingToPayMessage(), { balanceOwed: '0.00' });
+    }
+    if (owed > MAX_PAYABLE_CENTS) {
+      throw conflict('above_limit', this.aboveLimitMessage(owed), { balanceOwed: fromCents(owed) });
+    }
+    const amount = fromCents(owed);
+    const reference = `PAY-${String(this.nextReference++).padStart(8, '0')}`;
+    const to = `${card.name} card, ending ${card.lastFour}`;
+    const quote: Quote = {
+      reference,
+      amount,
+      fee: '0.00',
+      total: amount,
+      from: this.fromText(),
+      to,
+      wording: {
+        version: 'v1',
+        heading: 'Pay your full balance',
+        lines: [
+          `Amount: ${formatMoney(amount)}`,
+          'Fee: £0.00 (no fee)',
+          `Total to pay: ${formatMoney(amount)}`,
+          WHEN_LINE,
+          `From: ${this.fromText()}`,
+          `To: ${to}`,
+        ],
+        button: `Confirm payment of ${formatMoney(amount)}`,
+      },
+      createdAt: new Date().toISOString(),
+      origin: 'cardholder_view',
+    };
+    this.payments.set(reference, {
+      reference,
+      cardId: id,
+      cents: owed,
+      quote,
+      quoteStatus: 'open',
+      refusal: null,
+      simulated: false,
+      events: [],
+      state: null,
+      failureReason: null,
+      createdAt: quote.createdAt,
+      effectiveAt: null,
+      debitedAt: null,
+    });
+    return structuredClone(quote);
   }
 
-  confirmPayment(id: string, reference: string): Promise<Receipt> {
-    return notImplemented('PR-03', id, reference);
+  async confirmPayment(id: string, reference: string): Promise<Receipt> {
+    await this.enter('confirmPayment');
+    this.find(id);
+    const known = this.payments.get(reference);
+    if (known?.cardId === id && known.quoteStatus === 'refused' && known.state === null) {
+      const balanceAtRefusal = known.refusal?.balanceCents ?? 0;
+      this.addEvent(known, 'confirm_refused', null, null, 'quote_refused', false);
+      throw conflict('quote_refused', this.balanceChangedMessage(balanceAtRefusal), {
+        balanceOwed: fromCents(this.owed(id)),
+      });
+    }
+    const rec = this.findPayment(id, reference);
+    if (rec.state !== null) {
+      this.addEvent(rec, 'confirm_repeated', rec.state, rec.state, null, false);
+      return { ...this.receipt(rec), repeated: true };
+    }
+    const pending = this.pendingOf(id);
+    if (pending !== undefined) {
+      throw this.pendingConflict(pending);
+    }
+    const owed = this.owed(id);
+    if (owed !== rec.cents) {
+      rec.quoteStatus = 'refused';
+      rec.refusal = { balanceCents: owed };
+      this.addEvent(rec, 'confirm_refused', null, null, 'balance_changed', false);
+      throw conflict('balance_changed', this.balanceChangedMessage(owed), {
+        balanceOwed: fromCents(owed),
+      });
+    }
+    rec.quoteStatus = 'confirmed';
+    const now = new Date().toISOString();
+    const outcome = this.nextDebitOutcome;
+    const steered = this.debitSteered;
+    this.nextDebitOutcome = 'complete';
+    this.debitSteered = false;
+    rec.simulated = steered;
+    this.activityOf(id).unshift({ kind: 'payment', reference });
+    this.addEvent(rec, 'confirm_created', null, 'pending', null, false);
+    this.addEvent(rec, 'debit_requested', null, null, null, false);
+    if (outcome === 'complete' && rec.cents > this.account.balanceCents) {
+      this.settle(rec, 'failed', now, 'insufficient_funds');
+      this.addEvent(rec, 'bank_refused', 'pending', 'failed', 'insufficient_funds', steered);
+    } else if (outcome === 'complete') {
+      this.debit(rec, now);
+      this.settle(rec, 'completed', now, null);
+      this.addEvent(rec, 'bank_completed', 'pending', 'completed', null, steered);
+    } else if (outcome === 'refuse_insufficient_funds') {
+      this.settle(rec, 'failed', now, 'insufficient_funds');
+      this.addEvent(rec, 'bank_refused', 'pending', 'failed', 'insufficient_funds', steered);
+    } else if (outcome === 'refuse_account_unavailable') {
+      this.settle(rec, 'failed', now, 'account_unavailable');
+      this.addEvent(rec, 'bank_refused', 'pending', 'failed', 'account_unavailable', steered);
+    } else {
+      rec.state = 'pending';
+      if (outcome === 'timeout_debit_applied') {
+        this.debit(rec, now);
+      }
+      this.addEvent(rec, 'bank_unanswered', 'pending', 'pending', null, steered);
+    }
+    return this.receipt(rec);
   }
 
-  checkPayment(id: string, reference: string): Promise<Receipt> {
-    return notImplemented('PR-03', id, reference);
+  async checkPayment(id: string, reference: string): Promise<Receipt> {
+    await this.enter('checkPayment');
+    const rec = this.findPayment(id, reference);
+    if (rec.state !== 'pending') {
+      return this.receipt(rec);
+    }
+    const check = this.nextStatusCheck;
+    const steered = this.checkSteered;
+    this.nextStatusCheck = 'answers';
+    this.checkSteered = false;
+    rec.simulated = rec.simulated || steered;
+    if (check === 'does_not_answer') {
+      this.addEvent(rec, 'status_check_unanswered', 'pending', 'pending', null, steered);
+      return {
+        ...this.receipt(rec),
+        message: `Still pending. Your bank did not answer. No new payment has been requested and no money has been taken twice. Try Check status again shortly. Reference ${reference}.`,
+      };
+    }
+    if (rec.debitedAt !== null) {
+      this.settle(rec, 'completed', rec.debitedAt, null);
+      this.addEvent(rec, 'status_check_completed', 'pending', 'completed', null, steered);
+    } else {
+      this.settle(rec, 'failed', new Date().toISOString(), 'not_received');
+      this.addEvent(rec, 'status_check_not_received', 'pending', 'failed', 'not_received', steered);
+    }
+    return this.receipt(rec);
   }
 
-  getReceipt(id: string, reference: string): Promise<Receipt> {
-    return notImplemented('PR-03', id, reference);
+  async getReceipt(id: string, reference: string): Promise<Receipt> {
+    await this.enter('getReceipt');
+    return this.receipt(this.findPayment(id, reference));
   }
 
-  getFakeBank(): Promise<FakeBank> {
-    return notImplemented('PR-03');
+  async getFakeBank(): Promise<FakeBank> {
+    await this.enter('getFakeBank');
+    return this.bank();
   }
 
-  setFakeBank(steering: SteeringInput): Promise<FakeBank> {
-    return notImplemented('PR-03', steering);
+  async setFakeBank(steering: SteeringInput): Promise<FakeBank> {
+    await this.enter('setFakeBank');
+    if (steering.nextDebitOutcome !== undefined) {
+      this.withBank(steering.nextDebitOutcome);
+    }
+    if (steering.nextStatusCheck !== undefined) {
+      this.withStatusCheck(steering.nextStatusCheck);
+    }
+    return this.bank();
   }
 
-  listActivity(id: string): Promise<ActivityEntry[]> {
-    return notImplemented('PR-03', id);
+  async listActivity(id: string): Promise<ActivityEntry[]> {
+    await this.enter('listActivity');
+    this.find(id);
+    return this.activityEntries(id);
   }
 
-  listPaymentRecords(id: string): Promise<PaymentListItem[]> {
-    return notImplemented('PR-03', id);
+  async listPaymentRecords(id: string): Promise<PaymentListItem[]> {
+    await this.enter('listPaymentRecords');
+    this.find(id);
+    return [...this.payments.values()]
+      .filter((rec) => rec.cardId === id)
+      .reverse()
+      .map((rec): PaymentListItem => ({
+        reference: rec.reference,
+        status: rec.quoteStatus,
+        state: rec.state,
+        amount: fromCents(rec.cents),
+        createdAt: rec.createdAt,
+        settledAt: rec.state === 'pending' ? null : rec.effectiveAt,
+        failureReason: rec.failureReason,
+        origin: 'cardholder_view',
+      }));
   }
 
-  getPaymentRecord(id: string, reference: string): Promise<PaymentRecord> {
-    return notImplemented('PR-03', id, reference);
+  async getPaymentRecord(id: string, reference: string): Promise<PaymentRecord> {
+    await this.enter('getPaymentRecord');
+    const card = this.find(id);
+    const rec = this.findPayment(id, reference, true);
+    const q = rec.quote;
+    return {
+      quote: {
+        reference,
+        kind: 'full',
+        amount: q.amount,
+        fee: q.fee,
+        total: q.total,
+        from: q.from,
+        to: q.to,
+        wording: structuredClone(q.wording),
+        createdAt: q.createdAt,
+      },
+      status: rec.quoteStatus,
+      refusalReason: rec.refusal === null ? null : 'balance_changed',
+      balanceAtRefusal: rec.refusal === null ? null : fromCents(rec.refusal.balanceCents),
+      acceptance: {
+        at: rec.state === null ? null : rec.createdAt,
+        actor: { kind: 'cardholder', name: card.cardholderName },
+        authorityBasis: AUTHORITY_BASIS,
+        origin: 'cardholder_view',
+      },
+      payment:
+        rec.state === null
+          ? null
+          : {
+              state: rec.state,
+              amount: fromCents(rec.cents),
+              fee: '0.00',
+              createdAt: rec.createdAt,
+              settledAt: rec.state === 'pending' ? null : rec.effectiveAt,
+              effectiveAt: rec.state === 'completed' ? rec.effectiveAt : null,
+              bankDebitedAt: rec.debitedAt,
+              failureReason: rec.failureReason,
+              balanceBefore: rec.state === 'pending' ? null : fromCents(rec.cents),
+              balanceAfter:
+                rec.state === 'pending'
+                  ? null
+                  : rec.state === 'completed'
+                    ? '0.00'
+                    : fromCents(rec.cents),
+              simulated: rec.simulated,
+            },
+      events: structuredClone(rec.events),
+    };
+  }
+
+  private activityOf(id: string): ActivityItem[] {
+    let list = this.activity.get(id);
+    if (list === undefined) {
+      list = [];
+      this.activity.set(id, list);
+    }
+    return list;
+  }
+
+  private owed(id: string): number {
+    return this.activityOf(id).reduce((sum, item) => {
+      if (item.kind === 'purchase') {
+        return sum + item.cents;
+      }
+      const rec = this.payments.get(item.reference);
+      return rec?.state === 'completed' ? sum - rec.cents : sum;
+    }, 0);
+  }
+
+  private pendingOf(id: string): PaymentRec | undefined {
+    return [...this.payments.values()].find((rec) => rec.cardId === id && rec.state === 'pending');
+  }
+
+  private pendingConflict(pending: PaymentRec): ApiError {
+    return conflict('payment_pending', this.pendingMessage(pending), {
+      amount: fromCents(pending.cents),
+      pendingReference: pending.reference,
+      balanceOwed: fromCents(this.owed(pending.cardId)),
+    });
+  }
+
+  private findPayment(id: string, reference: string, allowRefused = false): PaymentRec {
+    this.find(id);
+    const rec = this.payments.get(reference);
+    if (rec?.cardId !== id || (!allowRefused && rec.state === null && rec.quoteStatus !== 'open')) {
+      throw new ApiError(404, { title: 'Not Found', status: 404 });
+    }
+    return rec;
+  }
+
+  private balanceChangedMessage(balanceCents: number): string {
+    return `Payment not made. Your card balance changed while you were reviewing. No money has moved. Your card balance is now ${formatMoney(fromCents(balanceCents))}. Review the new amount and confirm again if you want to pay it.`;
+  }
+
+  private addEvent(
+    rec: PaymentRec,
+    kind: string,
+    from: PaymentState | null,
+    to: PaymentState | null,
+    detail: string | null,
+    simulated: boolean,
+  ): void {
+    rec.events.push({ at: new Date().toISOString(), kind, from, to, detail, simulated });
+  }
+
+  private fromText(): string {
+    return `${this.account.displayName}, ending ${this.account.lastFour}`;
+  }
+
+  private debit(rec: PaymentRec, at: string): void {
+    this.account.balanceCents -= rec.cents;
+    rec.debitedAt = at;
+    this.ledger.unshift({
+      reference: rec.reference,
+      amount: fromCents(rec.cents),
+      postedAt: at,
+      narrative: `Card payment, ${rec.quote.to}`,
+    });
+  }
+
+  private settle(
+    rec: PaymentRec,
+    state: PaymentState,
+    at: string,
+    reason: FailureReason | null,
+  ): void {
+    rec.state = state;
+    rec.effectiveAt = at;
+    rec.failureReason = reason;
+  }
+
+  private pendingMessage(rec: PaymentRec): string {
+    return `A payment of ${formatMoney(fromCents(rec.cents))} (reference ${rec.reference}) is still pending. You cannot make another payment until we know its outcome. Choose Check status.`;
+  }
+
+  private nothingToPayMessage(): string {
+    return 'Nothing to pay. Your card balance is £0.00.';
+  }
+
+  private aboveLimitMessage(owed: number): string {
+    return `This balance cannot be paid here. Payments above £1,000,000.00 are not available online. No money has moved. Your card balance is ${formatMoney(fromCents(owed))}. Contact your account administrator.`;
+  }
+
+  private receipt(rec: PaymentRec): Receipt {
+    const balance = formatMoney(fromCents(this.owed(rec.cardId)));
+    const ref = rec.reference;
+    let message: string;
+    if (rec.state === 'completed') {
+      message = `Payment complete. ${formatMoney(fromCents(rec.cents))} has left your current account and paid your card. Your card balance is now ${balance}. Reference ${ref}.`;
+    } else if (rec.state === 'pending') {
+      message = `Payment pending. Your bank has not confirmed this payment yet, so the money may or may not have left your account; we never take it twice. Your card balance shows ${balance} until we know the outcome. Choose Check status to ask your bank now; we also check each time you open this page. Reference ${ref}.`;
+    } else if (rec.failureReason === 'insufficient_funds') {
+      message = `Payment not made. Your bank refused it because the account did not have enough money. No money has moved. Your card balance is still ${balance}. Add money to the account, then try again. Reference ${ref}.`;
+    } else {
+      message = `Payment not made. Your bank could not process it right now. No money has moved. Your card balance is still ${balance}. Try again later. Reference ${ref}.`;
+    }
+    return {
+      reference: ref,
+      state: rec.state ?? 'pending',
+      amount: fromCents(rec.cents),
+      fee: '0.00',
+      time: rec.effectiveAt ?? rec.createdAt,
+      from: rec.quote.from,
+      to: rec.quote.to,
+      failureReason: rec.failureReason,
+      message,
+      balanceOwed: fromCents(this.owed(rec.cardId)),
+      repeated: false,
+      origin: 'cardholder_view',
+    };
+  }
+
+  private activityEntries(id: string): ActivityEntry[] {
+    return this.activityOf(id).map((item): ActivityEntry => {
+      if (item.kind === 'purchase') {
+        return {
+          at: item.at,
+          kind: 'purchase',
+          amount: fromCents(item.cents),
+          description: 'Card purchase',
+          outcome: 'approved',
+          state: null,
+          reference: null,
+          origin: null,
+          category: 'other',
+          reason: 'approved',
+        };
+      }
+      const rec = this.payments.get(item.reference);
+      return {
+        at: rec?.effectiveAt ?? rec?.createdAt ?? '',
+        kind: 'payment',
+        amount: fromCents(rec?.cents ?? 0),
+        description: `Payment ${item.reference}`,
+        outcome: null,
+        state: rec?.state ?? 'pending',
+        reference: item.reference,
+        origin: 'cardholder_view',
+        category: null,
+        reason: null,
+      };
+    });
+  }
+
+  private view(id: string): CardholderView {
+    const card = this.find(id);
+    const owed = this.owed(id);
+    const pending = this.pendingOf(id);
+    let availability: CardholderView['availability'] = 'available';
+    let availabilityMessage: string | null = null;
+    if (pending !== undefined) {
+      availability = 'payment_pending';
+      availabilityMessage = this.pendingMessage(pending);
+    } else if (owed === 0) {
+      availability = 'nothing_to_pay';
+      availabilityMessage = this.nothingToPayMessage();
+    } else if (owed > MAX_PAYABLE_CENTS) {
+      availability = 'above_limit';
+      availabilityMessage = this.aboveLimitMessage(owed);
+    }
+    return {
+      card: {
+        id: card.id,
+        name: card.name,
+        lastFour: card.lastFour,
+        cardholderName: card.cardholderName,
+        status: card.status,
+      },
+      balanceOwed: fromCents(owed),
+      availability,
+      availabilityMessage,
+      pendingPayment: pending === undefined ? null : this.receipt(pending),
+      account: {
+        displayName: this.account.displayName,
+        lastFour: this.account.lastFour,
+        availableBalance: fromCents(this.account.balanceCents),
+        authorityBasis: AUTHORITY_BASIS,
+      },
+      cardActivity: this.activityEntries(id).slice(0, 10),
+      accountActivity: structuredClone(this.ledger.slice(0, 10)),
+    };
+  }
+
+  private bank(): FakeBank {
+    return {
+      nextDebitOutcome: this.nextDebitOutcome,
+      nextStatusCheck: this.nextStatusCheck,
+      account: {
+        lastFour: this.account.lastFour,
+        availableBalance: fromCents(this.account.balanceCents),
+      },
+      entries: structuredClone(this.ledger),
+    };
   }
 
   private async enter(method: string): Promise<void> {

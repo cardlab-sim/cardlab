@@ -1,3 +1,9 @@
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
 .open {
   display: inline-flex;
   align-items: center;

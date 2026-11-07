@@ -25,5 +25,13 @@ describe('formatMoney (002 payment amounts)', () => {
   // T-W-1 · PR-03 · web unit
   // Given "150.50", "170.50", "25000.01", "1000000.01" and "0.00", When formatMoney, Then "£150.50", "£170.50", "£25,000.01", "£1,000,000.01", "£0.00" (the same text the server puts in W-* messages)
   // Catches: SPA amounts disagreeing with the server-rendered wording on the same screen (DEC-10, R-12)
-  test.todo('T-W-1 formats payment amounts like the server wording');
+  test.each([
+    ['150.50', '£150.50'],
+    ['170.50', '£170.50'],
+    ['25000.01', '£25,000.01'],
+    ['1000000.01', '£1,000,000.01'],
+    ['0.00', '£0.00'],
+  ])('T-W-1 formats payment amounts like the server wording: %s', (input, expected) => {
+    expect(formatMoney(input)).toBe(expected);
+  });
 });

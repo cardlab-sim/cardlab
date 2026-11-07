@@ -146,5 +146,80 @@ describe('HttpApiClient (002)', () => {
   // T-W-9 · PR-03 · web unit
   // Given a stubbed fetch, When each 002 method is called, Then the method/path of design §7 is used (ids and references URL-encoded; PUT /api/fake-bank/steering with a JSON body) and the JSON body is returned; a 409 ProblemDetails rejects with ApiError whose problem carries code, message, balanceOwed and pendingReference
   // Catches: wrong routes or refusal details lost before the UI (design §7)
-  test.todo('T-W-9 maps the payment endpoints and 409 problems');
+  test('T-W-9 maps the payment endpoints and 409 problems', async () => {
+    const client = new HttpApiClient();
+    const accept = (m: ReturnType<typeof stubFetch>) =>
+      new Headers(lastCall(m).init.headers).get('Accept');
+
+    let fetchMock = stubFetch(jsonResponse(200, { balanceOwed: '150.50' }));
+    expect(await client.getCardholderView('a/b')).toEqual({ balanceOwed: '150.50' });
+    expect(lastCall(fetchMock).url).toBe('/api/cardholder/cards/a%2Fb');
+    expect(lastCall(fetchMock).init.method).toBe('GET');
+    expect(accept(fetchMock)).toBe('application/json');
+
+    fetchMock = stubFetch(jsonResponse(201, { reference: 'PAY-1' }));
+    expect(await client.createQuote('c1')).toEqual({ reference: 'PAY-1' });
+    expect(lastCall(fetchMock).url).toBe('/api/cardholder/cards/c1/quotes');
+    expect(lastCall(fetchMock).init.method).toBe('POST');
+
+    fetchMock = stubFetch(jsonResponse(200, { state: 'completed' }));
+    expect(await client.confirmPayment('c1', 'PAY 1')).toEqual({ state: 'completed' });
+    expect(lastCall(fetchMock).url).toBe('/api/cardholder/cards/c1/payments/PAY%201/confirm');
+    expect(lastCall(fetchMock).init.method).toBe('POST');
+
+    fetchMock = stubFetch(jsonResponse(200, { state: 'pending' }));
+    expect(await client.checkPayment('c1', 'PAY-1')).toEqual({ state: 'pending' });
+    expect(lastCall(fetchMock).url).toBe('/api/cardholder/cards/c1/payments/PAY-1/check');
+    expect(lastCall(fetchMock).init.method).toBe('POST');
+
+    fetchMock = stubFetch(jsonResponse(200, { state: 'failed' }));
+    expect(await client.getReceipt('c1', 'PAY-1')).toEqual({ state: 'failed' });
+    expect(lastCall(fetchMock).url).toBe('/api/cardholder/cards/c1/payments/PAY-1');
+    expect(lastCall(fetchMock).init.method).toBe('GET');
+
+    fetchMock = stubFetch(jsonResponse(200, { nextDebitOutcome: 'complete' }));
+    expect(await client.getFakeBank()).toEqual({ nextDebitOutcome: 'complete' });
+    expect(lastCall(fetchMock).url).toBe('/api/fake-bank');
+    expect(lastCall(fetchMock).init.method).toBe('GET');
+
+    fetchMock = stubFetch(jsonResponse(200, { nextDebitOutcome: 'refuse_insufficient_funds' }));
+    await client.setFakeBank({ nextDebitOutcome: 'refuse_insufficient_funds' });
+    expect(lastCall(fetchMock).url).toBe('/api/fake-bank/steering');
+    expect(lastCall(fetchMock).init.method).toBe('PUT');
+    expect(JSON.parse(lastCall(fetchMock).init.body as string)).toEqual({
+      nextDebitOutcome: 'refuse_insufficient_funds',
+    });
+    expect(new Headers(lastCall(fetchMock).init.headers).get('Content-Type')).toBe(
+      'application/json',
+    );
+
+    fetchMock = stubFetch(jsonResponse(200, [{ kind: 'purchase' }]));
+    expect(await client.listActivity('c1')).toEqual([{ kind: 'purchase' }]);
+    expect(lastCall(fetchMock).url).toBe('/api/cards/c1/activity');
+
+    fetchMock = stubFetch(jsonResponse(200, [{ reference: 'PAY-1' }]));
+    expect(await client.listPaymentRecords('c1')).toEqual([{ reference: 'PAY-1' }]);
+    expect(lastCall(fetchMock).url).toBe('/api/cards/c1/payments');
+
+    fetchMock = stubFetch(jsonResponse(200, { status: 'confirmed' }));
+    expect(await client.getPaymentRecord('c1', 'PAY-1')).toEqual({ status: 'confirmed' });
+    expect(lastCall(fetchMock).url).toBe('/api/cards/c1/payments/PAY-1');
+
+    const refusal = {
+      status: 409,
+      code: 'payment_pending',
+      message: 'A payment of £150.50 (reference PAY-1) is still pending.',
+      balanceOwed: '150.50',
+      pendingReference: 'PAY-1',
+    };
+    stubFetch(jsonResponse(409, refusal, 'application/problem+json'));
+    const error = await client.createQuote('c1').catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect((error as ApiError).status).toBe(409);
+    expect((error as ApiError).problem).toEqual(refusal);
+
+    stubFetch(jsonResponse(409, { ...refusal, code: 'balance_changed' }));
+    const confirmError = await client.confirmPayment('c1', 'PAY-1').catch((e: unknown) => e);
+    expect((confirmError as ApiError).problem?.code).toBe('balance_changed');
+  });
 });
