@@ -49,3 +49,9 @@ Nits:
 - Pre-existing: an exception between the end of lock #1 and the `try` at `PaymentService.cs:174` (only the `PaymentConfirmAttempt` log at `:145` for the Create path) would leave the entry registered and joiners waiting forever. To close it, start the step 2/3 `try` before the `:143` log for the Create case.
 
 No `upstream:` items.
+
+## Fixes verified (orchestrator, 2026-11-07, head a9897ce)
+- Fresh: Domain.Tests 282 passed / 0 failed; Integration.Tests (LocalDB) 119 passed / 0 failed / 4 skipped (PR-08 stubs); scope PASS.
+- F1: `grep -nE "completion\.(Try)?Set" PaymentService.cs` prints nothing; swapping Release/SetResult inside `InFlightPayments.Complete` fails an InFlightPayments test 3/3 runs. Verified.
+- F2: per coder report (plain TCS gate; red 20/20 with removal emptied). F3: design §5 and digest updated (08c2e50).
+- BUG-008 (added scope after this review, human decision): replacing `TruncateToMilliseconds` with identity fails `Instants_reaching_receipt_and_record_are_cut_to_milliseconds` and `Bank_debit_time_is_cut_to_milliseconds`; T-I-4/T-I-5 now assert exact equality. Verified. Not reviewed by the reviewer (two-line change; mutation-verified).
