@@ -141,3 +141,10 @@ describe('HttpApiClient', () => {
     expect((simError as ApiError).problem).toBeNull();
   });
 });
+
+describe('HttpApiClient (002)', () => {
+  // T-W-9 · PR-03 · web unit
+  // Given a stubbed fetch, When each 002 method is called, Then the method/path of design §7 is used (ids and references URL-encoded; PUT /api/fake-bank/steering with a JSON body) and the JSON body is returned; a 409 ProblemDetails rejects with ApiError whose problem carries code, message, balanceOwed and pendingReference
+  // Catches: wrong routes or refusal details lost before the UI (design §7)
+  test.todo('T-W-9 maps the payment endpoints and 409 problems');
+});

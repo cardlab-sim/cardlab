@@ -23,6 +23,8 @@
   --color-status-approved-bg: #dcfce7;
   --color-status-declined: #991b1b;
   --color-status-declined-bg: #fee2e2;
+  --color-status-pending: #92400e;
+  --color-status-pending-bg: #fef3c7;
 
   --font-family: 'Inter', system-ui, sans-serif;
   --font-size-sm: 14px;

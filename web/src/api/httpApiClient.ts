@@ -1,15 +1,24 @@
+import { notImplemented } from '../notImplemented';
 import { ApiError, type ApiClient } from './apiClient';
 import type {
+  ActivityEntry,
   AuditEntry,
   CardDetail,
+  CardholderView,
   CardStatus,
   CardSummary,
   Category,
   Decision,
+  FakeBank,
   Limit,
+  PaymentListItem,
+  PaymentRecord,
   Period,
   ProblemDetails,
+  Quote,
+  Receipt,
   SimulatePurchaseInput,
+  SteeringInput,
   Transaction,
 } from './types';
 
@@ -81,6 +90,48 @@ export class HttpApiClient implements ApiClient {
       );
     }
     throw await this.toError(response);
+  }
+
+  // ---- 002 (stubs; implemented in PR-03)
+
+  getCardholderView(id: string): Promise<CardholderView> {
+    return notImplemented('PR-03', id);
+  }
+
+  createQuote(id: string): Promise<Quote> {
+    return notImplemented('PR-03', id);
+  }
+
+  confirmPayment(id: string, reference: string): Promise<Receipt> {
+    return notImplemented('PR-03', id, reference);
+  }
+
+  checkPayment(id: string, reference: string): Promise<Receipt> {
+    return notImplemented('PR-03', id, reference);
+  }
+
+  getReceipt(id: string, reference: string): Promise<Receipt> {
+    return notImplemented('PR-03', id, reference);
+  }
+
+  getFakeBank(): Promise<FakeBank> {
+    return notImplemented('PR-03');
+  }
+
+  setFakeBank(steering: SteeringInput): Promise<FakeBank> {
+    return notImplemented('PR-03', steering);
+  }
+
+  listActivity(id: string): Promise<ActivityEntry[]> {
+    return notImplemented('PR-03', id);
+  }
+
+  listPaymentRecords(id: string): Promise<PaymentListItem[]> {
+    return notImplemented('PR-03', id);
+  }
+
+  getPaymentRecord(id: string, reference: string): Promise<PaymentRecord> {
+    return notImplemented('PR-03', id, reference);
   }
 
   private cardPath(id: string): string {

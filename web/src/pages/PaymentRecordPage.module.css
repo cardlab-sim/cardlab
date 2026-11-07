@@ -1,0 +1,6 @@
+/* 002 admin payment record page (§4.1); tokens only. Filled in by PR-07. */
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}

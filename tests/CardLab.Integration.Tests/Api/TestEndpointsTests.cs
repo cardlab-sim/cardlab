@@ -43,6 +43,14 @@ public sealed class TestEndpointsTests : IClassFixture<ApiFactory>
             Assert.Empty((await api.GetCardAsync(card.Id)).Body!.Limits);
         }
     }
+
+    // T-I-11 · PR-05 · integration
+    // Given completed and pending payments, quotes, events, bank entries and steering, When POST /api/test/reset, Then 204; PaymentQuote, Payment, PaymentEvent, BankDebitRequest, BankEntry and BankSteering are empty; BankAccount is back at £25,000.00; LinkedAccount still exists; every seeded card's balance (GetBalanceAsync) is £0.00
+    // Catches: state leaking between E2E journeys (AC-21, R-15)
+    [Fact(Skip = "todo")]
+    public void Reset_clears_payments_and_reseeds_the_bank()
+    {
+    }
 }
 
 [Collection("sql")]
@@ -67,5 +75,13 @@ public sealed class TestEndpointsDisabledTests : IClassFixture<ApiFactoryWithout
         Assert.Equal(HttpStatusCode.NotFound, reset.Status);
         Assert.Equal("frozen", (await api.GetCardAsync(id)).Body!.Status);
         Assert.Equal(1, await _factory.Database.CountAuditEventsAsync());
+    }
+
+    // T-I-11 · PR-05 · integration
+    // Given CardLab:TestEndpoints=false and payment, quote, event and bank rows inserted directly (raw SQL through Database), When POST /api/test/reset, Then 404 and every payment and bank row count is unchanged
+    // Catches: a product path deleting compliance records (AC-37, R-14, CD-5)
+    [Fact(Skip = "todo")]
+    public void Reset_is_unavailable_and_records_survive_when_disabled()
+    {
     }
 }

@@ -25,7 +25,8 @@ public sealed record LimitDto(string Category, string Period, string Amount);
 /// <param name="LastFour">Last four digits.</param>
 /// <param name="Status"><c>active</c> | <c>frozen</c>.</param>
 /// <param name="Limits">Every limit on the card.</param>
-public sealed record CardDetailDto(Guid Id, string Name, string CardholderName, string LastFour, string Status, IReadOnlyList<LimitDto> Limits);
+/// <param name="BalanceOwed">002 R-1: balance owed, two-decimal string (set by 002 PR-07; null before it).</param>
+public sealed record CardDetailDto(Guid Id, string Name, string CardholderName, string LastFour, string Status, IReadOnlyList<LimitDto> Limits, string? BalanceOwed = null);
 
 /// <summary><c>POST /api/cards/{id}/freeze|unfreeze</c> body.</summary>
 /// <param name="Status"><c>active</c> | <c>frozen</c>.</param>

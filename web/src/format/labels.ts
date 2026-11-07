@@ -1,5 +1,19 @@
 import { CATEGORIES, PERIODS } from '../api/types';
-import type { AuditAction, CardStatus, Category, Outcome, Period, Reason } from '../api/types';
+import type {
+  ActivityKind,
+  AuditAction,
+  CardStatus,
+  Category,
+  FailureReason,
+  NextDebitOutcome,
+  NextStatusCheck,
+  Outcome,
+  PaymentOrigin,
+  PaymentState,
+  Period,
+  QuoteStatus,
+  Reason,
+} from '../api/types';
 
 const STATUS_LABELS: Record<CardStatus, string> = { active: 'Active', frozen: 'Frozen' };
 
@@ -53,4 +67,75 @@ export function reasonLabel(reason: Reason): string {
 /** @see categoryLabel */
 export function auditActionLabel(action: AuditAction): string {
   return AUDIT_ACTION_LABELS[action];
+}
+
+// 002 (complete in PR-00): badge and control labels. Customer-facing payment messages are NOT built here; they come
+// from the server verbatim (DEC-10).
+
+const PAYMENT_STATE_LABELS: Record<PaymentState, string> = {
+  pending: 'Pending',
+  completed: 'Completed',
+  failed: 'Failed',
+};
+
+const FAILURE_REASON_LABELS: Record<FailureReason, string> = {
+  insufficient_funds: 'Insufficient funds',
+  account_unavailable: 'Account unavailable',
+  not_received: 'Not received',
+};
+
+const ACTIVITY_KIND_LABELS: Record<ActivityKind, string> = {
+  purchase: 'Purchase',
+  payment: 'Payment',
+};
+
+const ORIGIN_LABELS: Record<PaymentOrigin, string> = {
+  cardholder_view: 'Cardholder view',
+  deploy_smoke: 'origin: smoke',
+};
+
+const QUOTE_STATUS_LABELS: Record<QuoteStatus, string> = {
+  open: 'Open',
+  confirmed: 'Confirmed',
+  refused: 'Refused',
+};
+
+/** Option labels of the "Fake bank: next outcome" control, in R-15 order. */
+export const NEXT_DEBIT_OUTCOMES: readonly { value: NextDebitOutcome; label: string }[] = [
+  { value: 'complete', label: 'Complete' },
+  { value: 'refuse_insufficient_funds', label: 'Refuse (insufficient funds)' },
+  { value: 'refuse_account_unavailable', label: 'Refuse (account unavailable)' },
+  { value: 'timeout_debit_applied', label: 'Time out, debit applied' },
+  { value: 'timeout_not_received', label: 'Time out, debit not received' },
+];
+
+/** Option labels of the "Next status check" control (DEC-7). */
+export const NEXT_STATUS_CHECKS: readonly { value: NextStatusCheck; label: string }[] = [
+  { value: 'answers', label: 'Answers' },
+  { value: 'does_not_answer', label: 'Does not answer' },
+];
+
+/** @see categoryLabel */
+export function paymentStateLabel(state: PaymentState): string {
+  return PAYMENT_STATE_LABELS[state];
+}
+
+/** @see categoryLabel */
+export function failureReasonLabel(reason: FailureReason): string {
+  return FAILURE_REASON_LABELS[reason];
+}
+
+/** @see categoryLabel */
+export function activityKindLabel(kind: ActivityKind): string {
+  return ACTIVITY_KIND_LABELS[kind];
+}
+
+/** Origin badge text (DEC-15): `deploy_smoke` → "origin: smoke". */
+export function originLabel(origin: PaymentOrigin): string {
+  return ORIGIN_LABELS[origin];
+}
+
+/** @see categoryLabel */
+export function quoteStatusLabel(status: QuoteStatus): string {
+  return QUOTE_STATUS_LABELS[status];
 }

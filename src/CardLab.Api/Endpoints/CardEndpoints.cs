@@ -29,6 +29,9 @@ public static class CardEndpoints
         cards.MapDelete("/{id:guid}/limits/{category}/{period}", RemoveLimit);
         cards.MapGet("/{id:guid}/transactions", ListTransactions);
         cards.MapGet("/{id:guid}/audit", ListAudit);
+        cards.MapGet("/{id:guid}/activity", ListActivity);
+        cards.MapGet("/{id:guid}/payments", ListPayments);
+        cards.MapGet("/{id:guid}/payments/{reference}", GetPaymentRecord);
         return app;
     }
 
@@ -40,6 +43,7 @@ public static class CardEndpoints
     }
 
     /// <summary><c>GET /api/cards/{id}</c> → 200 <see cref="CardDetailDto"/> | 404.</summary>
+    /// <remarks>002 PR-07 adds <c>balanceOwed</c> (<c>ICardStore.GetBalanceAsync</c>); until then it is null.</remarks>
     internal static async Task<IResult> GetCard(Guid id, ICardStore store, CancellationToken ct)
     {
         var card = await store.GetCardAsync(new CardId(id), ct);
@@ -159,6 +163,21 @@ public static class CardEndpoints
             a.Event.OldValue,
             a.Event.NewValue)).ToList());
     }
+
+    /// <summary><c>GET /api/cards/{id}/activity?take=</c> → 200 <see cref="ActivityDto"/>[] newest first (purchases and payments, DEC-12) | 404.</summary>
+    /// <remarks>002: implemented in PR-07; <c>take</c> defaults to all.</remarks>
+    internal static Task<IResult> ListActivity(Guid id, int? take, ICardStore store, CancellationToken ct) =>
+        throw new NotImplementedException("PR-07");
+
+    /// <summary><c>GET /api/cards/{id}/payments</c> → 200 <see cref="PaymentListItemDto"/>[] newest first (incl. refused and open references) | 404.</summary>
+    /// <remarks>002: implemented in PR-07.</remarks>
+    internal static Task<IResult> ListPayments(Guid id, ICardStore store, CancellationToken ct) =>
+        throw new NotImplementedException("PR-07");
+
+    /// <summary><c>GET /api/cards/{id}/payments/{reference}</c> → 200 <see cref="PaymentRecordDto"/> | 404 (unknown, malformed or another card's reference) (AC-20).</summary>
+    /// <remarks>002: implemented in PR-07.</remarks>
+    internal static Task<IResult> GetPaymentRecord(Guid id, string reference, ICardStore store, CancellationToken ct) =>
+        throw new NotImplementedException("PR-07");
 
     private static IResult ToStatusResult(Result<CardStatus, DomainError> result) =>
         result.IsOk ? TypedResults.Ok(new StatusDto(WireNames.ToWire(result.Value))) : CardNotFound();

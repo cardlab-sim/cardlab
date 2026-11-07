@@ -143,6 +143,10 @@ internal sealed class SqlCardWriter : ICardWriter
             }
         });
 
+    /// <inheritdoc />
+    /// <remarks>Implemented in 002 PR-05: a <c>SqlPaymentWriter</c> over the same context and card (created once per writer).</remarks>
+    public IPaymentWriter Payments => throw new NotImplementedException("PR-05");
+
     /// <summary>Applies queued changes and saves everything tracked (called before reads and on commit).</summary>
     /// <param name="ct">Cancellation.</param>
     /// <returns>A task that completes when the changes are written inside the open transaction.</returns>

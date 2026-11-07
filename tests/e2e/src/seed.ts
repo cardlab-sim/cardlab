@@ -32,4 +32,14 @@ export const seed = {
     },
   } satisfies Record<string, SeedCard>,
   unknownCardNumber: '9999000199999999',
+  /** 002: the linked current account (the full number lives only in appsettings; never on screen, NFR-3). */
+  linkedAccount: {
+    displayName: 'Brightline Supplies Ltd current account',
+    accountNumber: '51907731',
+    lastFour: '7731',
+    bankAccountRef: '5a3e1d2c-7b4f-4c1a-9e2d-000000000731',
+    openingBalance: '25000.00',
+    authorityBasis:
+      'Standing authority of Brightline Supplies Ltd for the named cardholder to repay their own card from this account',
+  },
 } as const;

@@ -13,6 +13,7 @@ const opsVan: CardDetail = {
   lastFour: '0001',
   status: 'active',
   limits: [],
+  balanceOwed: '0.00',
 };
 const marketing: CardDetail = {
   id: 'mkt-2',
@@ -21,6 +22,7 @@ const marketing: CardDetail = {
   lastFour: '0002',
   status: 'frozen',
   limits: [],
+  balanceOwed: '0.00',
 };
 
 describe('CardListPage', () => {
@@ -72,4 +74,11 @@ describe('CardListPage', () => {
     expect(await screen.findByRole('table', { name: 'Card list' })).toBeInTheDocument();
     expect(screen.queryByText('Loading cards…')).toBeNull();
   });
+});
+
+describe('CardListPage (002)', () => {
+  // T-W-7 · PR-03 · web unit
+  // Given two cards, When rendered, Then each row has a "Cardholder view" link (accessible name "Cardholder view for Ops van") to /cardholder/{id}
+  // Catches: the cardholder view unreachable from the list (DEC-11, requirements §9)
+  test.todo('T-W-7 links each card to its cardholder view');
 });

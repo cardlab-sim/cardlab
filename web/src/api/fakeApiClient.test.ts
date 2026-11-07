@@ -10,6 +10,7 @@ const card = (): CardDetail => ({
   lastFour: '0001',
   status: 'active',
   limits: [],
+  balanceOwed: '0.00',
 });
 
 const purchase: SimulatePurchaseInput = { amount: '12.50', category: 'fuel', merchant: 'Shell' };
@@ -173,4 +174,11 @@ describe('FakeApiClient', () => {
     expect(second.name).toBe('Ops van');
     expect(second.limits).toEqual([]);
   });
+});
+
+describe('FakeApiClient (002)', () => {
+  // T-W-10 · PR-03 · web unit
+  // Given a seed with Ops van, purchases £150.50 and the seeded account at £25,000.00, When createQuote → confirmPayment, Then a W-1 quote, a completed receipt with W-2, balance £0.00, account £24,849.50 with one entry; withBank('refuse_insufficient_funds') gives a failed W-3 receipt; withBank('timeout_not_received') a pending W-5 receipt and checkPayment then a failed W-4 receipt; a changed balance rejects 409 balance_changed with W-6; hold() keeps confirm pending; calls are recorded
+  // Catches: page tests passing against a fake that behaves unlike the API (design §15.2)
+  test.todo('T-W-10 simulates the cardholder payment flow');
 });

@@ -54,6 +54,14 @@ public sealed class SqlTestDatabase : IAsyncLifetime
             o.AdminId = TestSeed.AdminId;
             o.AdminName = TestSeed.AdminName;
             o.Cards = TestSeed.Cards.Select(c => new SeedCardOptions { Name = c.Name, CardholderName = c.CardholderName, CardNumber = c.CardNumber }).ToList();
+            o.LinkedAccount = new SeedLinkedAccountOptions
+            {
+                DisplayName = TestSeed.LinkedAccountName,
+                AccountNumber = TestSeed.LinkedAccountNumber,
+                BankAccountRef = TestSeed.BankAccountRef,
+                OpeningBalance = TestSeed.BankOpeningBalance,
+                AuthorityBasis = TestSeed.AuthorityBasis,
+            };
         });
         services.AddSingleton<CardLab.Domain.Ports.ICardNumberLookup, HmacCardNumberLookup>();
         await using var provider = services.BuildServiceProvider();
@@ -152,6 +160,42 @@ public sealed class SqlTestDatabase : IAsyncLifetime
     {
         await using var db = CreateDbContext();
         return await db.AuditEvents.CountAsync();
+    }
+
+    /// <summary>002: number of rows in a table (e.g. <c>Payment</c>, <c>BankEntry</c>), by raw SQL so it works for any table.</summary>
+    /// <param name="table">Table name: letters only.</param>
+    /// <returns>The count.</returns>
+    /// <exception cref="ArgumentException">The name is not a plain identifier.</exception>
+    public async Task<int> CountRowsAsync(string table)
+    {
+        if (table.Length == 0 || !table.All(char.IsAsciiLetter))
+        {
+            throw new ArgumentException("Table name must be letters only.", nameof(table));
+        }
+
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT COUNT(*) FROM [{table}]";
+        return (int)(await command.ExecuteScalarAsync())!;
+    }
+
+    /// <summary>002: runs arrange SQL directly (e.g. inserting payment rows when the endpoints under test must not be used).</summary>
+    /// <param name="sql">The statement(s); test-authored text only.</param>
+    /// <param name="parameters">Named parameters (<c>@name</c> to value).</param>
+    /// <returns>Rows affected.</returns>
+    public async Task<int> ExecuteAsync(string sql, IReadOnlyDictionary<string, object?>? parameters = null)
+    {
+        await using var connection = new SqlConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters ?? new Dictionary<string, object?>())
+        {
+            command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+        }
+
+        return await command.ExecuteNonQueryAsync();
     }
 
     /// <summary>

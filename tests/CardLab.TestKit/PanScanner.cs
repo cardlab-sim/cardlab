@@ -25,6 +25,18 @@ public static partial class PanScanner
         }
     }
 
+    /// <summary>002 (design §10): finds the seeded linked account's full number (<see cref="Seed.LinkedAccountNumber"/>) in text.</summary>
+    /// <remarks>A literal pattern, not "8+ digits": GUIDs and amounts contain long digit runs. Implemented in 002 PR-02.</remarks>
+    /// <param name="text">Any text; null is treated as empty.</param>
+    /// <returns>Each occurrence (empty when clean).</returns>
+    public static IReadOnlyList<string> FindAccountNumbers(string? text) => throw new NotImplementedException("PR-02");
+
+    /// <summary>Asserts the text holds neither a full card number nor the full linked account number (NFR-3, AC-23).</summary>
+    /// <param name="text">Text to scan.</param>
+    /// <param name="where">Label for the failure message.</param>
+    /// <exception cref="Xunit.Sdk.XunitException">When either is found (message shows only last fours).</exception>
+    public static void AssertNoFullNumbers(string? text, string where) => throw new NotImplementedException("PR-02");
+
     // [0-9], not \d: \d also matches non-ASCII digits.
     [GeneratedRegex("[0-9]{16,}")]
     private static partial Regex DigitRun();
