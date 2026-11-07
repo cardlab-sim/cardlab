@@ -37,7 +37,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "review",
+      "status": "merged",
       "branch": "pr/002-full-balance-payment/01-domain-rules",
       "url": "https://github.com/cardlab-sim/cardlab/pull/35"
     },
@@ -48,7 +48,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "review",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/02-test-harness",
       "url": "https://github.com/cardlab-sim/cardlab/pull/36"
     },
@@ -59,7 +59,7 @@
       "depends_on": [
         "PR-00"
       ],
-      "status": "review",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/03-cardholder-web",
       "url": "https://github.com/cardlab-sim/cardlab/pull/37"
     },
@@ -125,7 +125,9 @@
       "url": null
     }
   ],
-  "bugs_open": [],
+  "bugs_open": [
+    "BUG-001"
+  ],
   "resume": null,
   "history": [
     {
