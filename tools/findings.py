@@ -142,7 +142,7 @@ def render(rec, f, inline=True):
         parts.append(title + nl + "```" + fence + nl + sug + nl + "```")
     blk = " A blocker keeps blocking until it is fixed or dismissed." if sev == "S1" else ""
     parts.append("<details><summary>How to respond</summary>" + nl + nl
-                 + "- `/fixed` after pushing the fix. Checked: the line changed and the re-review no longer raises it." + nl
+                 + "- `/fixed` after pushing the fix. Checked: there is a new commit and the re-review no longer raises it." + nl
                  + "- `/dismiss <reason>` if it's wrong or not worth fixing. The reason is recorded." + nl
                  + "- `/bug` to log it for triage." + blk + nl + "</details>")
     return (nl + nl).join(p for p in parts if p) + nl + nl + "<!-- finding " + json.dumps(rec) + " -->"
@@ -220,9 +220,9 @@ def cmd_triage():
         print("thread already resolved"); return
     base = {"finding": f["id"], "severity": f["severity"], "by": user, "sha": sha}
     if cmd == "fixed":
-        if not t["outdated"]:
-            reply(repo, pr, t["root_id"], f"@{user}: not recorded as fixed. The commented line hasn't changed since "
-                  "the finding. Push the fix first, or reply `/dismiss <reason>`.")
+        if f.get("sha") == sha:
+            reply(repo, pr, t["root_id"], f"@{user}: not recorded as fixed. There's no new commit since the finding "
+                  f"(`{sha[:7]}`). Push the fix first, or reply `/dismiss <reason>`.")
             return
         _, st = review_state(repo, pr)
         if not st or st.get("sha") != sha:
@@ -233,8 +233,8 @@ def cmd_triage():
             reply(repo, pr, t["root_id"], f"@{user}: not recorded as fixed. The money review on `{sha[:7]}` raised "
                   "a finding of this severity in this file again. Fix it, or reply `/dismiss <reason>`.")
             return
-        reply(repo, pr, t["root_id"], f"Recorded: **fixed** by @{user}. Checked: the line changed, and the money "
-              f"review on `{sha[:7]}` no longer raises it.", {**base, "outcome": "fixed"})
+        reply(repo, pr, t["root_id"], f"Recorded: **fixed** by @{user}. Checked: new commit `{sha[:7]}`, and the money "
+              f"review on it no longer raises it.", {**base, "outcome": "fixed"})
         resolve(t["id"])
     elif cmd == "dismiss":
         if not rest:
