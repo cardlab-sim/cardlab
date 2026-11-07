@@ -1,7 +1,6 @@
-import type { Page } from '@playwright/test';
-import { notImplemented } from '../notImplemented';
+import { expect, type Page } from '@playwright/test';
 
-/** 002 page object for `/cardholder/:id/pay` (the one review screen). Implemented in PR-08. */
+/** 002 page object for `/cardholder/:id/pay` (the one review screen). */
 export class ReviewPage {
   readonly page: Page;
 
@@ -9,13 +8,19 @@ export class ReviewPage {
     this.page = page;
   }
 
-  /** The W-1 heading and lines in DOM order. */
+  /** The W-1 heading and lines in DOM order, each as one line of text ("Amount: £150.50"). */
   async lines(): Promise<string[]> {
-    return notImplemented('PR-08');
+    const main = this.page.getByRole('main');
+    await expect(
+      main.getByRole('heading', { level: 1, name: 'Pay your full balance' }),
+    ).toBeVisible();
+    const heading = (await main.getByRole('heading', { level: 1 }).innerText()).trim();
+    const items = await main.locator('dl > div').allInnerTexts();
+    return [heading, ...items.map((item) => item.replace(/\s+/g, ' ').trim())];
   }
 
   /** Clicks the confirm button (named "Confirm payment of £…"). */
   async confirm(): Promise<void> {
-    notImplemented('PR-08');
+    await this.page.getByRole('button', { name: /^Confirm payment of £/ }).click();
   }
 }
