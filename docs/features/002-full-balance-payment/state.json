@@ -131,9 +131,9 @@
         "PR-06",
         "PR-07"
       ],
-      "status": "coding",
+      "status": "review",
       "branch": "pr/002-full-balance-payment/08-e2e",
-      "url": null
+      "url": "https://github.com/cardlab-sim/cardlab/pull/45"
     },
     {
       "id": "PR-03f",
@@ -145,9 +145,23 @@
       "status": "merged",
       "branch": "pr/002-full-balance-payment/03f-fix-bug-007",
       "url": "https://github.com/cardlab-sim/cardlab/pull/44"
+    },
+    {
+      "id": "PR-07f",
+      "title": "Fix BUG-009: activity shows a purchase at its processor time, ordered by decision time (as 001)",
+      "wave": 4,
+      "depends_on": [
+        "PR-07",
+        "PR-03f"
+      ],
+      "status": "coding",
+      "branch": "pr/002-full-balance-payment/07f-fix-bug-009",
+      "url": null
     }
   ],
-  "bugs_open": [],
+  "bugs_open": [
+    "BUG-009"
+  ],
   "resume": null,
   "history": [
     {
@@ -169,6 +183,10 @@
     {
       "at": "2026-11-07T19:00Z",
       "event": "design errata BUG-002..BUG-005 (human decisions via /sdlc:bugs); Gate 2 stays approved"
+    },
+    {
+      "at": "2026-11-07T22:00Z",
+      "event": "design erratum BUG-009 (activity shown time = processor timestamp, order by decision time, as 001); Gate 2 stays approved"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"

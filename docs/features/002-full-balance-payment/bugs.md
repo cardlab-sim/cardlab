@@ -14,6 +14,7 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 | BUG-006 | orchestrator (feature CI run 42410267102) | S4 | AC-10 | Disconnect test flaky: in-flight registry entry removed after the confirm returns | code | fix-now (option A) | fixed | build (PR-04f, wave 3) | | 2026-11-07 |
 | BUG-007 | reviewer (PR-07, F5) | S4 | R-1 | Shared web FakeApiClient doesn't feed simulated purchases into activity/balance; PR-07 test-local ActivityFake duplicates it with inconsistent data | test-harness | fix-now (small fix PR) | fixed | build (PR-03f, wave 4) | | 2026-11-07 |
 | BUG-008 | reviewer (PR-06, F4) | S4 | AC-9, AC-10 | Repeated/parallel confirm receipt time differs by < 1 ms on the wire (full-tick vs stored ms) | code | fix-now (fold into PR-04f) | fixed | build (PR-04f) | | 2026-11-07 |
+| BUG-009 | coder (PR-08, 001 E2E formatting.spec T-E-6) | S2 | 001 AC-38, R-7 | Admin activity shows a purchase at decision time instead of the processor timestamp (001 regression) | design | fix-now (B: exactly as 001) | in-progress | build (PR-07f, wave 4) | | 2026-11-07 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
      Decision: fix-now (option A/B) | defer | wont-fix, with the human's words in the section below
@@ -107,3 +108,14 @@ code: truncate instants to ms at the source in PaymentService (`now` in Validate
 "Fold into PR-04f (Recommended)"; then T-I-4 and T-I-5 assert exact equality.
 ### Resolution
 PR-04f (#41): instants truncated to ms at source; T-I-4/T-I-5 exact equality; mutation verified.
+
+## BUG-009
+**Repro:** 001 E2E `tests/e2e/src/formatting.spec.ts` "T-E-6 limit and transaction time" (chromium and firefox): a processor purchase stamped 2026-10-24T23:30:00Z shows "7 Nov 2026 21:37" (the decision time) instead of "25 Oct 2026 00:30".
+**Expected / actual:** 001 showed `OccurredAt` (the processor's timestamp) and ordered by `DecidedAtUtc`; 002's `ListActivityAsync` (design §5) shows `DecidedAtUtc`.
+**Evidence:** `SqlCardStore.ListActivityAsync` maps `At = DecidedAtUtc`; 001 `ListTransactionsAsync` orders by `DecidedAtUtc` and its DTO carries `occurredAt`.
+### Triage (orchestrator)
+design: §5 named decision time for the activity entry without separating the shown time from the order.
+### Decision (human, 2026-11-07)
+First answered "A. Processor time (Recommended)" on an option table that wrongly described A as 001's behaviour. After the orchestrator's correction (001 showed processor time, ordered by decision time), the human chose "B. Exactly as 001 (Recommended)": show purchases at the processor timestamp, order by decision time, payments by confirm time. Design §5 erratum.
+### Resolution
+…
