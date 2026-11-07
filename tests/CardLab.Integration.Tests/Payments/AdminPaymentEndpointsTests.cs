@@ -85,6 +85,26 @@ public sealed class AdminPaymentEndpointsTests : IClassFixture<ApiFactory>
         Assert.Equal(HttpStatusCode.BadRequest, (await api.ListActivityAsync(id.Value, -1)).Status);
     }
 
+    // BUG-009 · PR-07f · integration
+    // Given a processor purchase stamped 2026-10-24T23:30:00Z but decided later, When GET /api/cards/{id}/activity, Then its at is that stamp
+    // Catches: the API showing the decision time (BUG-009, 001 AC-38)
+    [Fact]
+    public async Task Activity_shows_a_purchase_at_its_processor_time()
+    {
+        var api = _fixture.CreateApiClient();
+        await api.ResetAsync();
+        var id = await _fixture.Database.CardIdAsync(TestSeed.OpsVan.Name);
+        var stamp = DateTimeOffset.Parse("2026-10-24T23:30:00Z");
+        await _fixture.Database.SeedTransactionsAsync(
+            TestSeed.OpsVan.Name,
+            [new TransactionBuilder().Amount("10.00").In(Category.Travel).At(stamp).DecidedAt(stamp.AddDays(2)).Build()]);
+
+        var activity = await api.ListActivityAsync(id.Value);
+
+        Assert.Equal(HttpStatusCode.OK, activity.Status);
+        Assert.Equal(stamp, Assert.Single(activity.Body!).At);
+    }
+
     // T-I-19 · PR-07 · integration
     // Given an open quote, a refused reference and a completed payment, When GET /api/cards/{id}/payments, Then three items newest first with status open/refused/confirmed, state null/null/completed, origin, settledAt only for the settled one
     // Catches: refused or open references missing from the admin list (R-14)

@@ -61,7 +61,10 @@ interface PaymentRec {
 
 interface PurchaseItem {
   kind: 'purchase';
+  /** The shown time: the processor timestamp (`occurredAt`). */
   at: string;
+  /** When the purchase was decided: the ordering time. */
+  decidedAt: string;
   cents: number;
   description: string;
   category: Category;
@@ -70,6 +73,10 @@ interface PurchaseItem {
 }
 
 type ActivityItem = PurchaseItem | { kind: 'payment'; reference: string; at: string };
+
+/** Ordering time of an activity row: decision time for purchases, confirm time for payments. */
+const placedAt = (item: ActivityItem): number =>
+  Date.parse(item.kind === 'purchase' ? item.decidedAt : item.at);
 
 const MAX_PAYABLE_CENTS = 100000000;
 const AUTHORITY_BASIS =
@@ -116,7 +123,7 @@ function limitValue(category: Category, period: Period, amount: string): string 
  * `Date` (pin with `vi.setSystemTime`). `calls` records method names.
  * 002: simulates the cardholder payment flow (quote, confirm, check, receipt) with the §17 wording, a one-shot next debit
  * outcome (`withBank`), the status-check steering (`withStatusCheck`) and `addPurchase`; balance owed = approved purchases minus
- * completed payments (R-1); activity lists approved and declined purchases (by decision time) and payments (by confirm time) newest first, like design §5; `withQuoteOrigin` sets the next quote's origin. Each payment record carries the events of its attempts
+ * completed payments (R-1); activity lists approved and declined purchases (shown at the processor time, ordered by decision time) and payments (by confirm time) newest first, like design §5 erratum; `withQuoteOrigin` sets the next quote's origin. Each payment record carries the events of its attempts
  * and `simulated` (true when a fake-bank steering value produced its outcome); steering is one-shot (DEC-6, DEC-7).
  * Every method can be made to hang with `hold()` to test pending states. Results are copies, so callers
  * cannot mutate the fake's state.
@@ -164,6 +171,7 @@ export class FakeApiClient implements ApiClient {
         amounts.map((amount): ActivityItem => ({
           kind: 'purchase',
           at,
+          decidedAt: at,
           cents: toCents(amount),
           description: 'Card purchase',
           category: 'other',
@@ -199,6 +207,7 @@ export class FakeApiClient implements ApiClient {
     this.activityOf(id).unshift({
       kind: 'purchase',
       at: new Date().toISOString(),
+      decidedAt: new Date().toISOString(),
       cents: toCents(amount),
       description: 'Card purchase',
       category: 'other',
@@ -348,7 +357,8 @@ export class FakeApiClient implements ApiClient {
     this.transactions.set(id, [transaction, ...(this.transactions.get(id) ?? [])]);
     this.activityOf(id).unshift({
       kind: 'purchase',
-      at: new Date().toISOString(),
+      at: transaction.occurredAt,
+      decidedAt: new Date().toISOString(),
       cents: toCents(input.amount),
       description: input.merchant,
       category: input.category,
@@ -734,7 +744,8 @@ export class FakeApiClient implements ApiClient {
   }
 
   private activityEntries(id: string): ActivityEntry[] {
-    const entries = this.activityOf(id).map((item): ActivityEntry => {
+    const items = this.activityOf(id);
+    const entries = items.map((item): ActivityEntry => {
       if (item.kind === 'purchase') {
         return {
           at: item.at,
@@ -763,8 +774,10 @@ export class FakeApiClient implements ApiClient {
         reason: null,
       };
     });
-    // Newest first by time; the stable sort keeps insertion order (newest first) for equal times.
-    return entries.sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+    return entries
+      .map((entry, i) => ({ entry, key: placedAt(items[i]!) }))
+      .sort((a, b) => b.key - a.key)
+      .map((x) => x.entry);
   }
 
   private view(id: string): CardholderView {

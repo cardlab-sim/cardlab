@@ -261,9 +261,9 @@ public sealed class InMemoryCardStore : ICardStore
                 return Task.FromResult<IReadOnlyList<ActivityEntry>>([]);
             }
 
-            var purchases = c.Transactions.Select(t => new ActivityEntry(
-                t.DecidedAtUtc, ActivityKind.Purchase, t.Amount, t.Merchant, t.Outcome, t.Reason, t.Category, null, null, null));
-            var payments = c.Payments.Select(p => new ActivityEntry(
+            var purchases = c.Transactions.Select(t => (Placed: t.DecidedAtUtc, Entry: new ActivityEntry(
+                t.OccurredAt, ActivityKind.Purchase, t.Amount, t.Merchant, t.Outcome, t.Reason, t.Category, null, null, null)));
+            var payments = c.Payments.Select(p => (Placed: p.CreatedAtUtc, Entry: new ActivityEntry(
                 p.CreatedAtUtc,
                 ActivityKind.Payment,
                 p.Amount,
@@ -273,8 +273,9 @@ public sealed class InMemoryCardStore : ICardStore
                 null,
                 p.State,
                 p.Reference,
-                c.Quotes.First(q => q.Quote.Reference == p.Reference).Quote.Origin));
-            IReadOnlyList<ActivityEntry> merged = Enumerable.Reverse(purchases.Concat(payments).ToList()).OrderByDescending(a => a.At).Take(take).ToList();
+                c.Quotes.First(q => q.Quote.Reference == p.Reference).Quote.Origin)));
+            IReadOnlyList<ActivityEntry> merged = Enumerable.Reverse(purchases.Concat(payments).ToList())
+                .OrderByDescending(a => a.Placed).Take(take).Select(a => a.Entry).ToList();
             return Task.FromResult(merged);
         }
     }
