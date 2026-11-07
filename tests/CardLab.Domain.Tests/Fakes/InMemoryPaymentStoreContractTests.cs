@@ -1,6 +1,7 @@
 using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 using CardLab.TestKit.Contracts;
+using CardLab.TestKit.Fakes;
 
 namespace CardLab.Domain.Tests.Fakes;
 
@@ -8,7 +9,7 @@ namespace CardLab.Domain.Tests.Fakes;
 public sealed class InMemoryPaymentStoreContractTests : PaymentStoreContractTests
 {
     protected override Task<ICardStore> CreateStoreAsync(IReadOnlyList<StoreSeedCard> cards, LinkedAccount account) =>
-        throw new NotImplementedException("PR-02");
+        Task.FromResult<ICardStore>(new InMemoryCardStore(cards).WithLinkedAccount(account));
 
-    protected override Task<ICardStore> OpenStoreAsync(ICardStore seeded) => throw new NotImplementedException("PR-02");
+    protected override Task<ICardStore> OpenStoreAsync(ICardStore seeded) => Task.FromResult(seeded);
 }

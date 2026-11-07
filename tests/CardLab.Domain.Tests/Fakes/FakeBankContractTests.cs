@@ -1,5 +1,6 @@
 using CardLab.Domain.Ports;
 using CardLab.TestKit.Contracts;
+using CardLab.TestKit.Fakes;
 
 namespace CardLab.Domain.Tests.Fakes;
 
@@ -7,5 +8,5 @@ namespace CardLab.Domain.Tests.Fakes;
 public sealed class FakeBankContractTests : CurrentAccountBankContractTests
 {
     protected override Task<ICurrentAccountBank> CreateBankAsync(BankAccountRef account, string lastFour, Money openingBalance) =>
-        throw new NotImplementedException("PR-02");
+        Task.FromResult<ICurrentAccountBank>(new FakeBank(Clock, account, lastFour, openingBalance));
 }
