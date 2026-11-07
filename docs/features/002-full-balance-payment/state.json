@@ -2,7 +2,7 @@
   "feature": "002-full-balance-payment",
   "title": "CL-3 slice 1: pay the full card balance from the linked current account",
   "lane": "M",
-  "phase": "build",
+  "phase": "bugfix",
   "base_branch": "main",
   "feature_branch": "feat/002-full-balance-payment",
   "gates": {
@@ -161,9 +161,9 @@
   ],
   "bugs_open": [],
   "resume": {
-    "phase": "build",
-    "step": "feature review",
-    "reason": "All 12 PRs merged (2026-11-07); full feature review (sdlc:reviewer mode feature) was started but the session ended before it reported. Re-run it, then validation."
+    "phase": "bugfix",
+    "step": "triage feature-review findings",
+    "reason": "Feature review (reviews/feature.review.md, head aa4c956) returned CHANGES: F1 blocker upstream:design (steered no-answer recorded as not simulated, R-15/AC-20/DEC-7) and F2 major upstream:requirements (demo fake bank can only drain; smoke fragility) need human decisions via /sdlc:bugs; then one code fix PR (F1 code, F4, F6-F9) and doc fixes (F3, F5); then validation."
   },
   "history": [
     {
@@ -193,6 +193,10 @@
     {
       "at": "2026-11-07T23:00Z",
       "event": "all PRs merged (8 planned + skeleton + PR-03f, PR-04f, PR-07f); BUG-001..009 fixed (3 verified); session paused before feature review result"
+    },
+    {
+      "at": "2026-11-07T23:10Z",
+      "event": "feature review CHANGES: 1 blocker (F1), 1 major (F2), 7 minor; paused for the day"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"
