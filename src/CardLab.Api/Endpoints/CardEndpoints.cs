@@ -3,6 +3,7 @@ using CardLab.Domain.Application;
 using CardLab.Domain.Common;
 using CardLab.Domain.Controls;
 using CardLab.Domain.Limits;
+using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 
 namespace CardLab.Api.Endpoints;
@@ -43,7 +44,7 @@ public static class CardEndpoints
     }
 
     /// <summary><c>GET /api/cards/{id}</c> → 200 <see cref="CardDetailDto"/> | 404.</summary>
-    /// <remarks>002 PR-07 adds <c>balanceOwed</c> (<c>ICardStore.GetBalanceAsync</c>); until then it is null.</remarks>
+    /// <remarks>Includes <c>balanceOwed</c> (R-1) from <c>ICardStore.GetBalanceAsync</c>.</remarks>
     internal static async Task<IResult> GetCard(Guid id, ICardStore store, CancellationToken ct)
     {
         var card = await store.GetCardAsync(new CardId(id), ct);
@@ -53,7 +54,8 @@ public static class CardEndpoints
         }
 
         var limits = card.Limits.Select(ToDto).ToList();
-        return TypedResults.Ok(new CardDetailDto(card.Id.Value, card.Name, card.CardholderName, card.LastFour, WireNames.ToWire(card.Status), limits));
+        var balance = await store.GetBalanceAsync(card.Id, ct);
+        return TypedResults.Ok(new CardDetailDto(card.Id.Value, card.Name, card.CardholderName, card.LastFour, WireNames.ToWire(card.Status), limits, balance?.Owed.ToString()));
     }
 
     /// <summary><c>POST /api/cards/{id}/freeze</c> → 200 <see cref="StatusDto"/> (<c>frozen</c>, also for a no-op) | 404.</summary>
@@ -165,19 +167,48 @@ public static class CardEndpoints
     }
 
     /// <summary><c>GET /api/cards/{id}/activity?take=</c> → 200 <see cref="ActivityDto"/>[] newest first (purchases and payments, DEC-12) | 404.</summary>
-    /// <remarks>002: implemented in PR-07; <c>take</c> defaults to all.</remarks>
-    internal static Task<IResult> ListActivity(Guid id, int? take, ICardStore store, CancellationToken ct) =>
-        throw new NotImplementedException("PR-07");
+    /// <remarks><c>take</c> defaults to all.</remarks>
+    internal static async Task<IResult> ListActivity(Guid id, int? take, ICardStore store, CancellationToken ct)
+    {
+        var cardId = new CardId(id);
+        if (await store.GetCardAsync(cardId, ct) is null)
+        {
+            return CardNotFound();
+        }
+
+        var rows = await store.ListActivityAsync(cardId, take ?? int.MaxValue, ct);
+        return TypedResults.Ok(rows.Select(PaymentDtoMapper.ToDto).ToList());
+    }
 
     /// <summary><c>GET /api/cards/{id}/payments</c> → 200 <see cref="PaymentListItemDto"/>[] newest first (incl. refused and open references) | 404.</summary>
-    /// <remarks>002: implemented in PR-07.</remarks>
-    internal static Task<IResult> ListPayments(Guid id, ICardStore store, CancellationToken ct) =>
-        throw new NotImplementedException("PR-07");
+    internal static async Task<IResult> ListPayments(Guid id, ICardStore store, CancellationToken ct)
+    {
+        var cardId = new CardId(id);
+        if (await store.GetCardAsync(cardId, ct) is null)
+        {
+            return CardNotFound();
+        }
+
+        var records = await store.ListPaymentRecordsAsync(cardId, ct);
+        return TypedResults.Ok(records.Select(PaymentDtoMapper.ToListItem).ToList());
+    }
 
     /// <summary><c>GET /api/cards/{id}/payments/{reference}</c> → 200 <see cref="PaymentRecordDto"/> | 404 (unknown, malformed or another card's reference) (AC-20).</summary>
-    /// <remarks>002: implemented in PR-07.</remarks>
-    internal static Task<IResult> GetPaymentRecord(Guid id, string reference, ICardStore store, CancellationToken ct) =>
-        throw new NotImplementedException("PR-07");
+    internal static async Task<IResult> GetPaymentRecord(Guid id, string reference, ICardStore store, CancellationToken ct)
+    {
+        var cardId = new CardId(id);
+        if (await store.GetCardAsync(cardId, ct) is null)
+        {
+            return CardNotFound();
+        }
+
+        if (!PaymentReference.TryParse(reference, out var parsed) || await store.GetPaymentRecordAsync(parsed, ct) is not { } record || record.Quote.Card != cardId)
+        {
+            return TypedResults.Problem(statusCode: StatusCodes.Status404NotFound, title: "Payment not found");
+        }
+
+        return TypedResults.Ok(PaymentDtoMapper.ToDto(record));
+    }
 
     private static IResult ToStatusResult(Result<CardStatus, DomainError> result) =>
         result.IsOk ? TypedResults.Ok(new StatusDto(WireNames.ToWire(result.Value))) : CardNotFound();
