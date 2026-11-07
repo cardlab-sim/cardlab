@@ -63,13 +63,17 @@ jobs:
             Return your findings as JSON only. You cannot post comments; a script posts them.
             For each finding: severity S1 (blocker: wrong money, security hole, data loss), S2 (major), S3 (minor), S4 (cosmetic);
             path; line = the line number in the NEW version of the file, on a line the diff changed or added;
-            a one-line title; a short detail with the evidence; requirement_ids such as R-11 or AC-9;
+            a one-line title; a summary of two or three sentences; impact = up to five short bullets, each naming the
+            affected behaviour with file:line evidence (callers, stored data, tests, comments that now disagree);
+            requirement_ids such as R-11 or AC-9, most important first; primary_requirement = the one requirement it breaks,
+            with its text quoted exactly from 01-requirements.md; suggestion = the exact replacement text for lines
+            start_line..line (or just line) of the new file, with the original indentation, only when a fix fits in those lines;
             suspected_layer = where the defect most likely originated (requirements, design, plan, code, test, environment, unknown).
             If nothing is in scope, return an empty findings list.
           claude_args: >-
             --allowedTools "Bash(git diff *),Bash(git log *),Read,Grep,Glob"
             --model claude-opus-5-5 --max-turns 30
-            --json-schema '{"type":"object","required":["findings"],"properties":{"findings":{"type":"array","items":{"type":"object","required":["severity","path","title","detail","requirement_ids","suspected_layer"],"properties":{"severity":{"enum":["S1","S2","S3","S4"]},"path":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string"},"detail":{"type":"string"},"requirement_ids":{"type":"array","items":{"type":"string"}},"suspected_layer":{"enum":["requirements","design","plan","code","test","environment","unknown"]}}}}}}'
+            --json-schema '{"type":"object","required":["findings"],"properties":{"findings":{"type":"array","items":{"type":"object","required":["severity","path","title","summary","requirement_ids","suspected_layer"],"properties":{"severity":{"enum":["S1","S2","S3","S4"]},"path":{"type":"string"},"line":{"type":"integer"},"start_line":{"type":"integer"},"title":{"type":"string"},"summary":{"type":"string"},"impact":{"type":"array","items":{"type":"string"}},"primary_requirement":{"type":"object","properties":{"id":{"type":"string"},"quote":{"type":"string"}}},"suggestion":{"type":"string"},"requirement_ids":{"type":"array","items":{"type":"string"}},"suspected_layer":{"enum":["requirements","design","plan","code","test","environment","unknown"]}}}}}}'
       - name: Post findings and set ai-blockers
         if: steps.tier.outputs.tier != '1'
         env:
