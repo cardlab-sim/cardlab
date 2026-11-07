@@ -11,6 +11,7 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 | BUG-003 | reviewer (PR-04, F3) | S4 | R-9 | Status check awaiting an in-flight confirm is undocumented and unbounded | design | fix-now (option A: record + cap at 10 s) | fixed | build (PR-04 fix round) | | 2026-11-07 |
 | BUG-004 | reviewer (PR-05, F4) | S2 | R-15 | Steered "time out, not received" failure is not marked simulated | design | fix-now (option A: amend design + code) | fixed | build (PR-05 fix round) | | 2026-11-07 |
 | BUG-005 | reviewer (PR-05, F8) | S4 | DEC-15 | Origin stored as enum name, design text said deploy_smoke | design | fix-now (amend design text) | fixed | — | | 2026-11-07 |
+| BUG-006 | orchestrator (feature CI run 42410267102) | S4 | AC-10 | Disconnect test flaky: in-flight registry entry removed after the confirm returns | code | fix-now (option A) | in-progress | build (PR-04f, wave 3) | | 2026-11-07 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
      Decision: fix-now (option A/B) | defer | wont-fix, with the human's words in the section below
@@ -71,3 +72,14 @@ design text only.
 "Amend design text (Recommended)": stored as enum name, wire `deploy_smoke`. No code change.
 ### Resolution
 Design DEC-15 / §6 / §4 text, design digest and ADR-007 amended 2026-11-07. Check: `grep -n "Origin = deploy_smoke" 02-tech-design.md` → no hits.
+
+## BUG-006
+**Repro:** feature-branch CI `backend` (run 42410267102, head d32241c): `PaymentServiceTests.Client_disconnect_never_cancels_the_debit_and_the_payment_settles` fails at line 382 (`Assert.False(f.InFlight.TryGet(...))`); passes locally.
+**Expected / actual:** the registry is clear once the confirm returns; actually `InFlightPayments.RunAsync` removes the entry in an asynchronous continuation after `ConfirmAsync` has already returned.
+**Evidence:** `PaymentService.cs:185` `completion.SetResult(result)` then return; `InFlightPayments.RunAsync` `await start()` → `Remove` (continuation, `RunContinuationsAsynchronously`).
+### Triage (orchestrator)
+code (PR-04): race in the test-visible registry cleanup; production impact nil (a check finding the stale entry awaits a completed task, then re-reads state).
+### Decision (human, 2026-11-07)
+"A. Small fix PR now (Recommended)": brief prs/PR-04-fix-BUG-006.md, wave 3.
+### Resolution
+…

@@ -76,6 +76,17 @@
       "url": "https://github.com/cardlab-sim/cardlab/pull/39"
     },
     {
+      "id": "PR-04f",
+      "title": "Fix BUG-006: in-flight registry entry cleared before the confirm returns",
+      "wave": 3,
+      "depends_on": [
+        "PR-04"
+      ],
+      "status": "coding",
+      "branch": "pr/002-full-balance-payment/04f-fix-bug-006",
+      "url": null
+    },
+    {
       "id": "PR-05",
       "title": "SQL payment store, persisted fake bank, migration, seed and reset",
       "wave": 2,
@@ -94,7 +105,7 @@
         "PR-04",
         "PR-05"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/06-cardholder-api",
       "url": null
     },
@@ -107,7 +118,7 @@
         "PR-04",
         "PR-05"
       ],
-      "status": "planned",
+      "status": "coding",
       "branch": "pr/002-full-balance-payment/07-admin-visibility",
       "url": null
     },
@@ -125,7 +136,9 @@
       "url": null
     }
   ],
-  "bugs_open": [],
+  "bugs_open": [
+    "BUG-006"
+  ],
   "resume": null,
   "history": [
     {
