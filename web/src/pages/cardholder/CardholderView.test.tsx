@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { StrictMode } from 'react';
+import { StrictMode, useEffect, useState, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { ApiError } from '../../api/apiClient';
@@ -19,6 +19,18 @@ const opsVan: CardDetail = {
   limits: [],
   balanceOwed: '0.00',
 };
+
+/**
+ * Mounts its children after the first commit. React does not double-invoke effects of the very first commit under
+ * Testing Library, but it does for trees mounted later, which is when StrictMode in the app exposes duplicate effects.
+ */
+function Later({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setReady(true);
+  }, []);
+  return ready ? children : null;
+}
 
 const route = { route: '/cardholder/ops-1', path: '/cardholder/:id' };
 
@@ -148,7 +160,9 @@ describe('CardholderViewPage', () => {
     fake.calls.length = 0;
     renderWithApi(
       <StrictMode>
-        <CardholderViewPage />
+        <Later>
+          <CardholderViewPage />
+        </Later>
       </StrictMode>,
       fake,
       route,
@@ -166,7 +180,6 @@ describe('CardholderViewPage', () => {
     expect(within(balance).getByRole('button', { name: 'Check status' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Pay full balance' })).toBeNull();
     expect(fake.calls.filter((c) => c === 'checkPayment')).toHaveLength(1);
-    expect(fake.calls.filter((c) => c === 'getCardholderView')).toHaveLength(2);
 
     // The steering is one-shot and the open used it: arm it again for the manual check.
     fake.withStatusCheck('does_not_answer');

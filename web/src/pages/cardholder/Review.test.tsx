@@ -1,6 +1,6 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { StrictMode } from 'react';
+import { StrictMode, useEffect, useState, type ReactNode } from 'react';
 import { Route, Routes } from 'react-router';
 import { describe, expect, test } from 'vitest';
 import { FakeApiClient } from '../../api/fakeApiClient';
@@ -19,6 +19,18 @@ const opsVan: CardDetail = {
   balanceOwed: '0.00',
 };
 
+/**
+ * Mounts its children after the first commit. React does not double-invoke effects of the very first commit under
+ * Testing Library, but it does for trees mounted later, which is when StrictMode in the app exposes duplicate effects.
+ */
+function Later({ children }: { children: ReactNode }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setReady(true);
+  }, []);
+  return ready ? children : null;
+}
+
 async function rejection(promise: Promise<unknown>): Promise<unknown> {
   return promise.then(
     () => undefined,
@@ -35,7 +47,14 @@ function renderReview(fake: FakeApiClient) {
     <StrictMode>
       <Routes>
         <Route element={<CardholderShell />}>
-          <Route path="pay" element={<ReviewPage />} />
+          <Route
+            path="pay"
+            element={
+              <Later>
+                <ReviewPage />
+              </Later>
+            }
+          />
           <Route path="payments/:reference" element={<p>Receipt page</p>} />
           <Route index element={<p>Card view page</p>} />
         </Route>
