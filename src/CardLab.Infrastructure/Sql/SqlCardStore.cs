@@ -176,7 +176,8 @@ public sealed class SqlCardStore : ICardStore
 
     /// <inheritdoc />
     /// <remarks>Purchases and payments are read separately (never the <c>Bank*</c> tables, DEC-2), each limited to
-    /// <paramref name="take"/> newest rows, then merged newest first.</remarks>
+    /// <paramref name="take"/> newest rows by decision time (purchases) or confirm time (payments), then merged newest first
+    /// by that time. A purchase is shown at its processor timestamp (<c>OccurredAt</c>, 001 AC-38; BUG-009).</remarks>
     public async Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default)
     {
         var purchases = await _db.Transactions.AsNoTracking()
@@ -190,29 +191,33 @@ public sealed class SqlCardStore : ICardStore
             join q in _db.PaymentQuotes on p.Reference equals q.Reference
             orderby p.CreatedAtUtc descending
             select new { Payment = p, q.Origin }).Take(take).ToListAsync(ct);
-        var entries = purchases.Select(t => new ActivityEntry(
-                RowMapper.ToInstant(t.DecidedAtUtc),
-                ActivityKind.Purchase,
-                RowMapper.ToMoney(t.Amount),
-                t.Merchant,
-                Enum.Parse<Outcome>(t.Outcome),
-                Enum.Parse<Reason>(t.Reason),
-                Enum.Parse<Category>(t.Category),
-                null,
-                null,
-                null))
-            .Concat(payments.Select(x => new ActivityEntry(
-                RowMapper.ToInstant(x.Payment.CreatedAtUtc),
-                ActivityKind.Payment,
-                RowMapper.ToMoney(x.Payment.Amount),
-                $"Payment {x.Payment.Reference}",
-                null,
-                null,
-                null,
-                Enum.Parse<PaymentState>(x.Payment.State),
-                new PaymentReference(x.Payment.Reference),
-                Enum.Parse<PaymentOrigin>(x.Origin))));
-        return entries.OrderByDescending(e => e.At).Take(take).ToList();
+        var entries = purchases.Select(t => (
+                Placed: RowMapper.ToInstant(t.DecidedAtUtc),
+                Entry: new ActivityEntry(
+                    t.OccurredAt,
+                    ActivityKind.Purchase,
+                    RowMapper.ToMoney(t.Amount),
+                    t.Merchant,
+                    Enum.Parse<Outcome>(t.Outcome),
+                    Enum.Parse<Reason>(t.Reason),
+                    Enum.Parse<Category>(t.Category),
+                    null,
+                    null,
+                    null)))
+            .Concat(payments.Select(x => (
+                Placed: RowMapper.ToInstant(x.Payment.CreatedAtUtc),
+                Entry: new ActivityEntry(
+                    RowMapper.ToInstant(x.Payment.CreatedAtUtc),
+                    ActivityKind.Payment,
+                    RowMapper.ToMoney(x.Payment.Amount),
+                    $"Payment {x.Payment.Reference}",
+                    null,
+                    null,
+                    null,
+                    Enum.Parse<PaymentState>(x.Payment.State),
+                    new PaymentReference(x.Payment.Reference),
+                    Enum.Parse<PaymentOrigin>(x.Origin)))));
+        return entries.OrderByDescending(e => e.Placed).Take(take).Select(e => e.Entry).ToList();
     }
 
     private static PaymentRecord ToRecord(PaymentQuoteRow quote, PaymentRow? payment, IReadOnlyList<PaymentEventRow> events) =>

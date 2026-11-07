@@ -583,9 +583,9 @@ describe('FakeApiClient (002)', () => {
   });
 
   // T-W-10 · PR-03f · web unit (BUG-007)
-  // Given purchases decided and a payment confirmed at different times, When listing, Then activity is newest first by decision time (purchases, ignoring a client timestamp) and confirm time (payments, unmoved by a later status check), like design §5
-  // Catches: rows in insertion order; a client-supplied timestamp or the settlement time used as the activity time
-  test('T-W-10 activity is ordered newest first by decision and confirm time', async () => {
+  // Given purchases decided and a payment confirmed at different times, one purchase stamped long before it was decided, When listing, Then activity is ordered newest first by decision time (purchases) and confirm time (payments, unmoved by a later status check) and shows a purchase at its processor stamp, like the store (design §5 erratum, BUG-009)
+  // Catches: rows in insertion order; the decision time shown for a late purchase; ordering by the processor stamp; the settlement time used as the activity time
+  test('T-W-10 activity is ordered by decision and confirm time and shows the processor time', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-07-01T12:00:00Z') });
     const fake = seeded();
     vi.setSystemTime(new Date('2026-07-01T12:03:00Z'));
@@ -606,7 +606,7 @@ describe('FakeApiClient (002)', () => {
     const activity = await fake.listActivity('ops-1');
 
     expect(activity.map((a) => [a.description, a.at])).toEqual([
-      ['Late', '2026-07-01T12:10:00.000Z'],
+      ['Late', '2026-06-01T08:00:00Z'],
       [`Payment ${quote.reference}`, '2026-07-01T12:05:00.000Z'],
       ['Early', '2026-07-01T12:03:00.000Z'],
       ['Card purchase', '2026-07-01T12:00:00.000Z'],

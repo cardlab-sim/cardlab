@@ -87,7 +87,7 @@ public sealed record PaymentRecord(Quote Quote, QuoteStatus Status, string? Refu
 /// <remarks>PLANNER-DECISION: design §5 has <c>string? Outcome</c>; the record carries typed purchase fields (so the
 /// admin Activity table keeps 001's category and reason columns) and the payment fields the §7 wire shape needs
 /// (state, origin).</remarks>
-/// <param name="At">Purchases: <c>DecidedAtUtc</c>; payments: <c>CreatedAtUtc</c>.</param>
+/// <param name="At">The shown time. Purchases: the processor timestamp <c>OccurredAt</c> (001 AC-38); payments: <c>CreatedAtUtc</c>. Rows are ordered newest first by decision time (<c>DecidedAtUtc</c>) for purchases and confirm time for payments, not by <c>At</c>.</param>
 /// <param name="Kind">Purchase or payment.</param>
 /// <param name="Amount">Amount.</param>
 /// <param name="Description">Purchases: the merchant; payments: <c>"Payment {reference}"</c>.</param>

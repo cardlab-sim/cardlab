@@ -323,6 +323,29 @@ public abstract class PaymentStoreContractTests
         Assert.Equal([payment2, declined], newestTwo);
     }
 
+    // BUG-009 · PR-07f · contract
+    // Given a purchase stamped by the processor before a payment but decided after it, When ListActivityAsync, Then it is listed above the payment (placed by decision time) with At = its processor stamp
+    // Catches: showing the decision time (BUG-009); ordering purchases by the processor stamp
+    /// <summary>Contract P-10b.</summary>
+    [Fact]
+    public async Task Late_purchase_shows_its_processor_time_ordered_by_decision()
+    {
+        var card = new CardBuilder().Build();
+        var store = await CreateStoreAsync([card], NewAccount());
+        await PayAsync(store, card, Ref(1).Value, "150.50", T0.AddMinutes(3), p => p.Completed());
+        await store.WithCardLockAsync(card.Id, w =>
+        {
+            w.AppendTransaction(new TransactionBuilder().Amount("10.00").At(T0.AddMinutes(2)).DecidedAt(T0.AddMinutes(5)).Build());
+            return Task.FromResult(0);
+        });
+
+        var activity = await store.ListActivityAsync(card.Id, 10);
+
+        Assert.Equal([ActivityKind.Purchase, ActivityKind.Payment], activity.Select(a => a.Kind).ToArray());
+        Assert.Equal(T0.AddMinutes(2), activity[0].At);
+        Assert.Equal(T0.AddMinutes(3).AddSeconds(30), activity[1].At);
+    }
+
     // T-U-23 / T-I-16 · PR-02 · contract
     // Given a unit of work that appends a quote, creates a payment and an event and then throws, When it ends, Then none of them are stored
     // Catches: partial payment writes surviving a failed unit of work (R-9)
