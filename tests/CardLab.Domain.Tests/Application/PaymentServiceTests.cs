@@ -645,13 +645,49 @@ public sealed class PaymentServiceTests
         await f.AddPurchaseAsync("10.00");
         var open = await f.QuoteOkAsync();
         var later = await f.Service.GetReceiptAsync(f.Card.Id, paid.Reference, Ct);
-        Assert.Equal(TestMoney.Of("10.00"), later.Value!.BalanceOwed);
+        Assert.Equal(original, later.Value);
+        Assert.Equal(Money.Zero, later.Value!.BalanceOwed);
+        Assert.Contains("Your card balance is now £0.00.", later.Value.Message);
         Assert.Single(f.Bank.DebitRequests);
         Assert.Equal(0, f.Bank.StatusChecks);
         Assert.IsType<PaymentError.ReferenceNotFound>((await f.Service.GetReceiptAsync(f.Other.Id, paid.Reference, Ct)).Error);
         Assert.IsType<PaymentError.ReferenceNotFound>((await f.Service.GetReceiptAsync(f.Card.Id, open.Reference, Ct)).Error);
         Assert.IsType<PaymentError.ReferenceNotFound>((await f.Service.GetReceiptAsync(f.Card.Id, new PaymentReference("PAY-0000ZZZZ"), Ct)).Error);
         Assert.IsType<PaymentError.CardNotFound>((await f.Service.GetReceiptAsync(new CardId(Guid.NewGuid()), paid.Reference, Ct)).Error);
+    }
+
+    // Catches: a repeated confirm rebuilding the receipt with today's owed instead of the settlement balance (BUG-012, AC-9, R-7)
+    [Fact]
+    public async Task Repeated_confirm_after_a_later_purchase_returns_the_original_receipt()
+    {
+        var f = await PaymentFixture.CreateAsync();
+        var quote = await f.QuoteOkAsync();
+        var original = await f.ConfirmOkAsync(quote.Reference);
+        await f.AddPurchaseAsync("20.00");
+
+        var again = await f.Service.ConfirmAsync(f.Card.Id, quote.Reference, Ct);
+
+        Assert.Equal(original with { Repeated = true }, again.Value);
+        Assert.Equal(Money.Zero, again.Value!.BalanceOwed);
+    }
+
+    // Catches: a failed receipt reload taking today's owed instead of its settlement balance (BUG-012, AC-12)
+    [Fact]
+    public async Task Failed_receipt_reload_after_a_later_purchase_keeps_its_balance()
+    {
+        var f = await PaymentFixture.CreateAsync();
+        var quote = await f.QuoteOkAsync();
+        f.Bank.NextDebit(BankOutcomes.InsufficientFunds());
+        var original = await f.ConfirmOkAsync(quote.Reference);
+        await f.AddPurchaseAsync("20.00");
+
+        var reload = await f.Service.GetReceiptAsync(f.Card.Id, quote.Reference, Ct);
+        var check = await f.Service.CheckStatusAsync(f.Card.Id, quote.Reference, Ct);
+
+        Assert.Equal(original, reload.Value);
+        Assert.Equal(original, check.Value);
+        Assert.Equal(TestMoney.Of("150.50"), reload.Value!.BalanceOwed);
+        Assert.Contains("still £150.50", reload.Value.Message);
     }
 
     [Fact]

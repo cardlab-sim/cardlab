@@ -154,6 +154,37 @@ public sealed class PaymentStatusCheckTests
         Assert.Equal(TestMoney.Of("20.00"), payment.Settlement.BalanceAfter);
     }
 
+    // Catches: a payment settled by a check showing today's owed on reload (BUG-012, AC-36)
+    [Fact]
+    public async Task Receipt_of_a_payment_settled_by_check_keeps_the_settlement_balance()
+    {
+        var (f, reference) = await PendingAsync(debitApplied: true);
+        await f.AddPurchaseAsync("20.00");
+        var settled = (await f.Service.CheckStatusAsync(f.Card.Id, reference, Ct)).Value!;
+        await f.AddPurchaseAsync("5.00");
+
+        var reload = await f.Service.GetReceiptAsync(f.Card.Id, reference, Ct);
+        var second = await f.Service.CheckStatusAsync(f.Card.Id, reference, Ct);
+
+        Assert.Equal(settled, reload.Value);
+        Assert.Equal(settled, second.Value);
+        Assert.Equal(TestMoney.Of("20.00"), reload.Value!.BalanceOwed);
+    }
+
+    // Catches: a pending receipt frozen at confirm time instead of showing the current owed (W-5, AC-13)
+    [Fact]
+    public async Task Pending_receipt_shows_the_current_balance()
+    {
+        var (f, reference) = await PendingAsync(debitApplied: true);
+        await f.AddPurchaseAsync("20.00");
+
+        var reload = await f.Service.GetReceiptAsync(f.Card.Id, reference, Ct);
+
+        Assert.Equal(PaymentState.Pending, reload.Value!.State);
+        Assert.Equal(TestMoney.Of("170.50"), reload.Value.BalanceOwed);
+        Assert.Contains("Your card balance shows £170.50", reload.Value.Message);
+    }
+
     // T-U-22 · PR-04 · unit (application)
     // Given a pending payment and NextStatus(Completed(null)), When CheckStatusAsync at clock T2, Then Completed with EffectiveAt = SettledAt = T2 and no BankDebitedAt
     // Catches: a missing bank debit time leaving the effective time empty (AC-38, R-11)

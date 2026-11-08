@@ -48,6 +48,28 @@ public sealed class IdempotencyTests : IClassFixture<ApiFactory>
         Assert.Equal(2, record!.Events.Count(e => e.Kind == PaymentEventKind.ConfirmRepeated));
     }
 
+    // T-I-4b · PR-10 · integration
+    // Given a completed confirm and then a later card purchase, When the confirm is repeated and the receipt reloaded, Then the repeat equals the first with repeated=true, the reload equals the first, and balanceOwed is 0.00
+    // Catches: a rebuilt receipt reading today's balance instead of the settlement's (BUG-012, AC-9)
+    [Fact]
+    public async Task Repeat_and_reload_after_a_later_purchase_return_the_original_receipt()
+    {
+        var client = _fixture.CreateApiClient();
+        await client.ResetAsync();
+        var id = (await _fixture.Database.CardIdAsync(TestSeed.OpsVan.Name)).Value;
+        await client.SimulatePurchaseAsync(id, new SimulatedPurchase("150.50", "fuel", "Shell", null));
+        var reference = (await client.CreateQuoteAsync(id)).Body!.Reference;
+        var first = await client.ConfirmAsync(id, reference);
+        await client.SimulatePurchaseAsync(id, new SimulatedPurchase("20.00", "fuel", "Shell", null));
+
+        var repeat = await client.ConfirmAsync(id, reference);
+        var reload = await client.GetReceiptAsync(id, reference);
+
+        Assert.Equal(first.Body! with { Repeated = true }, repeat.Body);
+        Assert.Equal(first.Body, reload.Body);
+        Assert.Equal("0.00", reload.Body!.BalanceOwed);
+    }
+
     // T-I-5 · PR-06 · integration
     // Given one quote, When 20 confirms of the same reference are sent in parallel, Then all return 200 with state completed and the same reference, exactly one Payment row and one BankEntry exist
     // Catches: concurrent confirms racing past the rules or the unique indexes (AC-10, DEC-5)
