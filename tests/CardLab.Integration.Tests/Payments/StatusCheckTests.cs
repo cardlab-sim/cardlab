@@ -5,6 +5,7 @@ using CardLab.Domain.Authorisation;
 using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 using CardLab.Integration.Tests.Harness;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.DependencyInjection;
 using TestSeed = CardLab.TestKit.Seed;
 
@@ -107,6 +108,57 @@ public sealed class StatusCheckTests : IClassFixture<ApiFactoryWithShortBankTime
         Assert.Equal("170.50", settlement.BalanceBefore.ToString());
         Assert.Equal("20.00", settlement.BalanceAfter.ToString());
         Assert.Equal("150.50", record.Payment.Amount.ToString());
+    }
+
+    // Catches: a steered no-answer recorded as a real bank non-answer (BUG-010, R-15, AC-20, AC-33)
+    [Fact]
+    public async Task Steered_no_answer_is_recorded_as_simulated()
+    {
+        var client = _fixture.CreateApiClient();
+        var (id, reference) = await PendingAsync(client, "timeout_not_received");
+
+        var afterConfirm = (await client.GetPaymentRecordAsync(id, reference)).Body!;
+
+        Assert.Equal("bank_unanswered", afterConfirm.Events[^1].Kind);
+        Assert.True(afterConfirm.Events[^1].Simulated, "the steered debit no-answer event");
+        Assert.True(afterConfirm.Payment!.Simulated, "a pending steered payment shows it was simulated");
+
+        await client.SetSteeringAsync(null, "does_not_answer");
+        await client.CheckAsync(id, reference);
+        var afterCheck = (await client.GetPaymentRecordAsync(id, reference)).Body!;
+
+        Assert.Equal("status_check_unanswered", afterCheck.Events[^1].Kind);
+        Assert.True(afterCheck.Events[^1].Simulated, "the steered status no-answer event");
+    }
+
+    // Catches: every pending record reading as simulated, so a real bank non-answer is labelled simulated (AC-20, R-14; mirror of BUG-010)
+    [Fact]
+    public async Task Unsteered_no_answer_is_not_simulated()
+    {
+        var client = _fixture.CreateApiClient();
+        await client.ResetAsync();
+        var id = (await _fixture.Database.CardIdAsync(TestSeed.OpsVan.Name)).Value;
+        await client.SimulatePurchaseAsync(id, new SimulatedPurchase("150.50", "fuel", "Shell", null));
+        var reference = (await client.CreateQuoteAsync(id)).Body!.Reference;
+
+        // A second connection holds the bank account's applock, so the fake bank waits until the 1 s budget fires.
+        await using var holder = new SqlConnection(_fixture.Database.ConnectionString);
+        await holder.OpenAsync(TestContext.Current.CancellationToken);
+        await using var transaction = (SqlTransaction)await holder.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        await using (var hold = new SqlCommand("EXEC sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Transaction'", holder, transaction))
+        {
+            hold.Parameters.AddWithValue("@resource", $"bank:{TestSeed.BankAccountRef}");
+            await hold.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var pending = await client.ConfirmAsync(id, reference);
+        await transaction.RollbackAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("pending", pending.Body!.State);
+        var record = (await client.GetPaymentRecordAsync(id, reference)).Body!;
+        Assert.Equal("bank_unanswered", record.Events[^1].Kind);
+        Assert.False(record.Events[^1].Simulated, "no steering was set");
+        Assert.False(record.Payment!.Simulated, "no steering was set");
     }
 
     private async Task<(Guid Id, string Reference)> PendingAsync(ApiClient client, string steering)

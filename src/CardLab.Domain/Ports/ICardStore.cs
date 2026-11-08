@@ -84,7 +84,7 @@ public interface ICardStore
     /// <returns>The records; empty for an unknown card.</returns>
     Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default);
 
-    /// <summary>Purchases (by <c>DecidedAtUtc</c>) and payments (by <c>CreatedAtUtc</c>) merged, newest first (R-13, DEC-12).</summary>
+    /// <summary>Purchases ordered by <c>DecidedAtUtc</c> and shown at their processor time <c>OccurredAt</c> (001 AC-38, BUG-009); payments ordered and shown at <c>CreatedAtUtc</c> (confirm time); merged newest first (R-13, DEC-12).</summary>
     /// <param name="id">Card id.</param>
     /// <param name="take">Maximum rows (10 on the cardholder view; <see cref="int.MaxValue"/> for all).</param>
     /// <param name="ct">Cancellation.</param>

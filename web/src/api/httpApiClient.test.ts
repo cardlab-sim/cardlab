@@ -72,10 +72,6 @@ describe('HttpApiClient', () => {
     expect(lastCall(fetchMock).url).toBe('/api/cards/c1/limits/fuel/week');
     expect(lastCall(fetchMock).init.method).toBe('DELETE');
 
-    fetchMock = stubFetch(jsonResponse(200, [{ id: 't1' }]));
-    expect(await client.listTransactions('c1')).toEqual([{ id: 't1' }]);
-    expect(lastCall(fetchMock).url).toBe('/api/cards/c1/transactions');
-
     fetchMock = stubFetch(jsonResponse(200, [{ id: 'e1' }]));
     expect(await client.listAudit('c1')).toEqual([{ id: 'e1' }]);
     expect(lastCall(fetchMock).url).toBe('/api/cards/c1/audit');

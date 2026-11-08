@@ -22,9 +22,9 @@ namespace CardLab.Infrastructure.FakeBank;
 /// Amount &gt; AvailableBalance (the refusal is recorded so a status check can answer Refused); Complete and
 /// TimeoutDebitApplied insert <c>BankDebitRequest</c> + <c>BankEntry</c> and decrement the balance, commit;
 /// TimeoutNotReceived commits the steering clear and a simulated <c>NotReceived</c> request row (no entry, no balance change,
-/// BUG-004); both timeout modes then <c>await Task.Delay(Timeout.Infinite, ct)</c>
+/// BUG-004); both timeout modes then wait on <c>ct</c> and end with <see cref="SimulatedNoAnswerException"/> (BUG-010)
 /// (a timeout mode on a debit the balance cannot cover is refused instead, there is nothing to apply). Status:
-/// read-and-clear <c>NextStatusCheck</c>; DoesNotAnswer waits on <c>ct</c>; else Completed(DebitedAtUtc) / Refused(reason)
+/// read-and-clear <c>NextStatusCheck</c>; DoesNotAnswer waits on <c>ct</c> and ends the same way; else Completed(DebitedAtUtc) / Refused(reason)
 /// from the request row (NotReceived is simulated when recorded under steering), NotReceived(not simulated) when none. Shares the
 /// request's scoped <see cref="CardLabDbContext"/>.
 /// </remarks>
@@ -69,7 +69,7 @@ public sealed class SqlFakeBank : ICurrentAccountBank, IFakeBankSteering
         var (outcome, hang) = await DebitInTransactionAsync(request, ct);
         if (hang)
         {
-            await Task.Delay(Timeout.Infinite, ct);
+            await NeverAnswerAsync(ct);
         }
 
         return outcome!;
@@ -111,7 +111,7 @@ public sealed class SqlFakeBank : ICurrentAccountBank, IFakeBankSteering
 
         if (outcome is null)
         {
-            await Task.Delay(Timeout.Infinite, ct);
+            await NeverAnswerAsync(ct);
         }
 
         return outcome!;
@@ -145,6 +145,19 @@ public sealed class SqlFakeBank : ICurrentAccountBank, IFakeBankSteering
         finally
         {
             _db.ChangeTracker.Clear();
+        }
+    }
+
+    // Both hangs run only under steering, so the no-answer they end with is simulated (BUG-010).
+    private static async Task NeverAnswerAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new SimulatedNoAnswerException(ct);
         }
     }
 

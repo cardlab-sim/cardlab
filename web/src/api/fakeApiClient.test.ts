@@ -100,29 +100,12 @@ describe('FakeApiClient', () => {
     expect((await fake.listCards())[0]?.status).toBe('frozen');
   });
 
-  test('simulatePurchase stores the decided transaction first and clears nextDecision', async () => {
+  test('simulatePurchase returns the scripted decision and clears nextDecision', async () => {
     const fake = new FakeApiClient({ cards: [card()] });
-    await fake.simulatePurchase('c1', { ...purchase, merchant: 'First' });
     fake.nextDecision = exceeded;
     const decision = await fake.simulatePurchase('c1', purchase);
     expect(decision.reason).toBe('limit_exceeded');
     expect(fake.nextDecision).toBeNull();
-    const transactions = await fake.listTransactions('c1');
-    expect(transactions).toHaveLength(2);
-    expect(transactions[0]).toMatchObject({
-      outcome: 'declined',
-      reason: 'limit_exceeded',
-      amount: '12.50',
-      merchant: 'Shell',
-    });
-    expect(transactions[1]).toMatchObject({ outcome: 'approved', merchant: 'First' });
-  });
-
-  test('an invalid_request decision stores no transaction', async () => {
-    const fake = new FakeApiClient({ cards: [card()] });
-    fake.nextDecision = { ...exceeded, reason: 'invalid_request' };
-    await fake.simulatePurchase('c1', purchase);
-    expect(await fake.listTransactions('c1')).toEqual([]);
   });
 
   test('simulatePurchase on an unknown card resolves with card_not_found', async () => {
@@ -141,7 +124,6 @@ describe('FakeApiClient', () => {
       () => fake.getCard('nope'),
       () => fake.freeze('nope'),
       () => fake.setLimit('nope', 'fuel', 'day', '1.00'),
-      () => fake.listTransactions('nope'),
       () => fake.listAudit('nope'),
     ]) {
       const error = await rejection(call());
@@ -239,6 +221,17 @@ describe('FakeApiClient (002)', () => {
       ['purchase', '150.50', null],
     ]);
     expect(await fake.getReceipt('ops-1', quote.reference)).toEqual(receipt);
+  });
+
+  // Catches: the fake storing an invalid_request purchase the API would not, so pages show activity and a balance the real host never has
+  test('T-W-10 an invalid_request decision stores no purchase', async () => {
+    const fake = seeded();
+    fake.nextDecision = { ...exceeded, reason: 'invalid_request' };
+
+    await fake.simulatePurchase('ops-1', purchase);
+
+    expect((await fake.listActivity('ops-1')).map((entry) => entry.amount)).toEqual(['150.50']);
+    expect((await fake.getCard('ops-1')).balanceOwed).toBe('150.50');
   });
 
   test('T-W-10 refusal by the bank fails the payment and moves nothing', async () => {

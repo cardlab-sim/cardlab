@@ -266,7 +266,7 @@ public sealed class PaymentServiceTests
     [Fact]
     public async Task Pending_payment_blocks_new_quotes_and_confirms()
     {
-        var f = await PaymentFixture.CreateAsync();
+        var f = await PaymentFixture.CreateAsync(bankTimeoutSeconds: 0);
         var first = await f.QuoteOkAsync();
         var second = await f.QuoteOkAsync();
         f.Bank.Hang();
@@ -348,7 +348,7 @@ public sealed class PaymentServiceTests
     [Fact]
     public async Task Unanswered_debit_leaves_the_payment_pending()
     {
-        var f = await PaymentFixture.CreateAsync();
+        var f = await PaymentFixture.CreateAsync(bankTimeoutSeconds: 0);
         var quote = await f.QuoteOkAsync();
         f.Clock.Advance(TimeSpan.FromMinutes(1));
         f.Bank.Hang();
@@ -387,6 +387,39 @@ public sealed class PaymentServiceTests
         Assert.Equal(PaymentState.Pending, result.Value!.State);
         var record = await f.RecordAsync(quote.Reference);
         Assert.Equal(PaymentEventKind.BankUnanswered, record.Events[^1].Kind);
+        Assert.Null(record.Events[^1].Detail);
+        Assert.False(record.Events[^1].Simulated, "a real budget expiry is not a simulated outcome");
+    }
+
+    // Catches: a cancellation that is not the budget firing (e.g. an adapter abort) treated as "no answer" instead of an adapter failure (design §9)
+    [Fact]
+    public async Task Cancellation_outside_the_budget_is_an_adapter_failure()
+    {
+        var f = await PaymentFixture.CreateAsync();
+        var quote = await f.QuoteOkAsync();
+        f.Bank.FailNext(new OperationCanceledException("adapter aborted"));
+
+        await f.ConfirmOkAsync(quote.Reference);
+
+        var last = (await f.RecordAsync(quote.Reference)).Events[^1];
+        Assert.Equal(PaymentEventKind.BankUnanswered, last.Kind);
+        Assert.Equal("OperationCanceledException", last.Detail);
+        Assert.False(last.Simulated);
+    }
+
+    // Catches: a steered no-answer recorded as a real bank non-answer (BUG-010, R-15, AC-33)
+    [Fact]
+    public async Task Steered_no_answer_is_recorded_as_simulated()
+    {
+        var f = await PaymentFixture.CreateAsync(bankTimeoutSeconds: 0);
+        var quote = await f.QuoteOkAsync();
+        f.Bank.Hang();
+
+        await f.ConfirmOkAsync(quote.Reference);
+
+        var record = await f.RecordAsync(quote.Reference);
+        Assert.Equal(PaymentEventKind.BankUnanswered, record.Events[^1].Kind);
+        Assert.True(record.Events[^1].Simulated);
         Assert.Null(record.Events[^1].Detail);
     }
 
@@ -521,7 +554,7 @@ public sealed class PaymentServiceTests
     [Fact]
     public async Task Failed_pending_and_blocked_attempts_log_their_results()
     {
-        var f = await PaymentFixture.CreateAsync();
+        var f = await PaymentFixture.CreateAsync(bankTimeoutSeconds: 0);
         var first = await f.QuoteOkAsync();
         var second = await f.QuoteOkAsync();
         var third = await f.QuoteOkAsync();

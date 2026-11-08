@@ -11,8 +11,9 @@ namespace CardLab.TestKit.Fakes;
 /// <c>CurrentAccountBankContractTests</c> (T-U-24). Scripts are one-shot (except <see cref="HoldDebitsUntil"/>) and override the natural behaviour once; a reference the bank has already seen returns its recorded outcome and leaves the scripts unconsumed (design §8 Flow 6).
 /// </summary>
 /// <remarks>
-/// PLANNER-DECISION: <see cref="Hang"/> throws <see cref="OperationCanceledException"/> immediately (it stands for "the
-/// budget fired"), so unit tests never wait. Ledger times come from the clock passed in (never the system clock).
+/// PLANNER-DECISION: <see cref="Hang"/> and <see cref="HangStatus"/> wait on the caller's token and then throw
+/// <see cref="SimulatedNoAnswerException"/>, as the port contract says (a steered no-answer). Unit tests that hang build the
+/// service with a zero budget (<c>bankTimeoutSeconds: 0</c>) so the wait ends at once. Ledger times come from the clock passed in (never the system clock).
 /// Thread-safe.
 /// </remarks>
 public sealed class FakeBank : ICurrentAccountBank
@@ -113,7 +114,7 @@ public sealed class FakeBank : ICurrentAccountBank
         }
     }
 
-    /// <summary>The next debit never answers: optionally applies it first, then throws <see cref="OperationCanceledException"/>.</summary>
+    /// <summary>The next debit never answers: optionally applies it first, then waits for the caller's token and throws <see cref="SimulatedNoAnswerException"/>.</summary>
     /// <param name="debitApplied">True: ledger written and remembered as completed (a later status check says Completed).</param>
     public void Hang(bool debitApplied = false)
     {
@@ -143,7 +144,7 @@ public sealed class FakeBank : ICurrentAccountBank
         }
     }
 
-    /// <summary>The next status check never answers (throws <see cref="OperationCanceledException"/>).</summary>
+    /// <summary>The next status check never answers: it waits for the caller's token, then throws <see cref="SimulatedNoAnswerException"/>.</summary>
     public void HangStatus()
     {
         lock (gate)
@@ -199,37 +200,62 @@ public sealed class FakeBank : ICurrentAccountBank
             await held.WaitAsync(ct);
         }
 
+        bool hangs;
+        BankOutcome? answer;
         lock (gate)
         {
-            return Debit(request);
+            hangs = Debit(request, out answer);
         }
+
+        if (hangs)
+        {
+            await NeverAnswerAsync(ct);
+        }
+
+        return answer!;
     }
 
     /// <inheritdoc />
-    public Task<BankOutcome> GetDebitStatusAsync(BankAccountRef account, PaymentReference reference, CancellationToken ct = default)
+    public async Task<BankOutcome> GetDebitStatusAsync(BankAccountRef account, PaymentReference reference, CancellationToken ct = default)
     {
         lock (gate)
         {
             CheckAccount(account);
             statusChecks++;
-            if (hangStatus)
+            if (!hangStatus)
             {
-                hangStatus = false;
-                throw new OperationCanceledException("The fake bank's status check never answered (scripted).");
+                if (nextStatus is { } scripted)
+                {
+                    nextStatus = null;
+                    return scripted;
+                }
+
+                return recorded.TryGetValue(reference, out var seen) ? seen : BankOutcomes.NotReceived();
             }
 
-            if (nextStatus is { } scripted)
-            {
-                nextStatus = null;
-                return Task.FromResult(scripted);
-            }
+            hangStatus = false;
+        }
 
-            return Task.FromResult(recorded.TryGetValue(reference, out var seen) ? seen : BankOutcomes.NotReceived());
+        await NeverAnswerAsync(ct);
+        throw new InvalidOperationException("Unreachable: the wait only ends by cancellation.");
+    }
+
+    private static async Task NeverAnswerAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw new SimulatedNoAnswerException(ct);
         }
     }
 
-    private BankOutcome Debit(DebitRequest request)
+    // Returns true when the debit hangs (no answer); otherwise the answer is in "answer".
+    private bool Debit(DebitRequest request, out BankOutcome? answer)
     {
+        answer = null;
         if (failNext is { } error)
         {
             failNext = null;
@@ -238,7 +264,8 @@ public sealed class FakeBank : ICurrentAccountBank
 
         if (recorded.TryGetValue(request.Reference, out var seen))
         {
-            return seen;
+            answer = seen;
+            return false;
         }
 
         if (hang is { } applied)
@@ -251,7 +278,7 @@ public sealed class FakeBank : ICurrentAccountBank
                 recorded[request.Reference] = BankOutcomes.Completed(at);
             }
 
-            throw new OperationCanceledException("The fake bank's debit never answered (scripted).");
+            return true;
         }
 
         if (nextDebit is { } scripted)
@@ -263,7 +290,8 @@ public sealed class FakeBank : ICurrentAccountBank
             }
 
             recorded[request.Reference] = scripted;
-            return scripted;
+            answer = scripted;
+            return false;
         }
 
         BankOutcome outcome;
@@ -279,7 +307,8 @@ public sealed class FakeBank : ICurrentAccountBank
         }
 
         recorded[request.Reference] = outcome;
-        return outcome;
+        answer = outcome;
+        return false;
     }
 
     private void Apply(DebitRequest request, DateTimeOffset at)

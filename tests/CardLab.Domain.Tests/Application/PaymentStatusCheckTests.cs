@@ -11,7 +11,7 @@ public sealed class PaymentStatusCheckTests
 
     private static async Task<(PaymentFixture Fixture, PaymentReference Reference)> PendingAsync(bool debitApplied)
     {
-        var f = await PaymentFixture.CreateAsync();
+        var f = await PaymentFixture.CreateAsync(bankTimeoutSeconds: 0);
         var quote = await f.QuoteOkAsync();
         f.Clock.Advance(TimeSpan.FromMinutes(1));
         f.Bank.Hang(debitApplied);
@@ -119,6 +119,20 @@ public sealed class PaymentStatusCheckTests
         Assert.Equal(["debit", "status"], unanswered.Select(e => (string)e.Fields["Call"]!).ToArray());
         Assert.Single(f.Bank.DebitRequests);
         Assert.Single(f.Logger.Events("PaymentStateChanged"));
+    }
+
+    // Catches: a steered status no-answer recorded as a real bank non-answer (BUG-010, DEC-7)
+    [Fact]
+    public async Task Steered_unanswered_check_is_recorded_as_simulated()
+    {
+        var (f, reference) = await PendingAsync(debitApplied: true);
+        f.Bank.HangStatus();
+
+        await f.Service.CheckStatusAsync(f.Card.Id, reference, Ct);
+
+        var last = (await f.RecordAsync(reference)).Events[^1];
+        Assert.Equal(PaymentEventKind.StatusCheckUnanswered, last.Kind);
+        Assert.True(last.Simulated);
     }
 
     // T-U-21 · PR-04 · unit (application)
@@ -256,7 +270,8 @@ public sealed class PaymentStatusCheckTests
         Assert.Equal(0, f.Bank.StatusChecks);
         var record = await f.RecordAsync(quote.Reference);
         Assert.Equal(PaymentEventKind.StatusCheckUnanswered, record.Events[^1].Kind);
-        Assert.Equal("status", (string)f.Logger.Events("BankCallUnanswered")[0].Fields["Call"]!);
+        Assert.DoesNotContain(f.Logger.Events("BankCallUnanswered"), e => (string)e.Fields["Call"]! == "status");
+        Assert.False(record.Events[^1].Simulated, "no bank was asked, so nothing is simulated");
 
         release.SetResult();
         Assert.Equal(PaymentState.Completed, (await confirm).Value!.State);

@@ -114,7 +114,7 @@ public static class PaymentDtoMapper
                 r.Payment.Settlement?.Reason is { } reason ? PaymentWireNames.ToWire(reason) : null,
                 r.Payment.Settlement?.BalanceBefore.ToString(),
                 r.Payment.Settlement?.BalanceAfter.ToString(),
-                r.Payment.Settlement?.Simulated ?? false);
+                r.Payment.Settlement?.Simulated ?? r.Events.Any(e => e.Simulated));
         return new PaymentRecordDto(
             new RecordQuoteDto(q.Reference.Value, PaymentWireNames.ToWire(q.Kind), q.Amount.ToString(), q.Fee.ToString(), q.Total.ToString(), q.FromLabel, q.ToLabel, ToDto(q.Shown), q.CreatedAtUtc),
             PaymentWireNames.ToWire(r.Status),

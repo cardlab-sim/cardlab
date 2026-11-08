@@ -28,13 +28,11 @@ import type {
   Receipt,
   SimulatePurchaseInput,
   SteeringInput,
-  Transaction,
 } from './types';
 
 /** Initial state of a FakeApiClient. */
 export interface FakeSeed {
   cards: CardDetail[];
-  transactions?: Record<string, Transaction[]>;
   audit?: Record<string, AuditEntry[]>;
   /** 002: purchase amounts per card id, newest first (added to the card's seeded `balanceOwed`). */
   purchases?: Record<string, string[]>;
@@ -136,7 +134,6 @@ export class FakeApiClient implements ApiClient {
   nextDecision: Decision | null = null;
 
   private readonly cards: Map<string, CardDetail>;
-  private readonly transactions: Map<string, Transaction[]>;
   private readonly audit: Map<string, AuditEntry[]>;
   private gate: Promise<void> | null = null;
   private nextId = 1;
@@ -153,9 +150,6 @@ export class FakeApiClient implements ApiClient {
 
   constructor(seed: FakeSeed = { cards: [] }) {
     this.cards = new Map(seed.cards.map((card) => [card.id, structuredClone(card)]));
-    this.transactions = new Map(
-      Object.entries(seed.transactions ?? {}).map(([id, list]) => [id, structuredClone(list)]),
-    );
     this.audit = new Map(
       Object.entries(seed.audit ?? {}).map(([id, list]) => [id, structuredClone(list)]),
     );
@@ -310,12 +304,6 @@ export class FakeApiClient implements ApiClient {
     }
   }
 
-  async listTransactions(id: string): Promise<Transaction[]> {
-    await this.enter('listTransactions');
-    this.find(id);
-    return structuredClone(this.transactions.get(id) ?? []);
-  }
-
   async listAudit(id: string): Promise<AuditEntry[]> {
     await this.enter('listAudit');
     this.find(id);
@@ -345,19 +333,9 @@ export class FakeApiClient implements ApiClient {
       return structuredClone(decision);
     }
     const transactionId = decision.transactionId ?? `fake-tx-${this.nextId++}`;
-    const transaction: Transaction = {
-      id: transactionId,
-      occurredAt: input.timestamp ?? new Date().toISOString(),
-      amount: input.amount,
-      category: input.category,
-      merchant: input.merchant,
-      outcome: decision.outcome,
-      reason: decision.reason,
-    };
-    this.transactions.set(id, [transaction, ...(this.transactions.get(id) ?? [])]);
     this.activityOf(id).unshift({
       kind: 'purchase',
-      at: transaction.occurredAt,
+      at: input.timestamp ?? new Date().toISOString(),
       decidedAt: new Date().toISOString(),
       cents: toCents(input.amount),
       description: input.merchant,
