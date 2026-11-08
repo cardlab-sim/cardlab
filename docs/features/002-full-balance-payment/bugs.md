@@ -17,7 +17,7 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 | BUG-009 | coder (PR-08, 001 E2E formatting.spec T-E-6) | S2 | 001 AC-38, R-7 | Admin activity shows a purchase at decision time instead of the processor timestamp (001 regression) | design | fix-now (B: exactly as 001) | verified | build (PR-07f, wave 4) | | 2026-11-07 |
 | BUG-010 | reviewer (feature, F1) | S1 | R-15, R-14, AC-20, AC-33 | Steered "no answer" outcomes recorded as a real bank non-answer (simulated = false) | design | fix-now (option A: design erratum + code) | verified | validate (PR-09 #48) | | 2026-11-08 |
 | BUG-011 | reviewer (feature, F2) | S2 | R-15, G-1, AC-26 | Demo fake bank can only drain; deploy smoke depends on mutable demo state | requirements | defer (option C: §17 note) | deferred | — (revisit before Azure returns) | https://github.com/cardlab-sim/cardlab/issues/47 | 2026-11-08 |
-| BUG-012 | validator | S3 | AC-9, R-7, R-12 | Repeated confirm or receipt reload after a later purchase shows the current balance, not the original receipt | plan | fix-now (option A: rule + code) | fixed | validate (PR-10 #49) | | 2026-11-08 |
+| BUG-012 | validator | S3 | AC-9, R-7, R-12 | Repeated confirm or receipt reload after a later purchase shows the current balance, not the original receipt | plan | fix-now (option A: rule + code) | verified | validate (PR-10 #49) | | 2026-11-08 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
      Decision: fix-now (option A/B) | defer | wont-fix, with the human's words in the section below
@@ -201,3 +201,17 @@ Root cause: requirements (R-15 forbids the only remedy). Options: (a) amend R-15
 
 ### Decision (human, 2026-11-08)
 "A. Fix rule + code (Recommended)". Design §5 and the digest now define `Receipt.BalanceOwed` (text erratum; Gate 2 stays approved). Next: plan amend (PR-04 brief erratum + `prs/PR-10-fix-BUG-012.md`), then build PR-10 (pr-light), then re-validate AC-9 and the receipt ACs.
+### Resolution
+PR-10 (#49, merged at 8203bad): `BuildReceipt` takes `Money? pendingBalance` and shows
+`payment.Settlement?.BalanceAfter ?? pendingBalance`. `StoredReceiptAsync` reads the current owed only
+while the payment is Pending. Tests: amended T-U-38, `Repeated_confirm_after_a_later_purchase_returns_the_original_receipt`,
+`Failed_receipt_reload_after_a_later_purchase_keeps_its_balance`, `Receipt_of_a_payment_settled_by_check_keeps_the_settlement_balance`,
+`Pending_receipt_shows_the_current_balance` and T-I-4b `Repeat_and_reload_after_a_later_purchase_return_the_original_receipt`.
+Verified (validator, 2026-11-08, head 25491ee, 04-validation.md re-validation section). The exact repro above, on a live host
+with TestEndpoints=true: the 1st confirm gives `balanceOwed "0.00"` and "… now £0.00. Reference PAY-S0SJZQCR.". After a £20.00
+purchase, the repeat confirm is identical apart from `repeated: true` (same time, `0.00`, "now £0.00"), and the receipt GET is
+identical to the first. The record holds `balanceAfter 0.00` and the card view shows the live `20.00`. Variants: a failed receipt
+(W-3 and W-4) keeps "still £150.50" on reload, check and repeat after a later completed payment and purchase. A check-settled
+payment keeps "now £20.00" after a £5.00 purchase, on reload, second check, repeat, in the browser and after a host restart. A
+pending receipt shows the current owed (£170.50, the same as the card view). Mutation (throwaway worktree, rule reverted): 4 domain
+tests and T-I-4b go red, and all are green on HEAD. Suites on 25491ee: unit 291/0, web 123/0, integration 131/0, E2E 32/0.

@@ -1,25 +1,87 @@
 ---
 feature: 002-full-balance-payment
 branch: feat/002-full-balance-payment
-commit: 5cdf614
-validated_at: 2026-11-08T10:00Z
+commit: 25491ee
+validated_at: 2026-11-08T10:35Z
+first_validated: 5cdf614 (2026-11-08T10:00Z)
 verdict: DELIVERED WITH CAVEATS
 ---
 
 # Validation: CL-3 slice 1, pay the full card balance from the linked current account
 
 ## Verdict
-**DELIVERED WITH CAVEATS.** Every AC that can run without `demo` is met with fresh evidence, and the
-whole pyramid is green on head `5cdf614`. The money invariants held under every probe: exactly once,
-one in flight, both sides agree, and nothing moves on a refusal. The BUG-010 erratum (a steered
-no-answer is recorded `Simulated = true`) holds in the running system, and a mutation proves its test.
-There are three caveats. AC-26, and G-1's "against `demo`" metric, are PENDING-HUMAN because no `demo`
-environment runs while Azure is parked; a local proxy passed. New BUG-012 (S3) is open: after a later
-purchase, a repeated confirm or a receipt reload shows the current balance, not the original receipt
-(AC-9 ⚠️). BUG-011 stays deferred (#47).
+**DELIVERED WITH CAVEATS** (re-validated on head `25491ee`, after PR-10 #49). BUG-012 is fixed and
+**verified**. A repeated confirm, a receipt reload and a check on a settled payment now return the
+original receipt after a later purchase, and AC-9 moves from ⚠️ to ✅. Every receipt AC was re-judged
+against the live system and holds. The whole pyramid is green again on `25491ee`. The money invariants
+still hold: exactly once, one in flight, both sides agree, and nothing moves on a refusal.
 
-## Test runs
-All runs are fresh on head `5cdf614`. Install: `dotnet restore` + `npm ci` (web, e2e). Build:
+One caveat remains. AC-26, and G-1's "against `demo`" metric, are PENDING-HUMAN because no `demo`
+environment runs while Azure is parked. A local proxy passed. BUG-011 stays deferred (#47). No new bugs.
+
+(First validation on `5cdf614`: DELIVERED WITH CAVEATS, with AC-9 ⚠️ for BUG-012. That run's evidence
+is kept below. The re-validation section has the fresh evidence.)
+
+## Re-validation 2026-11-08 (head `25491ee`, BUG-012 / PR-10)
+**Scope.** PR-10 changed only `PaymentService.BuildReceipt` and `StoredReceiptAsync`. A settled receipt
+now shows `Settlement.BalanceAfter`, and a pending one shows the current owed (design §5, BUG-012
+erratum). Re-checked: the BUG-012 repro, the failed, check-settled and pending variants, every AC that
+touches the receipt (AC-7, AC-9, AC-10, AC-12, AC-13, AC-14, AC-15, AC-35, AC-36), and the full pyramid
+as a regression check.
+
+**Setup.** `git pull` (`feat/002-full-balance-payment` == origin, head `25491ee`, clean). Clean
+`dotnet restore` plus `npm ci` (web, e2e). `dotnet build CardLab.sln -warnaserror --no-incremental`
+gave 0 warnings and 0 errors, and `npm run build --prefix web` gave 83.10 kB gzipped JS (SPA built
+before E2E). `dotnet format --verify-no-changes`, the web and e2e lint, and the web and e2e typecheck
+all exited 0.
+
+| Layer | Command | Passed | Failed | Skipped/todo | Duration |
+|-------|---------|--------|--------|--------------|----------|
+| Unit (domain + application + properties) | `dotnet test tests/CardLab.Domain.Tests --no-build` | 291 (+4 PR-10) | 0 | 0 | 349 ms (3.3 s wall) |
+| Unit (web) | `npm test --prefix web -- --run` | 123 (13 files) | 0 | 0 | 4.4 s |
+| Integration (LocalDB) | `dotnet test tests/CardLab.Integration.Tests --no-build` | 131 (+1 T-I-4b) | 0 | 0 | 1 m 18 s |
+| E2E (chromium + firefox, isolated port 5431, SPA built first) | `BASE_URL=http://localhost:5431 CARDLAB_HOST_COMMAND="dotnet run --project ../../src/CardLab.Api --urls http://localhost:5431 -- --webroot ../../web/dist" npx playwright test --project local --project local-firefox` | 32 | 0 | 0 | 2.2 min |
+
+GitHub CI on `25491ee`: `ci` success (runs 42471048977, 42471046748). `codeql` **failed for an
+environmental reason**: `analyze (csharp)` stopped in `codeql-action/init` with "Unable to download and
+extract CodeQL CLI: Unexpected HTTP response: 504". `analyze (javascript-typescript)` succeeded. A
+re-run is needed before the final PR. `risk-tier` still needs the human's approval. `findings-triage.yml`
+still fails with no jobs (CL-2, as before).
+
+**Regression tests proved red to green (mutation).** In a throwaway worktree at `25491ee`, I reverted
+the rule: `BuildReceipt` prefers the passed balance over `Settlement.BalanceAfter`, and
+`StoredReceiptAsync` always reads the current owed. Four domain tests went red:
+`Repeated_confirm_after_a_later_purchase_returns_the_original_receipt`,
+`Failed_receipt_reload_after_a_later_purchase_keeps_its_balance`,
+`Receipt_of_a_payment_settled_by_check_keeps_the_settlement_balance` and the amended T-U-38
+`Receipt_reload_reads_without_calling_the_bank` (4 failed / 287 passed). One integration test went red:
+`IdempotencyTests.Repeat_and_reload_after_a_later_purchase_return_the_original_receipt` (T-I-4b, 1 of
+3). All five are green on HEAD. `Pending_receipt_shows_the_current_balance` pins the pending rule. It
+is green before and after the fix, as the triage intended. I removed the worktree, and the main
+checkout was not touched.
+
+**Live host.** `dotnet run --no-build --project src/CardLab.Api --urls http://localhost:5435` with
+`ASPNETCORE_ENVIRONMENT=Development` (TestEndpoints=true) on a scratch LocalDB `CardLabReval002`
+(dropped afterwards), with the real 10 s bank budget. Scratch scripts only, nothing added to the repo.
+
+| Check | What was run | Result |
+|---|---|---|
+| T-C-15, BUG-012 curl repro (exact ledger steps) | reset; £150.50 purchase; quote; confirm; £20.00 purchase; repeat confirm; receipt GET | 1st confirm `completed`, `balanceOwed "0.00"`, "… Your card balance is now £0.00. Reference PAY-S0SJZQCR." The repeat body is **byte-identical apart from `repeated: true`**: same `time` `10:24:30.801+00:00`, `balanceOwed "0.00"`, "now £0.00". The GET body is identical to the first. Record: `balanceBefore 150.50`, `balanceAfter 0.00`, events `confirm_created, debit_requested, bank_completed, confirm_repeated`. Card view (live) `20.00`. **Fixed.** |
+| T-C-16 S1, completed | as T-C-15, plus a check on the settled payment | repeat == original (repeated aside), reload == original, check == original; all `0.00` / "now £0.00"; one debit |
+| T-C-16 S2a, failed, insufficient funds (AC-12) | steer `refuse_insufficient_funds`; confirm → W-3; new quote, confirm → completed `0.00`; £20.00 purchase; reload, check and repeat of the failed reference | the failed receipt keeps "Your card balance is **still £150.50**" and `balanceOwed 150.50` on reload, on check and on repeat (repeat differs only in `repeated`). The completed receipt reload stays `0.00`. Before the fix this read "still £0.00". |
+| T-C-16 S2b, failed, account unavailable (AC-35) | same with `refuse_account_unavailable` → W-4 | same: "still £150.50" kept on reload, check and repeat; fee `0.00` |
+| T-C-16 S3, pending settled by a check (AC-13, AC-14, AC-36) | steer `timeout_debit_applied`; confirm; £20.00 purchase; reload; check; £5.00 purchase; reload, second check and repeat | pending after **10.02 s**, W-5 "shows £150.50", fee `0.00`. The pending reload after the purchase shows the **current** "shows £170.50", and so does the card view's pending notice (same message). The check gives completed "now £20.00". After the £5.00 purchase the reload, second check and repeat all keep "now £20.00" / `20.00` (not £25.00), while the live view says `25.00` and `available`. One debit. |
+| T-C-16 S4, pending then not received (AC-15) | steer `timeout_not_received`; confirm; £20.00 purchase; check; £5.00 purchase; reload | the check gives failed "still £170.50" (the settlement's BalanceAfter). The bank stays `25000.00` and the card can pay again. The reload after the £5.00 purchase still reads "still £170.50". |
+| T-C-16 S5, 10 parallel confirms (AC-10) | 10 parallel; £20.00 purchase; one later repeat and a reload | all 200 `completed`, one body (apart from `repeated`); the later repeat and the reload equal it; one debit; 10 `confirm_repeated` events (9 parallel + 1 later) |
+| T-C-17, browser (chromium, Playwright script) | confirm from `/cardholder/{ops}/pay`; £20.00 purchase; page reload; deep link | the receipt page text after the reload and the deep link is **identical** to the first render ("now £0.00"), and the card view shows £20.00. Pending receipt page after a £20.00 purchase: "shows £170.50". Check status → "now £20.00". A £5.00 purchase and reload → still "now £20.00". AC-36 record: amount `150.50`, before `170.50`, after `20.00`. |
+| T-C-18, host restart | a check-settled payment ("now £20.00"), £5.00 purchase, host killed and restarted on the same DB | receipt GET `completed`, `20.00`, "now £20.00"; view `25.00`. The receipt is rebuilt from the stored settlement. |
+| Exploratory | repeat confirm while pending after a purchase; unanswered check (`does_not_answer`); cross-card and unknown references | a pending repeat and the W-10 receipt show the current `170.50` (the pending rule). After W-10, a reload reads W-5 with `170.50`, and the next check completes with `20.00`. The receipt GET, confirm and check under another card's id all return 404, and an unknown reference returns 404. |
+
+**Re-judged receipt ACs.** AC-7 ✅ · AC-9 ✅ (was ⚠️) · AC-10 ✅ · AC-12 ✅ · AC-13 ✅ · AC-14 ✅ · AC-15 ✅ ·
+AC-35 ✅ · AC-36 ✅. The AC table below carries the updated rows.
+
+## Test runs (first validation, head `5cdf614`)
+For the fresh re-run on `25491ee`, see the re-validation section above. All runs here are fresh on head `5cdf614`. Install: `dotnet restore` + `npm ci` (web, e2e). Build:
 `dotnet build CardLab.sln -warnaserror --no-incremental` gave 0 warnings and 0 errors, and
 `npm run build --prefix web` gave 83.10 kB gzipped JS. Lint, format and typecheck (web, e2e) all exited 0.
 
@@ -51,15 +113,15 @@ files, nothing was added to the repo.
 | AC-4 | T-I-1 (every seeded card), T-E-1; T-C-5: all 3 cards show name, last four, cardholder, "Brightline Supplies Ltd current account", 7731, available balance | pass | ✅ | |
 | AC-5 | T-U-3, T-U-4, T-I-3, T-E-2 (W-7, no Pay button); browser walk: `/pay` direct URL → W-7 | pass | ✅ | |
 | AC-6 | T-U-5, T-E-1 (exact W-1 lines + button in one `main`, no fake-bank region) | pass | ✅ | |
-| AC-7 | T-U-10, T-I-2, T-E-1 (W-2, fee £0.00, London-format time, both accounts, £24,849.50, same reference in account activity) | pass | ✅ | |
+| AC-7 | T-U-10, T-I-2, T-E-1 (W-2, fee £0.00, London-format time, both accounts, £24,849.50, same reference in account activity); re-val T-C-15, T-C-17 | pass | ✅ | Re-val `25491ee`: W-2 "now £0.00" is now also what every later reload of the receipt shows. |
 | AC-8 | T-U-11, T-I-3 (409 W-6 £170.50, no Payment, no BankEntry), T-I-10 (refused record: shown wording, `balance_changed`, balance at refusal), T-E-2 (Review again → £170.50) | pass | ✅ | |
-| AC-9 | T-U-12, T-I-4 (repeat body == original apart from `repeated`, 1 Payment, 1 BankEntry, 2 `confirm_repeated`); T-C-4: 10 parallel + 1 later repeat, identical bodies and time (BUG-008), 1 debit, 10 repeats recorded | pass | ⚠️ | **BUG-012:** when a purchase lands after completion, a repeated confirm (and a receipt reload) answers "Your card balance is now £20.00" / `balanceOwed 20.00`, not the original "£0.00". That is not "the original receipt". Exactly-once still holds. |
-| AC-10 | T-U-13, T-I-5 (20 parallel); T-C-4: 10 parallel → all 200, one body, one Payment | pass | ✅ | |
+| AC-9 | T-U-12, T-I-4, **T-I-4b** `Repeat_and_reload_after_a_later_purchase_return_the_original_receipt`, `Repeated_confirm_after_a_later_purchase_returns_the_original_receipt`; T-C-4; re-val T-C-15, T-C-16 S1/S2/S3/S5, T-C-17 | pass | ✅ | Re-val `25491ee`: **BUG-012 verified.** After a later purchase the repeat is byte-identical to the original apart from `repeated` (`balanceOwed 0.00`, "now £0.00"). One Payment, one debit, each repeat recorded as `confirm_repeated` with its time. Mutation turns the new tests red. (5cdf614: ⚠️ BUG-012.) |
+| AC-10 | T-U-13, T-I-5 (20 parallel); T-C-4: 10 parallel → all 200, one body, one Payment; re-val T-C-16 S5 | pass | ✅ | Re-val: same outcome is kept by a later repeat or reload after a purchase. |
 | AC-11 | T-U-6, T-U-14, T-I-6 (409 `payment_pending` W-9 with amount and reference), T-E-3 (W-9 + Check status, no Pay button) | pass | ✅ | |
-| AC-12 | T-U-15, T-E-2 (W-3 £150.50, fee £0.00, balance £150.50, account £25,000.00, activity empty) | pass | ✅ | |
-| AC-13 | T-I-6 (1 s budget), T-E-3 (real budget, ≤ 12 s, W-5 on receipt and view, Check status); T-C-3 measured 10,010 ms | pass | ✅ | |
-| AC-14 | T-U-16, T-I-7 (completed, one BankEntry, new quote allowed), T-E-3 | pass | ✅ | |
-| AC-15 | T-U-17, T-I-7; T-C-3: check → failed `not_received`, bank £25,000.00, availability `available` | pass | ✅ | |
+| AC-12 | T-U-15, T-E-2 (W-3 £150.50, fee £0.00, balance £150.50, account £25,000.00, activity empty); `Failed_receipt_reload_after_a_later_purchase_keeps_its_balance`; re-val T-C-16 S2a | pass | ✅ | Re-val: the W-3 receipt keeps "still £150.50" on reload, check and repeat after a later completed payment and purchase. |
+| AC-13 | T-I-6 (1 s budget), T-E-3 (real budget, ≤ 12 s, W-5 on receipt and view, Check status); T-C-3 measured 10,010 ms; `Pending_receipt_shows_the_current_balance`; re-val T-C-16 S3 (10.02 s) | pass | ✅ | Re-val: W-5 £150.50, fee £0.00. While pending, the receipt shows the current owed by design (§5 erratum). After an AC-36 purchase it reads "shows £170.50", the same as the card view's notice. |
+| AC-14 | T-U-16, T-I-7 (completed, one BankEntry, new quote allowed), T-E-3; `Receipt_of_a_payment_settled_by_check_keeps_the_settlement_balance`; re-val T-C-16 S3, T-C-17, T-C-18 | pass | ✅ | Re-val: a check-settled receipt keeps its settlement balance on reload, a second check, a repeat and after a host restart. One debit; the card can pay again. |
+| AC-15 | T-U-17, T-I-7; T-C-3: check → failed `not_received`, bank £25,000.00, availability `available`; re-val T-C-16 S4 | pass | ✅ | Re-val: the failed receipt keeps its settlement balance ("still £170.50" after an intervening £20.00 purchase) on reload after a later purchase. Nothing moved; the card can pay again. |
 | AC-16 | T-U-18, T-I-7; T-C-3: steered `does_not_answer` → W-10 after 10,018 ms, no new `debit_requested` event, no BankEntry; next check answers | pass | ✅ | |
 | AC-17 | T-U-7, T-P-4; every record read in T-C-* has one state per event, UTC (`+00:00`) times, nothing after a terminal state | pass | ✅ | |
 | AC-18 | T-I-8 (both sides read after every J-1/J-3 step under all five outcomes; no fee/charge) | pass | ✅ | |
@@ -80,11 +142,12 @@ files, nothing was added to the repo.
 | AC-33 | T-E-4 (no fake-bank region or control on review/receipt; record simulated), T-W-5; BUG-010 tests + T-C-3 | pass | ✅ | |
 | AC-34 | T-I-7, T-E-3 (view open → completed, effective = bank debit time), T-E-6 (admin open); browser walk D: opening admin detail settled `PAY-0QN3BDXG` (`status_check_completed`) | pass | ✅ | |
 | AC-38 | T-U-22 (EffectiveAt = SettledAt = T2, no BankDebitedAt) | pass | ✅ | Only the application layer can reach this: the shipped fake always reports a debit time. |
-| AC-36 | T-U-21, T-I-7 (before £170.50, after £20.00, settled £150.50) | pass | ✅ | |
-| AC-35 | T-U-20, T-E-2 (W-4 £150.50, fee £0.00) | pass | ✅ | |
+| AC-36 | T-U-21, T-I-7 (before £170.50, after £20.00, settled £150.50); re-val T-C-16 S3, T-C-17 | pass | ✅ | Re-val: record amount 150.50, before 170.50, after 20.00; the check's receipt "now £20.00" is kept after a later £5.00 purchase. |
+| AC-35 | T-U-20, T-E-2 (W-4 £150.50, fee £0.00); re-val T-C-16 S2b | pass | ✅ | Re-val: the W-4 receipt keeps "still £150.50" on reload, check and repeat after a later completed payment and purchase. |
 | AC-29 | T-C-1: `compliance-preread.md` CD-1..CD-8 all `decided`; a scripted diff of §17 W-1..W-10 against `WordingV1.cs` literals gives **10/10 verbatim**; the wording ACs quote §17 | pass | ✅ | |
 
-**Tally: 36 ✅ · 0 ❌ · 1 ⚠️ (AC-9) · 1 ⛔ PENDING-HUMAN (AC-26).**
+**Tally (re-validation, `25491ee`): 37 ✅ · 0 ❌ · 0 ⚠️ · 1 ⛔ PENDING-HUMAN (AC-26).**
+(First validation, `5cdf614`: 36 ✅ · 0 ❌ · 1 ⚠️ (AC-9) · 1 ⛔.)
 
 ### Fixed bugs re-verified (ledger moves `fixed` → `verified`)
 | BUG | Symptom re-tested (this session) | Regression test |
@@ -95,6 +158,7 @@ files, nothing was added to the repo.
 | BUG-005 | SQL `SELECT Origin … FROM PaymentQuote` → `CardholderView` / `DeploySmoke`; wire `origin: deploy_smoke` only for the exact header `deploy-smoke` (`Deploy-Smoke` → `cardholder_view`); smoke record shows "origin: smoke" | `OriginMarkerTests` green; design grep clean |
 | BUG-007 | `ActivityFake` gone (`grep` empty); shared fake feeds `simulatePurchase` into `listActivity`/balance (T-W-10, T-W-8 asserts a consistent £32.50) | web 123/123 |
 | BUG-008 | T-C-4: 10 parallel confirms + 1 later repeat → one `time` value `…:33.926+00:00`, bodies identical apart from `repeated` | T-I-4/T-I-5 exact equality green |
+| BUG-012 (re-val `25491ee`) | T-C-15: the exact ledger repro. The repeat and the GET after a later £20.00 purchase both give `balanceOwed 0.00` and "now £0.00", identical to the first receipt. Variants T-C-16 to T-C-18 cover failed, check-settled, pending and restart. | `Repeated_confirm_after_a_later_purchase_returns_the_original_receipt`, `Failed_receipt_reload_after_a_later_purchase_keeps_its_balance`, `Receipt_of_a_payment_settled_by_check_keeps_the_settlement_balance`, amended T-U-38, T-I-4b, all green. The mutation turns 4 unit tests and 1 integration test red. `Pending_receipt_shows_the_current_balance` is green (it pins the rule). |
 | BUG-010 | T-C-3: steered debit no-answer → `bank_unanswered` `simulated true`, `payment.simulated true`; steered `does_not_answer` → `status_check_unanswered` `simulated true`; T-C-7 unsteered (applock held) → `simulated false`. **Mutation** (throwaway worktree, `PaymentService.cs:426` `Unknown(e is SimulatedNoAnswerException)` → `Unknown(e is null)`): 2 unit + 1 integration tests red; green on HEAD | `Steered_no_answer_is_recorded_as_simulated` (unit + integration), `Steered_unanswered_check_is_recorded_as_simulated`, `Unsteered_no_answer_is_not_simulated`, `FakeBank_hangs_until_the_callers_token_fires` |
 
 ## Non-functional requirements
@@ -120,9 +184,17 @@ files, nothing was added to the repo.
 ## Bugs found
 | BUG | Severity | AC/R | Title |
 |-----|----------|------|-------|
-| BUG-012 | S3 | AC-9, R-7, R-12 | A repeated confirm or receipt reload after a later purchase shows the current balance, not the original receipt |
+| BUG-012 | S3 | AC-9, R-7, R-12 | A repeated confirm or receipt reload after a later purchase shows the current balance, not the original receipt. **Verified fixed on `25491ee` (PR-10 #49).** |
+
+Re-validation on `25491ee` found no new bugs.
 
 ## Observations (not bugs)
+- (re-val) A **pending** receipt follows the live balance, as the BUG-012 decision intends (§5 erratum). After an
+  AC-36 purchase, a reload reads "Your card balance shows £170.50 until we know the outcome", where the first
+  pending receipt said £150.50. It matches the card view's notice, and W-5's "shows" wording reads as live.
+  A repeat confirm and the W-10 receipt while pending follow the same rule.
+- (re-val) GitHub `codeql` on `25491ee` is red only because the CodeQL bundle download returned HTTP 504
+  (`analyze (csharp)` init step). Re-run it before the final PR.
 - A pending receipt page does not auto-check on reload; only the cardholder view and admin detail do. This
   matches R-11 and DEC-13. A cardholder who refreshes the receipt sees "pending" until they press Check
   status or go back to the card.
@@ -170,4 +242,22 @@ python wording.py 01-requirements.md WordingV1.cs   (AC-29: 10/10 verbatim)
 git worktree add --detach <scratch>/wt-mut HEAD; mutate PaymentService.cs:426; dotnet build; dotnet test --filter Steered / StatusCheckTests; git worktree remove
 dotnet test … --filter <fixed-bug regression tests>   (domain 5/5, integration 9/9)
 gh run list --branch feat/002-full-balance-payment; gh run view 42468270285 --log-failed
+
+# re-validation, head 25491ee
+git fetch; git pull  (== origin, head 25491ee, clean)
+dotnet restore CardLab.sln && npm ci --prefix web && npm ci --prefix tests/e2e
+dotnet build CardLab.sln -warnaserror --no-incremental && npm run build --prefix web
+dotnet test tests/CardLab.Domain.Tests --no-build; npm test --prefix web -- --run; dotnet test tests/CardLab.Integration.Tests --no-build
+git worktree add --detach <scratch>/wt-mut HEAD; revert the BUG-012 rule in PaymentService.cs (BuildReceipt + StoredReceiptAsync);
+  dotnet test tests/CardLab.Domain.Tests (4 red); dotnet test tests/CardLab.Integration.Tests --filter IdempotencyTests (1 red); git worktree remove
+dotnet test tests/CardLab.Integration.Tests --no-build --filter IdempotencyTests  (HEAD: 3/3)
+ASPNETCORE_ENVIRONMENT=Development ConnectionStrings__CardLab="…Database=CardLabReval002…" dotnet run --no-build --project src/CardLab.Api --urls http://localhost:5435 -- --webroot D:/cardlab/web/dist
+  (killed and restarted once on the same DB for T-C-18; DB dropped afterwards)
+bash bug012-curl.sh http://localhost:5435        (T-C-15)
+python -I reval.py http://localhost:5435          (T-C-16 S1..S5: 39/39 checks)
+cd tests/e2e; node browse.cjs http://localhost:5435  (T-C-17: 9/9)
+curl probes: pending repeat, does_not_answer check, cross-card and unknown references, restart reload (T-C-18)
+cd tests/e2e; BASE_URL=http://localhost:5431 CARDLAB_HOST_COMMAND="dotnet run --project ../../src/CardLab.Api --urls http://localhost:5431 -- --webroot ../../web/dist" npx playwright test --project local --project local-firefox
+dotnet format CardLab.sln --verify-no-changes; npm run lint|typecheck --prefix web|tests/e2e
+gh run list --branch feat/002-full-balance-payment; gh run view 42471048947 --log-failed
 ```

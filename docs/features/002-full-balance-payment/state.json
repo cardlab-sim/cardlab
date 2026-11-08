@@ -185,8 +185,7 @@
   ],
   "bugs_open": [
     "BUG-010",
-    "BUG-011",
-    "BUG-012"
+    "BUG-011"
   ],
   "resume": null,
   "history": [
@@ -245,6 +244,10 @@
     {
       "at": "2026-11-08T00:00Z",
       "event": "PR-10 pr-light APPROVE WITH FIXES (F1 null pending balance); fixes verified (M1 now fails T-U-38; unit 291), merged (#49); BUG-012 fixed; phase validate (re-validate AC-9 and receipt ACs)"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "re-validation DELIVERED WITH CAVEATS: 37 pass, 0 fail, 0 warn, AC-26 pending-human (Azure parked, BUG-011 deferred #47); BUG-012 verified; no new bugs"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"
