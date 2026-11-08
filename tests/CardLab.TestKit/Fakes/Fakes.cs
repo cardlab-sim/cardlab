@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using CardLab.Domain.Controls;
+using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 using CardLab.TestKit.Builders;
 using Microsoft.Extensions.Logging;
@@ -130,6 +131,38 @@ public sealed class CapturingLogger<T> : ILogger<T>
 
         public void Dispose()
         {
+        }
+    }
+}
+
+/// <summary>
+/// 002: sequential references <c>PAY-00000001</c>, <c>PAY-00000002</c>, … (design §15.2); deterministic, thread-safe.
+/// </summary>
+public sealed class FakePaymentReferences : IPaymentReferences
+{
+    private readonly object gate = new();
+    private readonly List<PaymentReference> issued = [];
+
+    /// <summary>References issued so far, in order.</summary>
+    public IReadOnlyList<PaymentReference> Issued
+    {
+        get
+        {
+            lock (gate)
+            {
+                return issued.ToArray();
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public PaymentReference Next()
+    {
+        lock (gate)
+        {
+            var reference = new PaymentReference("PAY-" + (issued.Count + 1).ToString("D8", System.Globalization.CultureInfo.InvariantCulture));
+            issued.Add(reference);
+            return reference;
         }
     }
 }

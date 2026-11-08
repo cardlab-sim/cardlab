@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using System.Globalization;
 using CardLab.Domain.Controls;
 using CardLab.Domain.Ports;
+using CardLab.Infrastructure.FakeBank;
 using CardLab.Infrastructure.Model;
 using CardLab.Infrastructure.Options;
 using Microsoft.Data.SqlClient;
@@ -78,7 +80,8 @@ public static class Seeder
     /// Ensures the account (by name), the admin (by <see cref="SeedOptions.AdminId"/>) and each card (by name)
     /// exist; never duplicates; recomputes every seeded card's lookup hash and last four from its number with
     /// the configured <c>ICardNumberLookup</c> (heals a key rotation). New cards start Active with no limits;
-    /// existing cards keep their status, limits and history.
+    /// existing cards keep their status, limits and history. Also seeds (002, only when missing) the linked current account,
+    /// the fake bank account at its opening balance and the steering row.
     /// </summary>
     /// <param name="services">A scoped service provider (DbContext + lookup).</param>
     /// <param name="options">Seed data.</param>
@@ -126,6 +129,56 @@ public static class Seeder
             }
         }
 
+        await SeedLinkedAccountAsync(db, account.Id, options.LinkedAccount, services.GetService<ILoggerFactory>()?.CreateLogger(typeof(Seeder).FullName!) ?? NullLogger.Instance, ct);
         await db.SaveChangesAsync(ct);
+    }
+
+    // 002: the linked account, its fake bank account and the steering row, each only when missing (a restart never
+    // resets the bank, AC-22). Only the last four of the account number is kept (NFR-3). Skipped (with a warning) only when
+    // the whole section is unset, so 001-era seed options keep working; a section that is set but invalid stops startup.
+    private static async Task SeedLinkedAccountAsync(CardLabDbContext db, Guid accountId, SeedLinkedAccountOptions linked, ILogger logger, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(linked.AccountNumber))
+        {
+            logger.LogWarning("Linked account not configured; payments unavailable.");
+            return;
+        }
+
+        if (linked.AccountNumber.Length < 4
+            || !linked.AccountNumber.All(char.IsAsciiDigit)
+            || linked.BankAccountRef == Guid.Empty
+            || !decimal.TryParse(linked.OpeningBalance, NumberStyles.Number, CultureInfo.InvariantCulture, out var openingBalance))
+        {
+            throw new InvalidOperationException("CardLab:Seed:LinkedAccount is invalid");
+        }
+
+        var lastFour = linked.AccountNumber[^4..];
+        if (!await db.LinkedAccounts.AnyAsync(l => l.AccountId == accountId, ct))
+        {
+            db.LinkedAccounts.Add(new LinkedAccountRow
+            {
+                Id = Guid.NewGuid(),
+                AccountId = accountId,
+                DisplayName = linked.DisplayName,
+                LastFour = lastFour,
+                BankAccountRef = linked.BankAccountRef,
+                AuthorityBasis = linked.AuthorityBasis,
+            });
+        }
+
+        if (!await db.BankAccounts.AnyAsync(b => b.Id == linked.BankAccountRef, ct))
+        {
+            db.BankAccounts.Add(new BankAccountRow
+            {
+                Id = linked.BankAccountRef,
+                LastFour = lastFour,
+                AvailableBalance = openingBalance,
+            });
+        }
+
+        if (!await db.BankSteerings.AnyAsync(s => s.Id == 1, ct))
+        {
+            db.BankSteerings.Add(new BankSteeringRow { Id = 1 });
+        }
     }
 }

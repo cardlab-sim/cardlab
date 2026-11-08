@@ -37,4 +37,37 @@ public static partial class CardLabEvents
     [LoggerMessage(EventId = 1002, EventName = "ControlChanged", Level = LogLevel.Information,
         Message = "Control changed: {Action} on card {CardId} ({LastFour}) by {ActorName} ({ActorId})")]
     public static partial void ControlChanged(ILogger logger, string actorId, string actorName, string cardId, string lastFour, string action);
+
+    /// <summary>One payment state change, including none → pending (002 NFR-4, design §12). Not logged for "unanswered".</summary>
+    /// <param name="logger">Logger of <c>PaymentService</c>.</param>
+    /// <param name="paymentId">Payment id as text.</param>
+    /// <param name="cardId">Card id as text.</param>
+    /// <param name="lastFour">Card last four.</param>
+    /// <param name="kind">Payment kind wire name (<c>full</c>).</param>
+    /// <param name="amount">Amount as <c>Money.ToString()</c>.</param>
+    /// <param name="fromState">State wire name before, or <c>"none"</c> on creation.</param>
+    /// <param name="toState">State wire name after.</param>
+    /// <param name="reason">Failure reason wire name, or <c>"-"</c>.</param>
+    /// <param name="durationMs">Milliseconds from service entry to the change.</param>
+    [LoggerMessage(EventId = 1003, EventName = "PaymentStateChanged", Level = LogLevel.Information,
+        Message = "Payment state changed: {PaymentId} card {CardId} ({LastFour}) {Kind} {Amount} {FromState} -> {ToState} {Reason} in {DurationMs} ms")]
+    public static partial void PaymentStateChanged(ILogger logger, string paymentId, string cardId, string lastFour, string kind, string amount, string fromState, string toState, string reason, long durationMs);
+
+    /// <summary>One confirm attempt (design §12).</summary>
+    /// <param name="logger">Logger of <c>PaymentService</c>.</param>
+    /// <param name="reference">Payment reference.</param>
+    /// <param name="cardId">Card id as text.</param>
+    /// <param name="lastFour">Card last four.</param>
+    /// <param name="result"><c>created</c> | <c>repeated</c> | <c>refused_balance_changed</c> | <c>refused_already_refused</c> | <c>refused_payment_pending</c>.</param>
+    [LoggerMessage(EventId = 1004, EventName = "PaymentConfirmAttempt", Level = LogLevel.Information,
+        Message = "Payment confirm attempt: {Reference} card {CardId} ({LastFour}) -> {Result}")]
+    public static partial void PaymentConfirmAttempt(ILogger logger, string reference, string cardId, string lastFour, string result);
+
+    /// <summary>The bank did not answer within the budget (design §12).</summary>
+    /// <param name="logger">Logger of <c>PaymentService</c>.</param>
+    /// <param name="reference">Payment reference.</param>
+    /// <param name="call"><c>debit</c> | <c>status</c>.</param>
+    [LoggerMessage(EventId = 1005, EventName = "BankCallUnanswered", Level = LogLevel.Warning,
+        Message = "Bank call unanswered: {Call} for {Reference}")]
+    public static partial void BankCallUnanswered(ILogger logger, string reference, string call);
 }

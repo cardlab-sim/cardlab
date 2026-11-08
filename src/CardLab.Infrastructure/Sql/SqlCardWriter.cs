@@ -7,6 +7,7 @@ using CardLab.Domain.Limits;
 using CardLab.Domain.Periods;
 using CardLab.Domain.Ports;
 using CardLab.Infrastructure.Model;
+using CardLab.Infrastructure.Payments;
 using Microsoft.EntityFrameworkCore;
 
 namespace CardLab.Infrastructure.Sql;
@@ -25,6 +26,7 @@ internal sealed class SqlCardWriter : ICardWriter
     private readonly CardLabDbContext _db;
     private readonly CardId _cardId;
     private readonly List<Func<CancellationToken, Task>> _pending = [];
+    private readonly SqlPaymentWriter _payments;
 
     /// <summary>Creates a writer for one locked card.</summary>
     /// <param name="db">The context whose transaction holds the lock.</param>
@@ -33,6 +35,7 @@ internal sealed class SqlCardWriter : ICardWriter
     {
         _db = db;
         _cardId = cardId;
+        _payments = new SqlPaymentWriter(db, cardId, FlushAsync);
     }
 
     /// <inheritdoc />
@@ -143,6 +146,11 @@ internal sealed class SqlCardWriter : ICardWriter
             }
         });
 
+    /// <inheritdoc />
+    /// <remarks>One <c>SqlPaymentWriter</c> over the same context and card, created with this writer; its queued changes are
+    /// applied after the 001 queued changes (in call order) at every flush.</remarks>
+    public IPaymentWriter Payments => _payments;
+
     /// <summary>Applies queued changes and saves everything tracked (called before reads and on commit).</summary>
     /// <param name="ct">Cancellation.</param>
     /// <returns>A task that completes when the changes are written inside the open transaction.</returns>
@@ -155,6 +163,7 @@ internal sealed class SqlCardWriter : ICardWriter
             await apply(ct);
         }
 
+        await _payments.ApplyPendingAsync(ct);
         await _db.SaveChangesAsync(ct);
     }
 }

@@ -43,6 +43,31 @@ public sealed class SeedOptions
 
     /// <summary>Seeded cards; matched by name on re-seed.</summary>
     public List<SeedCardOptions> Cards { get; set; } = [];
+
+    /// <summary>The business's linked current account and its fake-bank account (002 design §6, §11).</summary>
+    public SeedLinkedAccountOptions LinkedAccount { get; set; } = new();
+}
+
+/// <summary>
+/// Seeded linked current account (<c>CardLab:Seed:LinkedAccount</c>, 002 design §6). Fictional, non-secret. Only the last
+/// four digits of <see cref="AccountNumber"/> ever reach the database (NFR-3). Complete in 002 PR-00.
+/// </summary>
+public sealed class SeedLinkedAccountOptions
+{
+    /// <summary>"Brightline Supplies Ltd current account".</summary>
+    public string DisplayName { get; set; } = "";
+
+    /// <summary>Fictional full account number (digits); used only to derive the last four.</summary>
+    public string AccountNumber { get; set; } = "";
+
+    /// <summary>Fixed bank-side id of the account (also the fake bank's <c>BankAccount.Id</c>).</summary>
+    public Guid BankAccountRef { get; set; }
+
+    /// <summary>Opening available balance of the fake bank account, decimal text ("25000.00").</summary>
+    public string OpeningBalance { get; set; } = "";
+
+    /// <summary>The standing authority text named on every payment record (R-2).</summary>
+    public string AuthorityBasis { get; set; } = "";
 }
 
 /// <summary>One seeded card. The number is used only to compute the lookup hash and last four; never stored.</summary>

@@ -5,8 +5,10 @@ using CardLab.Domain.Cards;
 using CardLab.Domain.Common;
 using CardLab.Domain.Controls;
 using CardLab.Domain.Limits;
+using CardLab.Domain.Payments;
 using CardLab.Domain.Ports;
 using CardLab.Infrastructure.Model;
+using CardLab.Infrastructure.Payments;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
@@ -118,6 +120,114 @@ public sealed class SqlCardStore : ICardStore
                 a.OldValue,
                 a.NewValue))).ToList();
     }
+
+    /// <inheritdoc />
+    /// <remarks>Reads <c>LinkedAccount</c>; the system has one per business (R-2), so the first by id is the account.</remarks>
+    public async Task<LinkedAccount?> GetLinkedAccountAsync(CancellationToken ct = default)
+    {
+        var row = await _db.LinkedAccounts.AsNoTracking().OrderBy(l => l.Id).FirstOrDefaultAsync(ct);
+        return row is null ? null : new LinkedAccount(row.Id, row.DisplayName, row.LastFour, new BankAccountRef(row.BankAccountRef), row.AuthorityBasis);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Two indexed SUMs (<c>IX_Transaction_Spend</c> approved rows; <c>IX_Payment_Completed</c>); owed is <c>BalanceRules.Owed</c> of the two.</remarks>
+    public async Task<CardBalance?> GetBalanceAsync(CardId id, CancellationToken ct = default)
+    {
+        if (!await _db.Cards.AsNoTracking().AnyAsync(c => c.Id == id.Value, ct))
+        {
+            return null;
+        }
+
+        var approved = Outcome.Approved.ToString();
+        var purchases = RowMapper.ToMoney(await _db.Transactions.AsNoTracking()
+            .Where(t => t.CardId == id.Value && t.Outcome == approved)
+            .SumAsync(t => (decimal?)t.Amount, ct) ?? 0m);
+        var payments = RowMapper.ToMoney(await PaymentMapping.SumCompletedAsync(_db, id, ct));
+        return new CardBalance(purchases, payments, BalanceRules.Owed(purchases, payments));
+    }
+
+    /// <inheritdoc />
+    public async Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference reference, CancellationToken ct = default)
+    {
+        var quote = await _db.PaymentQuotes.AsNoTracking().SingleOrDefaultAsync(q => q.Reference == reference.Value, ct);
+        if (quote is null)
+        {
+            return null;
+        }
+
+        var payment = await _db.Payments.AsNoTracking().SingleOrDefaultAsync(p => p.Reference == reference.Value, ct);
+        var events = await _db.PaymentEvents.AsNoTracking().Where(e => e.Reference == reference.Value).OrderBy(e => e.AtUtc).ThenBy(e => e.Id).ToListAsync(ct);
+        return ToRecord(quote, payment, events);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default)
+    {
+        var quotes = await _db.PaymentQuotes.AsNoTracking().Where(q => q.CardId == id.Value).OrderByDescending(q => q.CreatedAtUtc).ToListAsync(ct);
+        var payments = (await _db.Payments.AsNoTracking().Where(p => p.CardId == id.Value).ToListAsync(ct)).ToDictionary(p => p.Reference);
+        var events = (await (
+            from e in _db.PaymentEvents.AsNoTracking()
+            join q in _db.PaymentQuotes on e.Reference equals q.Reference
+            where q.CardId == id.Value
+            orderby e.AtUtc, e.Id
+            select e).ToListAsync(ct)).ToLookup(e => e.Reference);
+        return quotes.Select(q => ToRecord(q, payments.GetValueOrDefault(q.Reference), events[q.Reference].ToList())).ToList();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Purchases and payments are read separately (never the <c>Bank*</c> tables, DEC-2), each limited to
+    /// <paramref name="take"/> newest rows by decision time (purchases) or confirm time (payments), then merged newest first
+    /// by that time. A purchase is shown at its processor timestamp (<c>OccurredAt</c>, 001 AC-38; BUG-009).</remarks>
+    public async Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default)
+    {
+        var purchases = await _db.Transactions.AsNoTracking()
+            .Where(t => t.CardId == id.Value)
+            .OrderByDescending(t => t.DecidedAtUtc)
+            .Take(take)
+            .ToListAsync(ct);
+        var payments = await (
+            from p in _db.Payments.AsNoTracking()
+            where p.CardId == id.Value
+            join q in _db.PaymentQuotes on p.Reference equals q.Reference
+            orderby p.CreatedAtUtc descending
+            select new { Payment = p, q.Origin }).Take(take).ToListAsync(ct);
+        var entries = purchases.Select(t => (
+                Placed: RowMapper.ToInstant(t.DecidedAtUtc),
+                Entry: new ActivityEntry(
+                    t.OccurredAt,
+                    ActivityKind.Purchase,
+                    RowMapper.ToMoney(t.Amount),
+                    t.Merchant,
+                    Enum.Parse<Outcome>(t.Outcome),
+                    Enum.Parse<Reason>(t.Reason),
+                    Enum.Parse<Category>(t.Category),
+                    null,
+                    null,
+                    null)))
+            .Concat(payments.Select(x => (
+                Placed: RowMapper.ToInstant(x.Payment.CreatedAtUtc),
+                Entry: new ActivityEntry(
+                    RowMapper.ToInstant(x.Payment.CreatedAtUtc),
+                    ActivityKind.Payment,
+                    RowMapper.ToMoney(x.Payment.Amount),
+                    $"Payment {x.Payment.Reference}",
+                    null,
+                    null,
+                    null,
+                    Enum.Parse<PaymentState>(x.Payment.State),
+                    new PaymentReference(x.Payment.Reference),
+                    Enum.Parse<PaymentOrigin>(x.Origin)))));
+        return entries.OrderByDescending(e => e.Placed).Take(take).Select(e => e.Entry).ToList();
+    }
+
+    private static PaymentRecord ToRecord(PaymentQuoteRow quote, PaymentRow? payment, IReadOnlyList<PaymentEventRow> events) =>
+        new(
+            PaymentMapping.ToQuote(quote),
+            Enum.Parse<QuoteStatus>(quote.Status),
+            quote.RefusalReason,
+            quote.BalanceAtRefusal is { } balance ? RowMapper.ToMoney(balance) : null,
+            payment is null ? null : PaymentMapping.ToSnapshot(payment),
+            events.Select(PaymentMapping.ToEvent).ToList());
 
     private static TransactionRecord ToRecord(TransactionRow t)
     {

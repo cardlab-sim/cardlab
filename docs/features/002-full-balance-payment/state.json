@@ -1,0 +1,258 @@
+{
+  "feature": "002-full-balance-payment",
+  "title": "CL-3 slice 1: pay the full card balance from the linked current account",
+  "lane": "M",
+  "phase": "validate",
+  "base_branch": "main",
+  "feature_branch": "feat/002-full-balance-payment",
+  "gates": {
+    "requirements": {
+      "approved_at": "2026-11-07T14:55Z",
+      "note": "Approve"
+    },
+    "design": {
+      "approved_at": "2026-11-07T15:34Z",
+      "note": "Approve"
+    },
+    "plan": {
+      "approved_at": "2026-11-07T16:30Z",
+      "note": "Approve"
+    }
+  },
+  "discovery": [],
+  "prs": [
+    {
+      "id": "PR-00",
+      "title": "Skeleton, shared wiring and plan",
+      "wave": 0,
+      "depends_on": [],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/00-skeleton",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/32"
+    },
+    {
+      "id": "PR-01",
+      "title": "Payment domain rules: balance, quote, confirm, lifecycle, wording v1",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/01-domain-rules",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/35"
+    },
+    {
+      "id": "PR-02",
+      "title": "Payment test harness: in-memory store, scriptable bank, contract suites",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/02-test-harness",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/36"
+    },
+    {
+      "id": "PR-03",
+      "title": "Cardholder web journey: view, review, receipt, fake-bank panel, API clients",
+      "wave": 1,
+      "depends_on": [
+        "PR-00"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/03-cardholder-web",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/37"
+    },
+    {
+      "id": "PR-04",
+      "title": "Payment application services: quote, three-step confirm, status check, view",
+      "wave": 2,
+      "depends_on": [
+        "PR-01",
+        "PR-02"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/04-application",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/39"
+    },
+    {
+      "id": "PR-04f",
+      "title": "Fix BUG-006: in-flight registry entry cleared before the confirm returns",
+      "wave": 3,
+      "depends_on": [
+        "PR-04"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/04f-fix-bug-006",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/41"
+    },
+    {
+      "id": "PR-05",
+      "title": "SQL payment store, persisted fake bank, migration, seed and reset",
+      "wave": 2,
+      "depends_on": [
+        "PR-02"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/05-sql-and-fake-bank",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/40"
+    },
+    {
+      "id": "PR-06",
+      "title": "Cardholder and fake-bank API with payment-flow integration tests",
+      "wave": 3,
+      "depends_on": [
+        "PR-04",
+        "PR-05"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/06-cardholder-api",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/43"
+    },
+    {
+      "id": "PR-07",
+      "title": "Admin payment visibility: balance, activity, payments list and record (API + web)",
+      "wave": 3,
+      "depends_on": [
+        "PR-03",
+        "PR-04",
+        "PR-05"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/07-admin-visibility",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/42"
+    },
+    {
+      "id": "PR-08",
+      "title": "End-to-end payment journeys, deploy smoke and cross-path checks",
+      "wave": 4,
+      "depends_on": [
+        "PR-03",
+        "PR-06",
+        "PR-07"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/08-e2e",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/45"
+    },
+    {
+      "id": "PR-03f",
+      "title": "Fix BUG-007: shared web fake client feeds simulated purchases into activity and balance",
+      "wave": 4,
+      "depends_on": [
+        "PR-07"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/03f-fix-bug-007",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/44"
+    },
+    {
+      "id": "PR-07f",
+      "title": "Fix BUG-009: activity shows a purchase at its processor time, ordered by decision time (as 001)",
+      "wave": 4,
+      "depends_on": [
+        "PR-07",
+        "PR-03f"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/07f-fix-bug-009",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/46"
+    },
+    {
+      "id": "PR-09",
+      "title": "Feature review fixes: steered no-answer marked simulated (BUG-010), in-flight registry, 768 px, dead code, log accuracy",
+      "wave": 5,
+      "depends_on": [
+        "PR-08",
+        "PR-03f",
+        "PR-07f"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/09-fix-feature-review",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/48"
+    },
+    {
+      "id": "PR-10",
+      "title": "Fix BUG-012: a rebuilt receipt shows the settlement balance, not today's balance",
+      "wave": 6,
+      "depends_on": [
+        "PR-09"
+      ],
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/10-fix-bug-012",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/49"
+    }
+  ],
+  "bugs_open": [
+    "BUG-011"
+  ],
+  "resume": null,
+  "history": [
+    {
+      "at": "2026-11-07T00:00Z",
+      "event": "feature created (CL-3 slice 1); lane M chosen by human; human blind estimate M"
+    },
+    {
+      "at": "2026-11-07T14:55Z",
+      "event": "gate requirements approved (human as PM + compliance partner, risk_class R2)"
+    },
+    {
+      "at": "2026-11-07T15:34Z",
+      "event": "gate design approved; requirements erratum (decision 37: additive Origin field, DEC-15), Gate 1 unchanged"
+    },
+    {
+      "at": "2026-11-07T16:30Z",
+      "event": "gate plan approved; PR-00 merged (#32); feat/* protection removed by human; phase build"
+    },
+    {
+      "at": "2026-11-07T19:00Z",
+      "event": "design errata BUG-002..BUG-005 (human decisions via /sdlc:bugs); Gate 2 stays approved"
+    },
+    {
+      "at": "2026-11-07T22:00Z",
+      "event": "design erratum BUG-009 (activity shown time = processor timestamp, order by decision time, as 001); Gate 2 stays approved"
+    },
+    {
+      "at": "2026-11-07T23:00Z",
+      "event": "all PRs merged (8 planned + skeleton + PR-03f, PR-04f, PR-07f); BUG-001..009 fixed (3 verified); session paused before feature review result"
+    },
+    {
+      "at": "2026-11-07T23:10Z",
+      "event": "feature review CHANGES: 1 blocker (F1), 1 major (F2), 7 minor; paused for the day"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "feature review triaged via /sdlc:bugs: BUG-010 (F1, S1, design) fix-now option A, erratum landed (§5, DEC-7, §9, §15, digest, ADR-007); BUG-011 (F2, S2, requirements) deferred option C, §17 row, issue #47; F3/F5 doc fixes (ADR-006 BUG-002/003 wording, KB phase, plan approved); fix brief PR-09 (wave 5) covers BUG-010 code + F4, F6-F9; Gate 2 stays approved"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "PR-09 review APPROVE WITH FIXES (1 major, 4 minor); fixes verified (mapper mutation fails Unsteered_no_answer_is_not_simulated; unit 287, web 123), merged (#48); BUG-010 fixed; F5 doc fix; phase validate (full, design erratum)"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "validation DELIVERED WITH CAVEATS: 36 pass, 0 fail, AC-9 warn (BUG-012 new, S3), AC-26 pending-human (Azure parked); BUG-002/003/004/005/007/008/010 verified; phase bugfix"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "BUG-012 triaged (plan layer); human chose option A; design §5 + digest define Receipt.BalanceOwed (text erratum, Gate 2 stays approved); resume plan amend"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "plan amend BUG-012 (docs-only, orchestrator): PR-04 brief erratum, fix brief PR-10 (wave 6); BUG-012 in-progress"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "PR-10 pr-light APPROVE WITH FIXES (F1 null pending balance); fixes verified (M1 now fails T-U-38; unit 291), merged (#49); BUG-012 fixed; phase validate (re-validate AC-9 and receipt ACs)"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "re-validation DELIVERED WITH CAVEATS: 37 pass, 0 fail, 0 warn, AC-26 pending-human (Azure parked, BUG-011 deferred #47); BUG-012 verified; no new bugs"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "human chose: final PR with caveat; PR #33 marked ready (feat/002 -> main), all checks green except approvals (needs human review); phase done after the human merges"
+    }
+  ],
+  "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt",
+  "note": "delivered with caveats: AC-26 needs Azure, cut; BUG-011 deferred (#47)"
+}

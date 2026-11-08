@@ -19,13 +19,22 @@ const COLUMNS: readonly Column<CardSummary>[] = [
   {
     header: 'Action',
     cell: (card) => (
-      <Link
-        to={`/cards/${encodeURIComponent(card.id)}`}
-        className={styles['open']}
-        aria-label={`Open ${card.name}`}
-      >
-        Open
-      </Link>
+      <span className={styles['actions']}>
+        <Link
+          to={`/cards/${encodeURIComponent(card.id)}`}
+          className={styles['open']}
+          aria-label={`Open ${card.name}`}
+        >
+          Open
+        </Link>
+        <Link
+          to={`/cardholder/${encodeURIComponent(card.id)}`}
+          className={styles['open']}
+          aria-label={`Cardholder view for ${card.name}`}
+        >
+          Cardholder view
+        </Link>
+      </span>
     ),
   },
 ];

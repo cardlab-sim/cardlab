@@ -2,6 +2,7 @@ using CardLab.Domain.Cards;
 using CardLab.Domain.Common;
 using CardLab.Domain.Controls;
 using CardLab.Domain.Limits;
+using CardLab.Domain.Payments;
 using CardLab.Domain.Periods;
 
 namespace CardLab.Domain.Ports;
@@ -58,6 +59,37 @@ public interface ICardStore
     /// <param name="ct">Cancellation.</param>
     /// <returns>All audit events of the card; empty for an unknown id.</returns>
     Task<IReadOnlyList<AuditRecord>> ListAuditAsync(CardId id, CancellationToken ct = default);
+
+    /// <summary>The business's linked current account (R-2; one per business, seeded).</summary>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>The account, or null when none is seeded.</returns>
+    /// <remarks>Added by 002 (design §5). Implemented in PR-05 (SQL) and PR-02 (in-memory).</remarks>
+    Task<LinkedAccount?> GetLinkedAccountAsync(CancellationToken ct = default);
+
+    /// <summary>A card's balance owed and its parts, read outside the lock (R-1).</summary>
+    /// <param name="id">Card id.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>The balance (approved purchases − completed payments, floored by <c>BalanceRules.Owed</c>), or null for an unknown card.</returns>
+    Task<CardBalance?> GetBalanceAsync(CardId id, CancellationToken ct = default);
+
+    /// <summary>The full record of one reference (AC-20).</summary>
+    /// <param name="reference">Reference.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>The record (events oldest first), or null for an unknown reference. Callers check the card.</returns>
+    Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference reference, CancellationToken ct = default);
+
+    /// <summary>Every reference of a card (open, confirmed and refused quotes), newest first by quote time (R-14).</summary>
+    /// <param name="id">Card id.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>The records; empty for an unknown card.</returns>
+    Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId id, CancellationToken ct = default);
+
+    /// <summary>Purchases ordered by <c>DecidedAtUtc</c> and shown at their processor time <c>OccurredAt</c> (001 AC-38, BUG-009); payments ordered and shown at <c>CreatedAtUtc</c> (confirm time); merged newest first (R-13, DEC-12).</summary>
+    /// <param name="id">Card id.</param>
+    /// <param name="take">Maximum rows (10 on the cardholder view; <see cref="int.MaxValue"/> for all).</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <returns>Up to <paramref name="take"/> rows; empty for an unknown card. Quotes without a payment are not activity.</returns>
+    Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId id, int take, CancellationToken ct = default);
 }
 
 /// <summary>Unit of work on one card, valid only inside <see cref="ICardStore.WithCardLockAsync{T}"/>.</summary>
@@ -96,4 +128,8 @@ public interface ICardWriter
     /// <param name="category">Category.</param>
     /// <param name="period">Period.</param>
     void RemoveLimit(Category category, Period period);
+
+    /// <summary>Payment reads and writes for the locked card, in the same unit of work (DEC-4).</summary>
+    /// <remarks>Added by 002. Implemented in PR-05 (SQL) and PR-02 (in-memory).</remarks>
+    IPaymentWriter Payments { get; }
 }

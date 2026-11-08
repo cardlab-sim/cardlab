@@ -1,0 +1,117 @@
+/* 002 cardholder pages (§4.1, DEC-11): single column, max-width 720 px, usable at 768 px; tokens only. */
+.frame {
+  max-width: 720px;
+}
+
+.main {
+  max-width: 720px;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.title {
+  margin: 0;
+}
+
+.lastFour {
+  color: var(--color-muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.section h2 {
+  margin: 0;
+  font-size: var(--font-size-lg);
+}
+
+.balance {
+  margin: 0;
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-2) var(--space-6);
+  margin: 0;
+}
+
+.details dt {
+  color: var(--color-muted-foreground);
+}
+
+.details dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.line dt {
+  font-weight: 600;
+}
+
+.line dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.actions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.fakeBank {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 2px dashed var(--color-muted-foreground);
+  border-radius: var(--radius);
+  background: var(--color-muted);
+}
+
+.fakeBank h2 {
+  margin: 0;
+  font-size: var(--font-size-base);
+}
+
+.fakeBank p {
+  margin: 0;
+}
+
+.outcome {
+  display: block;
+}

@@ -97,4 +97,79 @@ public sealed class NoPanTests : IClassFixture<ApiFactory>
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, response.StatusCode);
         return await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
     }
+
+    // T-I-13 · PR-08 · integration
+    // Given J-1..J-3 of 002 run through the cardholder, fake-bank and admin record endpoints, When every raw response body, every captured log record and Database.DumpAllRowsAsync() are scanned with PanScanner.AssertNoFullNumbers, Then no full card number or "51907731" appears, last fours 0001 and 7731 do appear, and every payment record names actor kind cardholder with the card's cardholder, never the admin
+    // Catches: full card or account numbers leaking, or the admin recorded as actor (AC-23, NFR-3, R-16)
+    [Fact]
+    public async Task No_full_numbers_and_cardholder_actor_after_payment_journeys()
+    {
+        var client = _factory.CreateApiClient();
+        await client.ResetAsync();
+        var id = (await _factory.Database.CardIdAsync(TestSeed.OpsVan.Name)).Value;
+        _factory.Logs.Clear();
+        var bodies = new List<(string Where, string Raw)>();
+        T Record<T>(string where, ApiResponse<T> response)
+        {
+            bodies.Add((where, response.Raw));
+            return response.Body!;
+        }
+
+        var references = new List<string>();
+        async Task PayAsync(string label, string? steering)
+        {
+            await client.SimulatePurchaseAsync(id, new SimulatedPurchase("30.00", "fuel", "Shell", null));
+            if (steering is not null)
+            {
+                Record($"steer {label}", await client.SetSteeringAsync(steering));
+            }
+
+            var quote = Record($"quote {label}", await client.CreateQuoteAsync(id));
+            references.Add(quote.Reference);
+            Record($"confirm {label}", await client.ConfirmAsync(id, quote.Reference));
+            Record($"receipt {label}", await client.GetReceiptAsync(id, quote.Reference));
+            Record($"view {label}", await client.GetCardholderViewAsync(id));
+        }
+
+        await PayAsync("complete", null);
+        await PayAsync("insufficient funds", "refuse_insufficient_funds");
+        await PayAsync("timeout", "timeout_debit_applied");
+        var pending = references[^1];
+        Record("check", await client.CheckAsync(id, pending));
+        Record("fake bank", await client.GetFakeBankAsync());
+        Record("admin card", await client.GetCardAsync(id));
+        Record("admin activity", await client.ListActivityAsync(id));
+        Record("admin payments", await client.ListPaymentsAsync(id));
+        var records = new List<PaymentRecordDto>();
+        foreach (var reference in references)
+        {
+            records.Add(Record($"record {reference}", await client.GetPaymentRecordAsync(id, reference)));
+        }
+
+        foreach (var (where, raw) in bodies)
+        {
+            PanScanner.AssertNoFullNumbers(raw, $"response body: {where}");
+        }
+
+        _factory.Logs.AssertNoPan();
+        foreach (var logged in _factory.Logs.Records)
+        {
+            PanScanner.AssertNoFullNumbers(logged.FormattedMessage, $"log message of '{logged.EventName}'");
+            foreach (var (name, value) in logged.Attributes)
+            {
+                PanScanner.AssertNoFullNumbers(Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture), $"log attribute '{name}' of '{logged.EventName}'");
+            }
+        }
+
+        PanScanner.AssertNoFullNumbers(await _factory.Database.DumpAllRowsAsync(), "stored rows");
+        Assert.Contains("\"lastFour\":\"0001\"", bodies.First(b => b.Where.StartsWith("view ", StringComparison.Ordinal)).Raw);
+        Assert.Contains("\"lastFour\":\"7731\"", bodies.First(b => b.Where.StartsWith("view ", StringComparison.Ordinal)).Raw);
+        Assert.Equal(3, records.Count);
+        foreach (var payment in records)
+        {
+            Assert.Equal("cardholder", payment.Acceptance.Actor.Kind);
+            Assert.Equal(TestSeed.OpsVan.CardholderName, payment.Acceptance.Actor.Name);
+            Assert.NotEqual(TestSeed.AdminName, payment.Acceptance.Actor.Name);
+        }
+    }
 }

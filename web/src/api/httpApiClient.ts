@@ -1,16 +1,23 @@
 import { ApiError, type ApiClient } from './apiClient';
 import type {
+  ActivityEntry,
   AuditEntry,
   CardDetail,
+  CardholderView,
   CardStatus,
   CardSummary,
   Category,
   Decision,
+  FakeBank,
   Limit,
+  PaymentListItem,
+  PaymentRecord,
   Period,
   ProblemDetails,
+  Quote,
+  Receipt,
   SimulatePurchaseInput,
-  Transaction,
+  SteeringInput,
 } from './types';
 
 /**
@@ -52,10 +59,6 @@ export class HttpApiClient implements ApiClient {
     await this.throwIfFailed(response);
   }
 
-  listTransactions(id: string): Promise<Transaction[]> {
-    return this.json<Transaction[]>('GET', `${this.cardPath(id)}/transactions`);
-  }
-
   listAudit(id: string): Promise<AuditEntry[]> {
     return this.json<AuditEntry[]>('GET', `${this.cardPath(id)}/audit`);
   }
@@ -81,6 +84,59 @@ export class HttpApiClient implements ApiClient {
       );
     }
     throw await this.toError(response);
+  }
+
+  // ---- 002 full balance payment (design §7)
+
+  getCardholderView(id: string): Promise<CardholderView> {
+    return this.json<CardholderView>('GET', this.cardholderPath(id));
+  }
+
+  createQuote(id: string): Promise<Quote> {
+    return this.json<Quote>('POST', `${this.cardholderPath(id)}/quotes`);
+  }
+
+  confirmPayment(id: string, reference: string): Promise<Receipt> {
+    return this.json<Receipt>('POST', `${this.receiptPath(id, reference)}/confirm`);
+  }
+
+  checkPayment(id: string, reference: string): Promise<Receipt> {
+    return this.json<Receipt>('POST', `${this.receiptPath(id, reference)}/check`);
+  }
+
+  getReceipt(id: string, reference: string): Promise<Receipt> {
+    return this.json<Receipt>('GET', this.receiptPath(id, reference));
+  }
+
+  getFakeBank(): Promise<FakeBank> {
+    return this.json<FakeBank>('GET', '/api/fake-bank');
+  }
+
+  setFakeBank(steering: SteeringInput): Promise<FakeBank> {
+    return this.json<FakeBank>('PUT', '/api/fake-bank/steering', steering);
+  }
+
+  listActivity(id: string): Promise<ActivityEntry[]> {
+    return this.json<ActivityEntry[]>('GET', `${this.cardPath(id)}/activity`);
+  }
+
+  listPaymentRecords(id: string): Promise<PaymentListItem[]> {
+    return this.json<PaymentListItem[]>('GET', `${this.cardPath(id)}/payments`);
+  }
+
+  getPaymentRecord(id: string, reference: string): Promise<PaymentRecord> {
+    return this.json<PaymentRecord>(
+      'GET',
+      `${this.cardPath(id)}/payments/${encodeURIComponent(reference)}`,
+    );
+  }
+
+  private cardholderPath(id: string): string {
+    return `/api/cardholder/cards/${encodeURIComponent(id)}`;
+  }
+
+  private receiptPath(id: string, reference: string): string {
+    return `${this.cardholderPath(id)}/payments/${encodeURIComponent(reference)}`;
   }
 
   private cardPath(id: string): string {
