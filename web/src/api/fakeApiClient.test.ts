@@ -223,6 +223,17 @@ describe('FakeApiClient (002)', () => {
     expect(await fake.getReceipt('ops-1', quote.reference)).toEqual(receipt);
   });
 
+  // Catches: the fake storing an invalid_request purchase the API would not, so pages show activity and a balance the real host never has
+  test('T-W-10 an invalid_request decision stores no purchase', async () => {
+    const fake = seeded();
+    fake.nextDecision = { ...exceeded, reason: 'invalid_request' };
+
+    await fake.simulatePurchase('ops-1', purchase);
+
+    expect((await fake.listActivity('ops-1')).map((entry) => entry.amount)).toEqual(['150.50']);
+    expect((await fake.getCard('ops-1')).balanceOwed).toBe('150.50');
+  });
+
   test('T-W-10 refusal by the bank fails the payment and moves nothing', async () => {
     const fake = seeded().withBank('refuse_insufficient_funds');
     const quote = await fake.createQuote('ops-1');

@@ -88,6 +88,30 @@ public sealed class PaymentHarnessTests
         Assert.Equal(10, bank.DebitRequests.Count);
     }
 
+    // Catches: a hanging fake that answers "no answer" before the caller's budget fires, which reaches the service as an adapter failure and re-creates BUG-010 (F6b)
+    [Fact]
+    public async Task FakeBank_hangs_until_the_callers_token_fires()
+    {
+        var bank = new FakeBank(new FakeClock(new DateTimeOffset(2026, 11, 7, 10, 0, 0, TimeSpan.Zero)));
+        using var debitBudget = new CancellationTokenSource();
+        bank.Hang();
+        var debit = bank.RequestDebitAsync(Debit(bank, "PAY-00000001", "1.00"), debitBudget.Token);
+
+        await Task.Delay(50, Ct);
+        Assert.False(debit.IsCompleted, "the debit must wait for the caller's token");
+        await debitBudget.CancelAsync();
+        await Assert.ThrowsAsync<SimulatedNoAnswerException>(() => debit);
+
+        using var statusBudget = new CancellationTokenSource();
+        bank.HangStatus();
+        var status = bank.GetDebitStatusAsync(bank.Account, new PaymentReference("PAY-00000001"), statusBudget.Token);
+
+        await Task.Delay(50, Ct);
+        Assert.False(status.IsCompleted, "the status check must wait for the caller's token");
+        await statusBudget.CancelAsync();
+        await Assert.ThrowsAsync<SimulatedNoAnswerException>(() => status);
+    }
+
     [Fact]
     public async Task FakeBank_scripts_do_not_touch_a_reference_the_bank_has_seen()
     {
