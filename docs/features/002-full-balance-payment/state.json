@@ -247,7 +247,12 @@
     {
       "at": "2026-11-08T00:00Z",
       "event": "re-validation DELIVERED WITH CAVEATS: 37 pass, 0 fail, 0 warn, AC-26 pending-human (Azure parked, BUG-011 deferred #47); BUG-012 verified; no new bugs"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "human chose: final PR with caveat; PR #33 marked ready (feat/002 -> main), all checks green except approvals (needs human review); phase done after the human merges"
     }
   ],
-  "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"
+  "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt",
+  "note": "delivered with caveats: AC-26 needs Azure, cut; BUG-011 deferred (#47)"
 }
