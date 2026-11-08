@@ -656,6 +656,8 @@ public sealed class PaymentServiceTests
         Assert.IsType<PaymentError.CardNotFound>((await f.Service.GetReceiptAsync(new CardId(Guid.NewGuid()), paid.Reference, Ct)).Error);
     }
 
+    // PR-10 · unit (application)
+    // Given a completed payment and then a later £20.00 card purchase, When the same reference is confirmed again, Then the receipt is the original with Repeated true and BalanceOwed £0.00
     // Catches: a repeated confirm rebuilding the receipt with today's owed instead of the settlement balance (BUG-012, AC-9, R-7)
     [Fact]
     public async Task Repeated_confirm_after_a_later_purchase_returns_the_original_receipt()
@@ -671,6 +673,8 @@ public sealed class PaymentServiceTests
         Assert.Equal(Money.Zero, again.Value!.BalanceOwed);
     }
 
+    // PR-10 · unit (application)
+    // Given a payment refused for insufficient funds and then a later £20.00 card purchase, When the receipt is reloaded and a status check runs, Then both equal the original, BalanceOwed £150.50 and the message says "still £150.50"
     // Catches: a failed receipt reload taking today's owed instead of its settlement balance (BUG-012, AC-12)
     [Fact]
     public async Task Failed_receipt_reload_after_a_later_purchase_keeps_its_balance()

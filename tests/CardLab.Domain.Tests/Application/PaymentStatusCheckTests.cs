@@ -154,6 +154,8 @@ public sealed class PaymentStatusCheckTests
         Assert.Equal(TestMoney.Of("20.00"), payment.Settlement.BalanceAfter);
     }
 
+    // PR-10 · unit (application)
+    // Given a pending payment settled by a check after a £20.00 purchase, and then a £5.00 purchase, When the receipt is reloaded and checked again, Then both equal the check's receipt with BalanceOwed £20.00
     // Catches: a payment settled by a check showing today's owed on reload (BUG-012, AC-36)
     [Fact]
     public async Task Receipt_of_a_payment_settled_by_check_keeps_the_settlement_balance()
@@ -171,6 +173,8 @@ public sealed class PaymentStatusCheckTests
         Assert.Equal(TestMoney.Of("20.00"), reload.Value!.BalanceOwed);
     }
 
+    // PR-10 · unit (application)
+    // Given a pending £150.50 payment and then a £20.00 card purchase, When the receipt is reloaded, Then it is Pending with BalanceOwed £170.50 and "Your card balance shows £170.50"
     // Catches: a pending receipt frozen at confirm time instead of showing the current owed (W-5, AC-13)
     [Fact]
     public async Task Pending_receipt_shows_the_current_balance()

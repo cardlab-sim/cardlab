@@ -287,13 +287,13 @@ public sealed class PaymentService
     /// <summary>Builds the receipt of a payment (shared with the cardholder view).</summary>
     /// <param name="quote">The quote the payment was made from (labels, fee, origin).</param>
     /// <param name="payment">The payment.</param>
-    /// <param name="pendingBalance">The card's current owed, shown only while the payment is Pending. A settled payment always shows its settlement's BalanceAfter, however the receipt is rebuilt (BUG-012).</param>
+    /// <param name="pendingBalance">The card's current owed, shown only while the payment is Pending. A settled payment always shows its settlement's BalanceAfter, however the receipt is rebuilt (BUG-012). Null only for a settled payment.</param>
     /// <param name="repeated">True for a repeated confirm.</param>
     /// <param name="unansweredCheck">True after a status check the bank did not answer (W-10 instead of W-5).</param>
     /// <returns>The receipt.</returns>
-    internal static Receipt BuildReceipt(Quote quote, PaymentSnapshot payment, Money pendingBalance, bool repeated, bool unansweredCheck = false)
+    internal static Receipt BuildReceipt(Quote quote, PaymentSnapshot payment, Money? pendingBalance, bool repeated, bool unansweredCheck = false)
     {
-        var balanceOwed = payment.Settlement?.BalanceAfter ?? pendingBalance;
+        var balanceOwed = payment.Settlement?.BalanceAfter ?? pendingBalance ?? throw new InvalidOperationException("A pending receipt needs the current balance owed.");
         var reason = payment.Settlement?.Reason;
         var message = unansweredCheck && payment.State == PaymentState.Pending
             ? WordingV1.StillPending(payment.Reference)
@@ -344,7 +344,7 @@ public sealed class PaymentService
     private async Task<Receipt> StoredReceiptAsync(PaymentRecord record, CancellationToken ct)
     {
         var payment = record.Payment!;
-        var pendingBalance = payment.Settlement is null ? (await _store.GetBalanceAsync(record.Quote.Card, ct))!.Owed : Money.Zero;
+        var pendingBalance = payment.Settlement is null ? (await _store.GetBalanceAsync(record.Quote.Card, ct))!.Owed : (Money?)null;
         return BuildReceipt(record.Quote, payment, pendingBalance, repeated: false);
     }
 
