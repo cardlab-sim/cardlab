@@ -52,3 +52,30 @@ test('T-E-5 axe and keyboard-only journey', async ({ page, request }) => {
   expect(await view.balance()).toBe('£0.00');
   await expectNoSeriousViolations(page);
 });
+
+// F7 · feature review · e2e
+// Given the cardholder view, review and receipt at 768 px, When each page is shown, Then the document is not wider than the viewport
+// Catches: a horizontal scroll at the tablet width (design §4.1, NFR-5, AC-28)
+test('cardholder pages do not scroll horizontally at 768 px', async ({ page, request }) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  const api = new Api(request);
+  const opsVan = await api.cardId(seed.cards.opsVan.name);
+  await api.simulatePurchase(opsVan, '150.50');
+  const scrollWidth = (): Promise<number> =>
+    page.evaluate(() => document.documentElement.scrollWidth);
+
+  const view = new CardholderPage(page);
+  await view.goto(opsVan);
+  await view.waitUntilLoaded();
+  expect(await scrollWidth(), 'view').toBeLessThanOrEqual(768);
+
+  await view.pay();
+  const review = new ReviewPage(page);
+  await review.lines();
+  expect(await scrollWidth(), 'review').toBeLessThanOrEqual(768);
+
+  await review.confirm();
+  await page.waitForURL(/\/cardholder\/[^/]+\/payments\/PAY-/, { timeout: 15_000 });
+  await new ReceiptPage(page).state();
+  expect(await scrollWidth(), 'receipt').toBeLessThanOrEqual(768);
+});

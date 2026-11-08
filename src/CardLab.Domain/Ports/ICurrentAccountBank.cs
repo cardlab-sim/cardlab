@@ -33,8 +33,10 @@ public sealed record DebitRequest(BankAccountRef Account, PaymentReference Refer
 /// <remarks>
 /// Contract: a reference the bank has seen is never applied twice (a repeated debit returns the recorded outcome);
 /// a debit larger than the available balance is refused with InsufficientFunds; <see cref="RequestDebitAsync"/> and
-/// <see cref="GetDebitStatusAsync"/> may never return: the caller's <c>ct</c> is the time budget and they then throw
-/// <see cref="OperationCanceledException"/>. Fake-bank tables are never joined with card tables (DEC-2).
+/// <see cref="GetDebitStatusAsync"/> may never return: the caller's <c>ct</c> is the time budget and, when it fires, they
+/// throw <see cref="OperationCanceledException"/>. A no-answer produced by steering ends with the subclass
+/// <see cref="SimulatedNoAnswerException"/> instead, so the caller can mark the outcome simulated (R-15, BUG-010); any other
+/// no-answer ends with a plain <see cref="OperationCanceledException"/>. Fake-bank tables are never joined with card tables (DEC-2).
 /// </remarks>
 public interface ICurrentAccountBank
 {
@@ -55,7 +57,8 @@ public interface ICurrentAccountBank
     /// <param name="request">The request.</param>
     /// <param name="ct">The time budget (10 s in production); cancellation means "no answer".</param>
     /// <returns><see cref="BankOutcome.Completed"/> or <see cref="BankOutcome.Refused"/>.</returns>
-    /// <exception cref="OperationCanceledException">The bank did not answer before <paramref name="ct"/> fired.</exception>
+    /// <exception cref="OperationCanceledException">The bank did not answer before <paramref name="ct"/> fired
+    /// (<see cref="SimulatedNoAnswerException"/> when steering caused it).</exception>
     Task<BankOutcome> RequestDebitAsync(DebitRequest request, CancellationToken ct = default);
 
     /// <summary>Asks the outcome of a debit by reference.</summary>
@@ -63,8 +66,23 @@ public interface ICurrentAccountBank
     /// <param name="reference">Payment reference.</param>
     /// <param name="ct">The time budget.</param>
     /// <returns><see cref="BankOutcome.Completed"/>, <see cref="BankOutcome.Refused"/> or <see cref="BankOutcome.NotReceived"/>.</returns>
-    /// <exception cref="OperationCanceledException">The bank did not answer before <paramref name="ct"/> fired.</exception>
+    /// <exception cref="OperationCanceledException">The bank did not answer before <paramref name="ct"/> fired
+    /// (<see cref="SimulatedNoAnswerException"/> when steering caused it).</exception>
     Task<BankOutcome> GetDebitStatusAsync(BankAccountRef account, PaymentReference reference, CancellationToken ct = default);
+}
+
+/// <summary>
+/// The caller's token fired while the fake bank was hanging because of a steering setting (R-15, BUG-010): the
+/// unanswered outcome is simulated. Only fakes throw it; a real no-answer is a plain <see cref="OperationCanceledException"/>.
+/// </summary>
+public sealed class SimulatedNoAnswerException : OperationCanceledException
+{
+    /// <summary>Creates the exception.</summary>
+    /// <param name="token">The token that fired.</param>
+    public SimulatedNoAnswerException(CancellationToken token)
+        : base("The bank did not answer (simulated by steering).", token)
+    {
+    }
 }
 
 /// <summary>Mints payment references (DEC-8). Real: <c>SystemPaymentReferences</c> (40 random bits); test: sequential.</summary>

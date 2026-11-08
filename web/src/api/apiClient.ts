@@ -17,7 +17,6 @@ import type {
   Receipt,
   SimulatePurchaseInput,
   SteeringInput,
-  Transaction,
 } from './types';
 
 /**
@@ -45,8 +44,6 @@ export interface ApiClient {
   setLimit(id: string, category: Category, period: Period, amount: string): Promise<Limit>;
   /** `DELETE /api/cards/{id}/limits/{category}/{period}` (204). */
   removeLimit(id: string, category: Category, period: Period): Promise<void>;
-  /** `GET /api/cards/{id}/transactions`, newest first. */
-  listTransactions(id: string): Promise<Transaction[]>;
   /** `GET /api/cards/{id}/audit`, newest first. */
   listAudit(id: string): Promise<AuditEntry[]>;
   /**

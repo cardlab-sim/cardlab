@@ -139,7 +139,9 @@ public sealed class PaymentService
             throw;
         }
 
-        if (step.Attempt is not null)
+        // On the Create path the log runs inside the try below: the reference is registered by now, so nothing that can
+        // throw may sit between the registration and the try that releases it (F6a).
+        if (step.Attempt is not null && step.Created is null)
         {
             CardLabEvents.PaymentConfirmAttempt(_logger, reference.Value, cardId.Value.ToString(), cardRef.LastFour, step.Attempt);
         }
@@ -172,6 +174,7 @@ public sealed class PaymentService
         Receipt result;
         try
         {
+            CardLabEvents.PaymentConfirmAttempt(_logger, reference.Value, cardId.Value.ToString(), cardRef.LastFour, step.Attempt!);
             CardLabEvents.PaymentStateChanged(_logger, step.Created.Id.Value.ToString(), cardId.Value.ToString(), cardRef.LastFour, PaymentWireNames.ToWire(step.Quote!.Kind), step.Created.Amount.ToString(), NoneState, PaymentWireNames.ToWire(PaymentState.Pending), NoReason, ElapsedMs(started));
             var outcome = await RequestDebitAsync(account, step.Quote);
             result = await SettleConfirmAsync(cardRef, step.Quote, step.Created, step.Owed, outcome, started);
@@ -258,7 +261,8 @@ public sealed class PaymentService
             cardId,
             writer => SettleAsync(writer.Payments, reference, outcome, detail, fromCheck: true, ct: CancellationToken.None),
             CancellationToken.None);
-        LogSettled(cardRef, settled, "status", started);
+        // An expired wait on an in-flight confirm asked no bank, so there is no unanswered bank call to log (F9).
+        LogSettled(cardRef, settled, "status", started, logUnanswered: !waitExpired);
         return Result<Receipt, PaymentError>.Ok(settled.Receipt);
     }
 
@@ -363,7 +367,7 @@ public sealed class PaymentService
                 payments.SetQuoteStatus(reference, QuoteStatus.Confirmed, null, null, now);
 
                 // Registered before this unit of work commits, so a confirm that sees "repeat" always finds it (DEC-5).
-                _ = _inFlight.GetOrAdd(reference, () => completion.Task);
+                _inFlight.Register(reference, completion.Task);
                 markRegistered();
                 var snapshot = new PaymentSnapshot(created, reference, PaymentState.Pending, record.Quote.Amount, now, null);
                 return Validated.Create(record.Quote, snapshot, owed);
@@ -416,9 +420,10 @@ public sealed class PaymentService
         {
             return (await call(budget.Token), null);
         }
-        catch (OperationCanceledException) when (budget.IsCancellationRequested)
+        catch (OperationCanceledException e) when (budget.IsCancellationRequested)
         {
-            return (new BankOutcome.Unknown(false), null);
+            // Only a steered hang says so (SimulatedNoAnswerException); a real expiry is not simulated (BUG-010).
+            return (new BankOutcome.Unknown(e is SimulatedNoAnswerException), null);
         }
         catch (Exception error)
         {
@@ -498,7 +503,7 @@ public sealed class PaymentService
         var debitedAt = transition.BankDebitedAtUtc is { } reported ? TruncateToMilliseconds(reported) : (DateTimeOffset?)null;
         if (transition.To == PaymentState.Pending)
         {
-            payments.AppendEvent(Event(reference, payment.Id, now, fromCheck ? PaymentEventKind.StatusCheckUnanswered : PaymentEventKind.BankUnanswered, PaymentState.Pending, PaymentState.Pending, detail));
+            payments.AppendEvent(Event(reference, payment.Id, now, fromCheck ? PaymentEventKind.StatusCheckUnanswered : PaymentEventKind.BankUnanswered, PaymentState.Pending, PaymentState.Pending, detail, outcome.Simulated));
             return new SettleResult(BuildReceipt(record.Quote, payment, before, repeated: false, unansweredCheck: fromCheck), record.Quote, payment, null, true);
         }
 
@@ -526,11 +531,15 @@ public sealed class PaymentService
             _ => fromCheck ? PaymentEventKind.StatusCheckRefused : PaymentEventKind.BankRefused,
         };
 
-    private void LogSettled(CardRef card, SettleResult settled, string call, long started)
+    private void LogSettled(CardRef card, SettleResult settled, string call, long started, bool logUnanswered = true)
     {
         if (settled.Unanswered)
         {
-            CardLabEvents.BankCallUnanswered(_logger, settled.Payment.Reference.Value, call);
+            if (logUnanswered)
+            {
+                CardLabEvents.BankCallUnanswered(_logger, settled.Payment.Reference.Value, call);
+            }
+
             return;
         }
 

@@ -100,29 +100,12 @@ describe('FakeApiClient', () => {
     expect((await fake.listCards())[0]?.status).toBe('frozen');
   });
 
-  test('simulatePurchase stores the decided transaction first and clears nextDecision', async () => {
+  test('simulatePurchase returns the scripted decision and clears nextDecision', async () => {
     const fake = new FakeApiClient({ cards: [card()] });
-    await fake.simulatePurchase('c1', { ...purchase, merchant: 'First' });
     fake.nextDecision = exceeded;
     const decision = await fake.simulatePurchase('c1', purchase);
     expect(decision.reason).toBe('limit_exceeded');
     expect(fake.nextDecision).toBeNull();
-    const transactions = await fake.listTransactions('c1');
-    expect(transactions).toHaveLength(2);
-    expect(transactions[0]).toMatchObject({
-      outcome: 'declined',
-      reason: 'limit_exceeded',
-      amount: '12.50',
-      merchant: 'Shell',
-    });
-    expect(transactions[1]).toMatchObject({ outcome: 'approved', merchant: 'First' });
-  });
-
-  test('an invalid_request decision stores no transaction', async () => {
-    const fake = new FakeApiClient({ cards: [card()] });
-    fake.nextDecision = { ...exceeded, reason: 'invalid_request' };
-    await fake.simulatePurchase('c1', purchase);
-    expect(await fake.listTransactions('c1')).toEqual([]);
   });
 
   test('simulatePurchase on an unknown card resolves with card_not_found', async () => {
@@ -141,7 +124,6 @@ describe('FakeApiClient', () => {
       () => fake.getCard('nope'),
       () => fake.freeze('nope'),
       () => fake.setLimit('nope', 'fuel', 'day', '1.00'),
-      () => fake.listTransactions('nope'),
       () => fake.listAudit('nope'),
     ]) {
       const error = await rejection(call());

@@ -25,44 +25,48 @@ public sealed class InFlightPaymentsTests
             PaymentOrigin.CardholderView);
 
     // T-U-30 · PR-04 · unit (application)
-    // Given two concurrent GetOrAdd calls for one reference with a start function gated on a TaskCompletionSource, When both run, Then start ran once and both got the same task; TryGet is true while it runs and false after it completes (also after it faults); another reference is independent
-    // Catches: the registry starting two bank calls or leaking entries (AC-10, DEC-5)
+    // Given a registered task for one reference, When TryGet, Then it is that task while the owner is running and gone after Complete or Fail; another reference is independent and may be registered again afterwards
+    // Catches: the registry leaking entries or mixing references (AC-10, DEC-5)
     [Fact]
-    public async Task Registry_starts_once_and_forgets_when_done()
+    public async Task Registered_task_is_found_until_the_owner_completes_or_fails()
     {
         var registry = new InFlightPayments();
-        var gate = new TaskCompletionSource<Receipt>();
-        var starts = 0;
+        var owner = new TaskCompletionSource<Receipt>();
 
-        var a = registry.GetOrAdd(First, () =>
-        {
-            starts++;
-            return gate.Task;
-        });
-        var b = registry.GetOrAdd(First, () =>
-        {
-            starts++;
-            return gate.Task;
-        });
+        registry.Register(First, owner.Task);
 
-        Assert.Same(a, b);
-        Assert.Equal(1, starts);
         Assert.True(registry.TryGet(First, out var found));
-        Assert.Same(a, found);
+        Assert.Same(owner.Task, found);
         Assert.False(registry.TryGet(Second, out _));
 
-        gate.SetResult(ReceiptFor(First));
-        var receipt = await a;
-        Assert.Equal(First, receipt.Reference);
+        registry.Complete(First, owner, ReceiptFor(First));
+        Assert.Equal(First, (await owner.Task).Reference);
         Assert.False(registry.TryGet(First, out _));
 
-        var faulting = registry.GetOrAdd(Second, () => Task.FromException<Receipt>(new InvalidOperationException("boom")));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => faulting);
+        var faulting = new TaskCompletionSource<Receipt>();
+        registry.Register(Second, faulting.Task);
+        registry.Fail(Second, faulting, new InvalidOperationException("boom"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => faulting.Task);
         Assert.False(registry.TryGet(Second, out _));
 
-        var again = registry.GetOrAdd(First, () => Task.FromResult(ReceiptFor(First)));
-        Assert.NotSame(a, again);
-        await again;
+        var again = new TaskCompletionSource<Receipt>();
+        registry.Register(First, again.Task);
+        Assert.True(registry.TryGet(First, out var second));
+        Assert.Same(again.Task, second);
+    }
+
+    // Catches: a second registration silently replacing the first confirm's entry, so its joiners lose the shared outcome (AC-10, DEC-5)
+    [Fact]
+    public void Register_twice_for_one_reference_throws()
+    {
+        var registry = new InFlightPayments();
+        var first = new TaskCompletionSource<Receipt>();
+        registry.Register(First, first.Task);
+
+        Assert.Throws<InvalidOperationException>(() => registry.Register(First, new TaskCompletionSource<Receipt>().Task));
+
+        Assert.True(registry.TryGet(First, out var found));
+        Assert.Same(first.Task, found);
     }
 
     // Catches: the entry still registered when the owner's task completes (BUG-006); the observer runs synchronously inside the completion
@@ -77,7 +81,7 @@ public sealed class InFlightPaymentsTests
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
-        _ = registry.GetOrAdd(First, () => gate.Task);
+        registry.Register(First, gate.Task);
 
         registry.Complete(First, gate, ReceiptFor(First));
 
@@ -96,30 +100,10 @@ public sealed class InFlightPaymentsTests
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
-        _ = registry.GetOrAdd(First, () => gate.Task);
+        registry.Register(First, gate.Task);
 
         registry.Fail(First, gate, new InvalidOperationException("boom"));
 
         Assert.False(seen);
-    }
-
-    // Catches: a late cleanup of an old registration removing the entry of a newer one for the same reference (DEC-5)
-    [Fact]
-    public async Task Late_cleanup_of_a_completed_registration_keeps_a_newer_entry()
-    {
-        var registry = new InFlightPayments();
-        var owner = new TaskCompletionSource<Receipt>();
-        var oldRun = new TaskCompletionSource<Receipt>();
-        _ = registry.GetOrAdd(First, () => oldRun.Task);
-        registry.Complete(First, owner, ReceiptFor(First));
-        var newGate = new TaskCompletionSource<Receipt>();
-        var newer = registry.GetOrAdd(First, () => newGate.Task);
-
-        oldRun.SetResult(ReceiptFor(First));
-
-        Assert.True(registry.TryGet(First, out var found));
-        Assert.Same(newer, found);
-        newGate.SetResult(ReceiptFor(First));
-        await newer;
     }
 }

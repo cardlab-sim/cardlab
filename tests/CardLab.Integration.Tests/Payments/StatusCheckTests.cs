@@ -109,6 +109,27 @@ public sealed class StatusCheckTests : IClassFixture<ApiFactoryWithShortBankTime
         Assert.Equal("150.50", record.Payment.Amount.ToString());
     }
 
+    // Catches: a steered no-answer recorded as a real bank non-answer (BUG-010, R-15, AC-20, AC-33)
+    [Fact]
+    public async Task Steered_no_answer_is_recorded_as_simulated()
+    {
+        var client = _fixture.CreateApiClient();
+        var (id, reference) = await PendingAsync(client, "timeout_not_received");
+
+        var afterConfirm = (await client.GetPaymentRecordAsync(id, reference)).Body!;
+
+        Assert.Equal("bank_unanswered", afterConfirm.Events[^1].Kind);
+        Assert.True(afterConfirm.Events[^1].Simulated, "the steered debit no-answer event");
+        Assert.True(afterConfirm.Payment!.Simulated, "a pending steered payment shows it was simulated");
+
+        await client.SetSteeringAsync(null, "does_not_answer");
+        await client.CheckAsync(id, reference);
+        var afterCheck = (await client.GetPaymentRecordAsync(id, reference)).Body!;
+
+        Assert.Equal("status_check_unanswered", afterCheck.Events[^1].Kind);
+        Assert.True(afterCheck.Events[^1].Simulated, "the steered status no-answer event");
+    }
+
     private async Task<(Guid Id, string Reference)> PendingAsync(ApiClient client, string steering)
     {
         await client.ResetAsync();

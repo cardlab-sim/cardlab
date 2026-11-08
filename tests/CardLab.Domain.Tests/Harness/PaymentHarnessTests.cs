@@ -11,8 +11,11 @@ public sealed class PaymentHarnessTests
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
+    // The caller's budget having fired: a hanging fake bank waits on this token and then reports a steered no-answer.
+    private static CancellationToken BudgetFired => new(true);
+
     // T-U-37 · PR-02 · unit
-    // Given a FakeBank, When NextDebit(Refused) then two natural debits, Hang(debitApplied: true), FailNext(error), HangStatus and HoldDebitsUntil(gate) with two concurrent debits, Then the script applies once and reverts; Hang(true) writes the entry then throws OperationCanceledException and a status check then says Completed; FailNext throws the error once; HangStatus throws once; both held debits answer only after the gate completes; DebitRequests and StatusChecks count every call
+    // Given a FakeBank, When NextDebit(Refused) then two natural debits, Hang(debitApplied: true), FailNext(error), HangStatus and HoldDebitsUntil(gate) with two concurrent debits, Then the script applies once and reverts; Hang(true) writes the entry then, when the caller's token fires, throws SimulatedNoAnswerException and a status check then says Completed; FailNext throws the error once; HangStatus throws SimulatedNoAnswerException once; both held debits answer only after the gate completes; DebitRequests and StatusChecks count every call
     // Catches: a fake that drifts from the scripts the application tests rely on (AC-10, AC-13, AC-16)
     [Fact]
     public async Task FakeBank_scripts_are_one_shot()
@@ -37,7 +40,7 @@ public sealed class PaymentHarnessTests
 
         // Hang(debitApplied: true): the debit is written, the call then reports "no answer", a status check finds it.
         bank.Hang(debitApplied: true);
-        await Assert.ThrowsAsync<OperationCanceledException>(() => bank.RequestDebitAsync(Debit(bank, "PAY-00000004", "1.00"), Ct));
+        await Assert.ThrowsAsync<SimulatedNoAnswerException>(() => bank.RequestDebitAsync(Debit(bank, "PAY-00000004", "1.00"), BudgetFired));
         Assert.Equal("24984.00", bank.AvailableBalance.ToString());
         Assert.Equal(3, bank.Entries.Count);
         var applied = await bank.GetDebitStatusAsync(bank.Account, new PaymentReference("PAY-00000004"), Ct);
@@ -45,7 +48,7 @@ public sealed class PaymentHarnessTests
 
         // Hang() without applying: nothing is written, the status check says the bank never received it.
         bank.Hang();
-        await Assert.ThrowsAsync<OperationCanceledException>(() => bank.RequestDebitAsync(Debit(bank, "PAY-00000005", "1.00"), Ct));
+        await Assert.ThrowsAsync<SimulatedNoAnswerException>(() => bank.RequestDebitAsync(Debit(bank, "PAY-00000005", "1.00"), BudgetFired));
         Assert.Equal("24984.00", bank.AvailableBalance.ToString());
         Assert.IsType<BankOutcome.NotReceived>(await bank.GetDebitStatusAsync(bank.Account, new PaymentReference("PAY-00000005"), Ct));
         var afterHangs = await bank.RequestDebitAsync(Debit(bank, "PAY-00000006", "1.00"), Ct);
@@ -65,7 +68,7 @@ public sealed class PaymentHarnessTests
         Assert.Equal(new BankOutcome.Refused(FailureReason.AccountUnavailable, true), scriptedStatus);
         Assert.IsType<BankOutcome.Completed>(await bank.GetDebitStatusAsync(bank.Account, new PaymentReference("PAY-00000002"), Ct));
         bank.HangStatus();
-        await Assert.ThrowsAsync<OperationCanceledException>(() => bank.GetDebitStatusAsync(bank.Account, new PaymentReference("PAY-00000002"), Ct));
+        await Assert.ThrowsAsync<SimulatedNoAnswerException>(() => bank.GetDebitStatusAsync(bank.Account, new PaymentReference("PAY-00000002"), BudgetFired));
         Assert.IsType<BankOutcome.Completed>(await bank.GetDebitStatusAsync(bank.Account, new PaymentReference("PAY-00000002"), Ct));
         Assert.Equal(checksBefore + 4, bank.StatusChecks);
 
@@ -105,7 +108,7 @@ public sealed class PaymentHarnessTests
         var repeatAgain = await bank.RequestDebitAsync(Debit(bank, "PAY-00000001", "100.00"), Ct);
         Assert.Equal(first, repeatAgain);
         Assert.Equal(2, bank.Entries.Count);
-        await Assert.ThrowsAsync<OperationCanceledException>(() => bank.RequestDebitAsync(Debit(bank, "PAY-00000003", "1.00"), Ct));
+        await Assert.ThrowsAsync<SimulatedNoAnswerException>(() => bank.RequestDebitAsync(Debit(bank, "PAY-00000003", "1.00"), BudgetFired));
     }
 
     [Fact]

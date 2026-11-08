@@ -310,12 +310,6 @@ export class FakeApiClient implements ApiClient {
     }
   }
 
-  async listTransactions(id: string): Promise<Transaction[]> {
-    await this.enter('listTransactions');
-    this.find(id);
-    return structuredClone(this.transactions.get(id) ?? []);
-  }
-
   async listAudit(id: string): Promise<AuditEntry[]> {
     await this.enter('listAudit');
     this.find(id);

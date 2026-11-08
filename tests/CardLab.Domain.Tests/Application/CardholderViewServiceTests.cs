@@ -89,7 +89,7 @@ public sealed class CardholderViewServiceTests
     [Fact]
     public async Task View_shows_the_pending_payment_without_checking()
     {
-        var f = await PaymentFixture.CreateAsync();
+        var f = await PaymentFixture.CreateAsync(bankTimeoutSeconds: 0);
         var quote = await f.QuoteOkAsync();
         f.Bank.Hang();
         await f.ConfirmOkAsync(quote.Reference);

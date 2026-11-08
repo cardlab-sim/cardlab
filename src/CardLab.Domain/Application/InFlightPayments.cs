@@ -7,33 +7,27 @@ namespace CardLab.Domain.Application;
 /// Registry of confirms whose bank call is in flight (DEC-5): a second confirm of the same reference awaits the first
 /// one's task instead of returning a half-known outcome (AC-10). Singleton; single-host assumption (ADR-001).
 /// </summary>
-/// <remarks>Thread-safe. An entry is removed just before its task completes (successfully or not), by the registry, or by <see cref="Complete"/> / <see cref="Fail"/> for the owner's own source (the owner removes before completing), so a caller that
-/// has seen the task complete never finds it again and a later confirm reads the stored receipt.</remarks>
+/// <remarks>Thread-safe. The owner registers its task inside the first card lock, before the payment is committed, and
+/// <see cref="Complete"/> / <see cref="Fail"/> remove the entry before completing the task, so a caller that has seen the
+/// task complete never finds it again and a later confirm reads the stored receipt (BUG-006).</remarks>
 public sealed class InFlightPayments
 {
     private readonly object _gate = new();
     private readonly Dictionary<PaymentReference, Task<Receipt>> _tasks = [];
 
-    /// <summary>Returns the in-flight task for <paramref name="reference"/>, starting and registering <paramref name="start"/> when none exists.</summary>
+    /// <summary>Registers the in-flight task of a confirm; its owner later calls <see cref="Complete"/> or <see cref="Fail"/>.</summary>
     /// <param name="reference">Payment reference.</param>
-    /// <param name="start">Starts the bank call and settlement; invoked at most once per registration, after the entry is visible to <see cref="TryGet"/>.</param>
-    /// <returns>The task every concurrent caller for this reference awaits.</returns>
-    public Task<Receipt> GetOrAdd(PaymentReference reference, Func<Task<Receipt>> start)
+    /// <param name="task">The owner's task, the one every concurrent caller for this reference awaits.</param>
+    /// <exception cref="InvalidOperationException">The reference is already registered.</exception>
+    public void Register(PaymentReference reference, Task<Receipt> task)
     {
-        TaskCompletionSource<Receipt> source;
         lock (_gate)
         {
-            if (_tasks.TryGetValue(reference, out var existing))
+            if (!_tasks.TryAdd(reference, task))
             {
-                return existing;
+                throw new InvalidOperationException("A confirm of " + reference + " is already in flight.");
             }
-
-            source = new TaskCompletionSource<Receipt>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _tasks[reference] = source.Task;
         }
-
-        _ = RunAsync(reference, start, source);
-        return source.Task;
     }
 
     /// <summary>Finds an in-flight task.</summary>
@@ -51,7 +45,7 @@ public sealed class InFlightPayments
     /// <summary>Removes the entry, then completes the owner's task with a result (BUG-006): no caller can observe the
     /// completion while the entry is still registered.</summary>
     /// <param name="reference">Payment reference.</param>
-    /// <param name="completion">The task source whose task was handed to <see cref="GetOrAdd"/>.</param>
+    /// <param name="completion">The task source whose task was handed to <see cref="Register"/>.</param>
     /// <param name="result">The receipt every joiner gets.</param>
     public void Complete(PaymentReference reference, TaskCompletionSource<Receipt> completion, Receipt result)
     {
@@ -61,7 +55,7 @@ public sealed class InFlightPayments
 
     /// <summary>Removes the entry, then faults the owner's task (BUG-006); a no-op for the task if it already completed.</summary>
     /// <param name="reference">Payment reference.</param>
-    /// <param name="completion">The task source whose task was handed to <see cref="GetOrAdd"/>.</param>
+    /// <param name="completion">The task source whose task was handed to <see cref="Register"/>.</param>
     /// <param name="error">The failure joiners see.</param>
     public void Fail(PaymentReference reference, TaskCompletionSource<Receipt> completion, Exception error)
     {
@@ -74,33 +68,6 @@ public sealed class InFlightPayments
         lock (_gate)
         {
             _tasks.Remove(reference);
-        }
-    }
-
-    private async Task RunAsync(PaymentReference reference, Func<Task<Receipt>> start, TaskCompletionSource<Receipt> source)
-    {
-        try
-        {
-            var receipt = await start().ConfigureAwait(false);
-            Remove(reference, source.Task);
-            source.SetResult(receipt);
-        }
-        catch (Exception error)
-        {
-            Remove(reference, source.Task);
-            source.SetException(error);
-        }
-    }
-
-    // Only this registration's own entry: after Complete / Fail the reference may already belong to a newer registration.
-    private void Remove(PaymentReference reference, Task<Receipt> own)
-    {
-        lock (_gate)
-        {
-            if (_tasks.TryGetValue(reference, out var current) && ReferenceEquals(current, own))
-            {
-                _tasks.Remove(reference);
-            }
         }
     }
 }

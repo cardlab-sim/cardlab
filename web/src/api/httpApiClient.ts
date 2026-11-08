@@ -18,7 +18,6 @@ import type {
   Receipt,
   SimulatePurchaseInput,
   SteeringInput,
-  Transaction,
 } from './types';
 
 /**
@@ -58,10 +57,6 @@ export class HttpApiClient implements ApiClient {
   async removeLimit(id: string, category: Category, period: Period): Promise<void> {
     const response = await this.send('DELETE', this.limitPath(id, category, period));
     await this.throwIfFailed(response);
-  }
-
-  listTransactions(id: string): Promise<Transaction[]> {
-    return this.json<Transaction[]>('GET', `${this.cardPath(id)}/transactions`);
   }
 
   listAudit(id: string): Promise<AuditEntry[]> {
