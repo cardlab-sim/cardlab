@@ -62,7 +62,7 @@ Ports:
 - `PaymentRecord(Quote, Status, RefusalReason?, BalanceAtRefusal?, Payment?, Events)`.
 
 Application (`CardLab.Domain.Application`):
-- `PaymentService`: `QuoteAsync`, `ConfirmAsync`, `CheckStatusAsync`, `GetReceiptAsync` → `Result<Receipt|Quote, PaymentError>`; `Receipt(Reference, State, Amount, Fee, Time, FromLabel, ToLabel, Reason?, Message, BalanceOwed, Repeated)` + origin; `PaymentError` = CardNotFound, ReferenceNotFound, NothingToPay, AboveLimit, PaymentPending, BalanceChanged, QuoteRefused.
+- `PaymentService`: `QuoteAsync`, `ConfirmAsync`, `CheckStatusAsync`, `GetReceiptAsync` → `Result<Receipt|Quote, PaymentError>`; `Receipt(Reference, State, Amount, Fee, Time, FromLabel, ToLabel, Reason?, Message, BalanceOwed, Repeated)` + origin (`BalanceOwed` = settlement `BalanceAfter` once settled, current owed while Pending; BUG-012); `PaymentError` = CardNotFound, ReferenceNotFound, NothingToPay, AboveLimit, PaymentPending, BalanceChanged, QuoteRefused.
 - `CardholderViewService.GetAsync(CardId) → CardholderView` (card, balance, availability + message, pending receipt, linked account + available balance, ≤ 10 card activity, ≤ 10 account entries).
 - `InFlightPayments.Register(reference, task)` (in lock #1 before commit; throws if already registered), `TryGet`, `Complete`/`Fail` (remove the entry before completing; BUG-006) singleton.
 

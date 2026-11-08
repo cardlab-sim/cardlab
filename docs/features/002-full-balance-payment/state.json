@@ -2,7 +2,7 @@
   "feature": "002-full-balance-payment",
   "title": "CL-3 slice 1: pay the full card balance from the linked current account",
   "lane": "M",
-  "phase": "bugfix",
+  "phase": "plan",
   "base_branch": "main",
   "feature_branch": "feat/002-full-balance-payment",
   "gates": {
@@ -178,9 +178,9 @@
     "BUG-012"
   ],
   "resume": {
-    "phase": "bugfix",
-    "step": "triage BUG-012",
-    "reason": "Validation (04-validation.md, head 5cdf614) DELIVERED WITH CAVEATS: 36 pass, 1 warn (AC-9, BUG-012), 1 pending-human (AC-26, demo parked). BUG-012 S3 needs triage and a human decision."
+    "phase": "plan",
+    "step": "amend BUG-012: PR-04 brief erratum + fix brief PR-10",
+    "reason": "BUG-012 (S3, plan) fix-now option A; design §5 text erratum landed; then build PR-10 (pr-light) and re-validate AC-9 and the receipt ACs."
   },
   "history": [
     {
@@ -226,6 +226,10 @@
     {
       "at": "2026-11-08T00:00Z",
       "event": "validation DELIVERED WITH CAVEATS: 36 pass, 0 fail, AC-9 warn (BUG-012 new, S3), AC-26 pending-human (Azure parked); BUG-002/003/004/005/007/008/010 verified; phase bugfix"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "BUG-012 triaged (plan layer); human chose option A; design §5 + digest define Receipt.BalanceOwed (text erratum, Gate 2 stays approved); resume plan amend"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"
