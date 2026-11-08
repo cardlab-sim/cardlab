@@ -20,6 +20,6 @@
 - **Alternatives:** returning "unknown" instantly in timeout mode (budget path never exercised);
   a separate project and DbContext (a day more for a boundary review can enforce); in-memory or
   file-backed ledger (lost on restart or fragile on App Service).
-- **Consequences:** one E2E spec waits a real 10 s; steering is global (one row), acceptable for
+- **Consequences:** four E2E waits use the real 10 s (T-E-3 twice, T-E-5, T-E-6); a steered hang ends with `SimulatedNoAnswerException`, so its record is marked simulated (BUG-010); steering is global (one row), acceptable for
   a lab; a real adapter later replaces the class behind the same port and contract suite, and the
   fake moves to a test/demo project.

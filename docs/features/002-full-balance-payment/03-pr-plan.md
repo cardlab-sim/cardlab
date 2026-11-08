@@ -1,7 +1,7 @@
 ---
 feature: 002-full-balance-payment
 design: ./02-tech-design.md
-status: draft
+status: approved
 ---
 
 # PR plan: Full balance payment (CL-3, slice 1)
@@ -118,5 +118,5 @@ registration (`Program.cs`, route tables inside the endpoint files; only handler
   the model snapshot matching (EF's pending-model-changes check fails startup otherwise).
 - **001 E2E page object:** PR-07 renames the admin "Transactions" heading to "Activity" but keeps the table caption
   "Transaction history" and updates `tests/e2e/src/pages/CardDetailPage.ts` so 001 specs stay green.
-- **Real 10 s wait:** only T-E-3 waits the real budget; integration tests use `ApiFactoryWithShortBankTimeout` (1 s).
+- **Real 10 s wait:** four E2E waits use the real budget (T-E-3 twice, T-E-5, T-E-6); integration tests use `ApiFactoryWithShortBankTimeout` (1 s).
 - **Public repo:** fictional data only; never name a real company; no absolute paths outside the repo in files.

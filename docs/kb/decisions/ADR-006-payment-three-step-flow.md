@@ -16,7 +16,9 @@
   or admin card detail opens; a pending payment is never re-sent. Payment writes share the card's
   unit of work through `ICardWriter.Payments : IPaymentWriter`. Two confirms of one reference at
   the same instant: the second joins the first's in-flight task (`InFlightPayments`, in-process,
-  single host per ADR-001) and returns the identical receipt.
+  single host per ADR-001) and returns the identical receipt. The bank budget is its own token, not
+  linked to the request (a disconnect never cancels a debit, BUG-002); a status check awaits an
+  in-flight confirm on this host within its own budget and never asks the bank meanwhile (BUG-003).
 - **Alternatives:** hold the lock across the bank call (breaks ADR-002); outbox + background worker
   (receipt waits for a poll cycle; F1 has no Always On); separate payment store with its own lock
   (atomicity with the balance needs a shared transaction).

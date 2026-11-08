@@ -2,7 +2,7 @@
   "feature": "002-full-balance-payment",
   "title": "CL-3 slice 1: pay the full card balance from the linked current account",
   "lane": "M",
-  "phase": "bugfix",
+  "phase": "build",
   "base_branch": "main",
   "feature_branch": "feat/002-full-balance-payment",
   "gates": {
@@ -157,13 +157,28 @@
       "status": "merged",
       "branch": "pr/002-full-balance-payment/07f-fix-bug-009",
       "url": "https://github.com/cardlab-sim/cardlab/pull/46"
+    },
+    {
+      "id": "PR-09",
+      "title": "Feature review fixes: steered no-answer marked simulated (BUG-010), in-flight registry, 768 px, dead code, log accuracy",
+      "wave": 5,
+      "depends_on": [
+        "PR-08",
+        "PR-03f",
+        "PR-07f"
+      ],
+      "status": "planned",
+      "branch": "pr/002-full-balance-payment/09-fix-feature-review"
     }
   ],
-  "bugs_open": [],
+  "bugs_open": [
+    "BUG-010",
+    "BUG-011"
+  ],
   "resume": {
-    "phase": "bugfix",
-    "step": "triage feature-review findings",
-    "reason": "Feature review (reviews/feature.review.md, head aa4c956) returned CHANGES: F1 blocker upstream:design (steered no-answer recorded as not simulated, R-15/AC-20/DEC-7) and F2 major upstream:requirements (demo fake bank can only drain; smoke fragility) need human decisions via /sdlc:bugs; then one code fix PR (F1 code, F4, F6-F9) and doc fixes (F3, F5); then validation."
+    "phase": "build",
+    "step": "code PR-09 (wave 5), review, then full validation",
+    "reason": "BUG-010 fix-now (design erratum landed; code in PR-09 with F4, F6-F9); BUG-011 deferred (#47); F3/F5 doc fixes done. Design changed (erratum), so validation runs in full after PR-09 merges."
   },
   "history": [
     {
@@ -197,6 +212,10 @@
     {
       "at": "2026-11-07T23:10Z",
       "event": "feature review CHANGES: 1 blocker (F1), 1 major (F2), 7 minor; paused for the day"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "feature review triaged via /sdlc:bugs: BUG-010 (F1, S1, design) fix-now option A, erratum landed (§5, DEC-7, §9, §15, digest, ADR-007); BUG-011 (F2, S2, requirements) deferred option C, §17 row, issue #47; F3/F5 doc fixes (ADR-006 BUG-002/003 wording, KB phase, plan approved); fix brief PR-09 (wave 5) covers BUG-010 code + F4, F6-F9; Gate 2 stays approved"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"

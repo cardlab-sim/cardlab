@@ -15,6 +15,8 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 | BUG-007 | reviewer (PR-07, F5) | S4 | R-1 | Shared web FakeApiClient doesn't feed simulated purchases into activity/balance; PR-07 test-local ActivityFake duplicates it with inconsistent data | test-harness | fix-now (small fix PR) | fixed | build (PR-03f, wave 4) | | 2026-11-07 |
 | BUG-008 | reviewer (PR-06, F4) | S4 | AC-9, AC-10 | Repeated/parallel confirm receipt time differs by < 1 ms on the wire (full-tick vs stored ms) | code | fix-now (fold into PR-04f) | fixed | build (PR-04f) | | 2026-11-07 |
 | BUG-009 | coder (PR-08, 001 E2E formatting.spec T-E-6) | S2 | 001 AC-38, R-7 | Admin activity shows a purchase at decision time instead of the processor timestamp (001 regression) | design | fix-now (B: exactly as 001) | verified | build (PR-07f, wave 4) | | 2026-11-07 |
+| BUG-010 | reviewer (feature, F1) | S1 | R-15, R-14, AC-20, AC-33 | Steered "no answer" outcomes recorded as a real bank non-answer (simulated = false) | design | fix-now (option A: design erratum + code) | in-progress | build (PR-09, wave 5) | | 2026-11-08 |
+| BUG-011 | reviewer (feature, F2) | S2 | R-15, G-1, AC-26 | Demo fake bank can only drain; deploy smoke depends on mutable demo state | requirements | defer (option C: §17 note) | deferred | — (revisit before Azure returns) | https://github.com/cardlab-sim/cardlab/issues/47 | 2026-11-08 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
      Decision: fix-now (option A/B) | defer | wont-fix, with the human's words in the section below
@@ -119,3 +121,22 @@ design: §5 named decision time for the activity entry without separating the sh
 First answered "A. Processor time (Recommended)" on an option table that wrongly described A as 001's behaviour. After the orchestrator's correction (001 showed processor time, ordered by decision time), the human chose "B. Exactly as 001 (Recommended)": show purchases at the processor timestamp, order by decision time, payments by confirm time. Design §5 erratum.
 ### Resolution
 PR-07f (#46): SQL and in-memory stores and the web fake show purchases at `OccurredAt`, ordered by `DecidedAtUtc`; contract case on both stores; 001 formatting.spec T-E-6 green on both browsers (orchestrator, isolated port). Verified: feature CI run 42419754713 (head 8335420) green, e2e included.
+
+## BUG-010
+**Repro:** steer the fake bank to *time out, debit applied*, *time out, not received* or *Next status check: does not answer*, then confirm (or check). The record shows `bank_unanswered` / `status_check_unanswered` with `simulated: false`, and `payment.simulated == false`.
+**Expected / actual:** R-15 and DEC-7 (02-tech-design.md:167) say steered outcomes are marked simulated. Actually, the steered hang ends in a plain `OperationCanceledException`, so `PaymentService.cs:419-421` returns `Unknown(false)` and `:501` appends the event unmarked. The SPA `FakeApiClient` marks them simulated, so the fake and the real API disagree.
+**Evidence:** reviews/feature.review.md F1 (head aa4c956): `SqlFakeBank.cs:72,114`, `PaymentService.cs:419-421,501`, `PaymentDtoMapper.cs`, `fakeApiClient.ts:494,509-511`.
+### Triage (reviewer, feature review)
+Root cause: design. The §5 `ICurrentAccountBank` contract has no way to tell a steered no-answer from a real one. Proposed erratum: a steered no-answer ends with `SimulatedNoAnswerException : OperationCanceledException` (`CardLab.Domain.Ports`) when the caller's token fires. Code: the adapter and TestKit hangs throw it, the service maps it to `Unknown(simulated: true)` and passes the flag to the event, and the DTO falls back to `Events.Any(e => e.Simulated)`. Test: `Steered_no_answer_is_recorded_as_simulated` plus a mutation.
+### Decision (human, 2026-11-08)
+"A. Erratum + code (Recommended)". The erratum landed in 02-tech-design.md §5, DEC-7, §9 and §15, plus the digest and ADR-007; Gate 2 stays approved. Code goes in PR-09 (`prs/PR-09-fix-BUG-010.md`), together with feature-review F4, F6, F7, F8 and F9.
+
+## BUG-011
+**Repro:** on `demo`, each completed payment lowers the fake bank's £25,000.00 balance, and nothing can refill it (R-15 forbids balance edits; the reset is off on `demo`, AC-37). One £24,999 purchase plus payment and every later demo payment fails with W-3. The deploy smoke also fails if a visitor freezes Ops van or sets a Fuel limit.
+**Expected / actual:** G-1 and AC-26 need a working payment on `demo`. Actually, demo state only degrades.
+**Evidence:** reviews/feature.review.md F2: `DatabaseProbe.cs:66-76`, `tests/e2e/src/smoke/pay.spec.ts:18-20`, R-15, DEC-14. Context 2026-11-08: Azure is parked on `main` (`deploy.yml` is `workflow_dispatch` only, DORA-lite uses `dora-deploy.yml`), so no `demo` deploy or smoke runs today.
+### Triage (reviewer, feature review)
+Root cause: requirements (R-15 forbids the only remedy). Options: (a) amend R-15 with a labelled *restore opening balance* action that posts a simulated credit, and have the smoke call it; (b) keep R-15, have the smoke fail fast with "demo fake bank drained", and add a runbook; (c) record it in design §17 only. With any option, the smoke should reset Ops van's freeze and Fuel limit first.
+### Decision (human, 2026-11-08)
+"C. §17 note + defer (Recommended)". Azure is parked, so no `demo` runs. Design §17 has the risk row; deferred as https://github.com/cardlab-sim/cardlab/issues/47. Revisit before Azure returns (options a/b in the issue).
+

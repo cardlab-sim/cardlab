@@ -157,14 +157,14 @@ bounded by the check's own 10 s budget; on expiry the check appends `StatusCheck
 
 **Chosen:** A. The fake applies the ledger entry *before* hanging in "time out, debit
 applied" mode and records nothing in "time out, not received" mode, so AC-14 and AC-15 are both
-reachable through the normal status query. **We give up:** a fast timeout path in E2E (one spec
-waits 10 s). **Revisit if:** E2E time matters more than realism (flip the config in CI only). **ADR:** ../../kb/decisions/ADR-007-fake-bank-shipped-adapter.md
+reachable through the normal status query. **We give up:** a fast timeout path in E2E (four real
+10 s waits: T-E-3 twice, T-E-5, T-E-6). **Revisit if:** E2E time matters more than realism (flip the config in CI only). **ADR:** ../../kb/decisions/ADR-007-fake-bank-shipped-adapter.md
 
 ### DEC-7 Steering the status check (Q-5, human, round 1)
 AC-16 needs the *status check* to go unanswered, but R-15's control steers the *next debit
 request* only. **Proposed:** the fake-bank panel gets a second one-shot setting, *Next status
 check: answers / does not answer* (default answers), same rules: applies once, then reverts; the
-unanswered check is recorded as `status_check_unanswered` with `Simulated = true`. **Chosen:** as proposed. **We give up:**
+unanswered check is recorded as `status_check_unanswered` with `Simulated = true` (likewise a steered debit timeout's `bank_unanswered`); the fake signals it with `SimulatedNoAnswerException` (§5, erratum BUG-010). **Chosen:** as proposed. **We give up:**
 a one-control panel. **Revisit if:** the compliance partner wants the control hidden in `demo`.
 
 ### DEC-8 Reference format (Q-6, human, round 1)
@@ -338,7 +338,7 @@ controls; `useActionState` noted, not adopted: the pages use the 001 pending-but
     "Payment not made" / "Payment pending"), the W-2..W-5/W-10 message in a `Notice`
     (`role="status"`), a `<dl>` (Reference, Amount, Fee, Time, From, To, Outcome badge), *Check
     status* button when pending, link *Back to your card*.
-  - *Admin card detail* `/cards/:id`: heading gains "Balance owed £x" ; the Transactions table
+  - *Admin card detail* `/cards/:id`: the page header shows "Balance owed £x" after the status badge (text, not part of the `h1`); the Transactions table
     becomes **Activity** (purchases and payments; payments carry a type badge and a state badge and
     link to the record); new **Payments** section listing every reference (incl. refused) newest
     first, each with origin (DEC-15) and state badges.
@@ -376,7 +376,7 @@ state; disabling the confirm button natively (focus loss); client-side wording.
 | `PaymentStateMachine` | lifecycle | `static Result<Transition, string> Apply(PaymentState current, BankOutcome outcome)`; `record Transition(PaymentState From, PaymentState To, FailureReason? Reason, DateTimeOffset? BankDebitedAtUtc)`; terminal states reject every outcome; `Unknown` leaves `Pending` | none |
 | `BankOutcome` | what the bank said | `abstract record BankOutcome(bool Simulated)`: `Completed(DateTimeOffset? DebitedAtUtc)`, `Refused(FailureReason Reason)` (InsufficientFunds/AccountUnavailable), `NotReceived`, `Unknown` (no answer in time) | none |
 | `WordingV1` | §17 strings | `const string Version = "v1"`; `static RenderedWording ReviewScreen(Money amount, string fromLabel, string toLabel)` (W-1); `static string Completed(Money amount, Money balance, PaymentReference)` (W-2); `RefusedInsufficientFunds` (W-3), `RefusedAccountUnavailable` (W-4), `Pending` (W-5), `BalanceChanged(Money balance)` (W-6), `NothingToPay` (W-7), `AboveLimit(Money balance)` (W-8), `PendingExists(Money amount, PaymentReference)` (W-9), `StillPending(PaymentReference)` (W-10); `static string Label(string name, string lastFour)` → `"{name}, ending {lastFour}"`; amounts via `Money.ToDisplay()` → `£1,234.56` (new on `Money`) | none |
-| `CardLab.Domain.Ports.ICurrentAccountBank` | the external bank | `Task<AccountSnapshot> GetAccountAsync(BankAccountRef, ct)` → `record AccountSnapshot(BankAccountRef Ref, string LastFour, Money AvailableBalance)`; `Task<IReadOnlyList<BankEntry>> ListRecentEntriesAsync(BankAccountRef, int take, ct)` → `record BankEntry(PaymentReference Reference, Money Amount, DateTimeOffset PostedAtUtc, string Narrative)` newest first; `Task<BankOutcome> RequestDebitAsync(DebitRequest, ct)` → `record DebitRequest(BankAccountRef Account, PaymentReference Reference, Money Amount, string Narrative)`; `Task<BankOutcome> GetDebitStatusAsync(BankAccountRef, PaymentReference, ct)`. Contract: a reference the bank has seen is never applied twice; `RequestDebitAsync` may never return (the caller's `ct` is the budget) and then throws `OperationCanceledException`; `GetDebitStatusAsync` answers `Completed`/`Refused`/`NotReceived` or does not return. `readonly record struct BankAccountRef(Guid Value)` | — |
+| `CardLab.Domain.Ports.ICurrentAccountBank` | the external bank | `Task<AccountSnapshot> GetAccountAsync(BankAccountRef, ct)` → `record AccountSnapshot(BankAccountRef Ref, string LastFour, Money AvailableBalance)`; `Task<IReadOnlyList<BankEntry>> ListRecentEntriesAsync(BankAccountRef, int take, ct)` → `record BankEntry(PaymentReference Reference, Money Amount, DateTimeOffset PostedAtUtc, string Narrative)` newest first; `Task<BankOutcome> RequestDebitAsync(DebitRequest, ct)` → `record DebitRequest(BankAccountRef Account, PaymentReference Reference, Money Amount, string Narrative)`; `Task<BankOutcome> GetDebitStatusAsync(BankAccountRef, PaymentReference, ct)`. Contract: a reference the bank has seen is never applied twice; `RequestDebitAsync` may never return (the caller's `ct` is the budget) and then throws `OperationCanceledException`; `GetDebitStatusAsync` answers `Completed`/`Refused`/`NotReceived` or does not return; a no-answer produced by steering ends, when the caller's `ct` fires, with `SimulatedNoAnswerException : OperationCanceledException` (`CardLab.Domain.Ports`), and any other no-answer with a plain `OperationCanceledException` (erratum BUG-010). The service records `BankUnanswered` / `StatusCheckUnanswered` with `Simulated = true` only for `SimulatedNoAnswerException`; a check whose wait on an in-flight confirm expires asked no bank and stays `Simulated = false`. `readonly record struct BankAccountRef(Guid Value)` | — |
 | `IPaymentReferences` | randomness port | `PaymentReference Next()` | — |
 | `ICardStore` additions | reads outside the lock | `Task<LinkedAccount?> GetLinkedAccountAsync(ct)` → `record LinkedAccount(Guid Id, string DisplayName, string LastFour, BankAccountRef BankRef, string AuthorityBasis)`; `Task<CardBalance?> GetBalanceAsync(CardId, ct)` → `record CardBalance(Money ApprovedPurchases, Money CompletedPayments, Money Owed)`; `Task<PaymentRecord?> GetPaymentRecordAsync(PaymentReference, ct)`; `Task<IReadOnlyList<PaymentRecord>> ListPaymentRecordsAsync(CardId, ct)` (newest first, incl. refused and open quotes); `Task<IReadOnlyList<ActivityEntry>> ListActivityAsync(CardId, int take, ct)` → `record ActivityEntry(DateTimeOffset At, ActivityKind Kind, Money Amount, string Description, string? Outcome, PaymentReference? Reference)` (ordered newest first by purchases' `DecidedAtUtc` and payments' `CreatedAtUtc`; `At` shown = a purchase's processor timestamp `OccurredAt`, exactly as 001's history (erratum BUG-009, human, 2026-11-07), and a payment's confirm time) | — |
 | `ICardWriter.Payments : IPaymentWriter` (inside the lock) | atomic payment writes | `Task<Money> SumApprovedPurchasesAsync(ct)`; `Task<Money> SumCompletedPaymentsAsync(ct)`; `Task<QuoteRecord?> GetQuoteAsync(PaymentReference, ct)` → `record QuoteRecord(Quote Quote, QuoteStatus Status, PaymentSnapshot? Payment)`; `Task<PaymentSnapshot?> GetPendingPaymentAsync(ct)` → `record PaymentSnapshot(PaymentId Id, PaymentReference Reference, PaymentState State, Money Amount, DateTimeOffset CreatedAtUtc, Settlement? Settlement)`; `void AppendQuote(Quote)`; `void SetQuoteStatus(PaymentReference, QuoteStatus, string? refusalReason, Money? balanceAtRefusal, DateTimeOffset at)`; `PaymentId CreatePayment(NewPayment)` (state Pending); `void SettlePayment(PaymentId, Settlement)` → `record Settlement(PaymentState State, FailureReason? Reason, DateTimeOffset SettledAtUtc, DateTimeOffset EffectiveAtUtc, DateTimeOffset? BankDebitedAtUtc, Money BalanceBefore, Money BalanceAfter, bool Simulated)`; `void AppendEvent(PaymentEvent)` → `record PaymentEvent(PaymentReference Reference, PaymentId? Payment, DateTimeOffset AtUtc, PaymentEventKind Kind, PaymentState? From, PaymentState? To, string? Detail, bool Simulated)`; `enum PaymentEventKind { ConfirmCreated, ConfirmRepeated, ConfirmRefused, DebitRequested, BankCompleted, BankRefused, BankUnanswered, StatusCheckCompleted, StatusCheckRefused, StatusCheckNotReceived, StatusCheckUnanswered }` | — |
@@ -512,7 +512,7 @@ no row (a crash before the bank saw it) `NotReceived(Simulated: false)`; the two
 | Balance changed between review and confirm | `ConfirmRules` → `RefuseBalanceChanged` | quote → Refused, event, no bank call | W-6 with the new balance; *Review again* |
 | Reference unknown, belongs to another card, or malformed | lookup in lock #1 / `PaymentReference.TryParse` | `404` ProblemDetails, nothing stored | "This payment reference was not found" notice |
 | Bank refuses (insufficient funds / account unavailable) | `BankOutcome.Refused` | settle Failed with reason; nothing moved | W-3 / W-4 receipt |
-| Bank does not answer in 10 s (debit or status check) | `OperationCanceledException` from the budget CTS (not the request's token) | stays Pending; event `BankUnanswered` / `StatusCheckUnanswered` | W-5 / W-10 with *Check status* |
+| Bank does not answer in 10 s (debit or status check) | `OperationCanceledException` from the budget CTS (not the request's token); `SimulatedNoAnswerException` when steered | stays Pending; event `BankUnanswered` / `StatusCheckUnanswered`, `Simulated = true` when steered (BUG-010) | W-5 / W-10 with *Check status* |
 | Bank adapter throws (SQL error inside the fake) | exception | treated as `Unknown`: stays Pending, event with `Detail = exception type`; logged | W-5 |
 | Status check says `NotReceived` | `BankOutcome.NotReceived` | settle Failed, reason `not_received` | W-4 text ("could not process it right now") plus reason badge "not received" |
 | Confirm arrives after a restart while the payment is pending with no in-flight task | registry miss | returns the stored pending receipt, `repeated = true` | W-5 |
@@ -523,9 +523,9 @@ no row (a crash before the bank saw it) `NotReceived(Simulated: false)`; the two
 
 ## 10. Security & privacy
 - **NFR-3:** the linked account's full number never reaches the database (seed keeps only the
-  last four); the bank tables hold `LastFour` only; `PanScanner` extends to 8+ digit runs in
-  payment responses, records and logs (account numbers are shorter than PANs, so the scanner gets
-  a second pattern for the seeded account number's digits); `AC-23` tests run the scanner over
+  last four); the bank tables hold `LastFour` only; `PanScanner` scans 16+ digit runs plus
+  the literal seeded account number in payment responses, records and logs (account numbers are
+  shorter than PANs, so the scanner looks for that number's exact digits); `AC-23` tests run the scanner over
   cardholder responses, the record endpoint, logs and page text.
 - **No auth (decision 9):** cardholder routes are open like the admin routes; the actor is derived
   from the card (DEC-9). A reference is scoped to its card (`404` across cards), so guessing a
@@ -568,7 +568,7 @@ No new secrets; the fake adapter needs none (NFR-3). No new repo variables or Bi
   A client disconnect after step 1 does not cancel the bank call: steps 2 and 3 run to completion
   (lock #2 with `CancellationToken.None`), so the payment settles and any joiner gets the real outcome.
 - **NFR-2 review renders ≤ 2 s warm:** the view is one aggregate GET (4 indexed queries + 2 bank
-  reads); the quote is one POST. T-I-14 asserts the aggregate endpoint p95 ≤ 300 ms locally with
+  reads); the quote is one POST. T-I-17 asserts the aggregate endpoint p95 ≤ 300 ms locally with
   1,000 transactions and 200 payments.
 - **SPA bundle:** three new routes and two pages; budget stays ≤ ~200 kB gzipped (no new deps).
 
@@ -590,7 +590,7 @@ No new secrets; the fake adapter needs none (NFR-3). No new repo variables or Bi
 | Layer | Scope | Real | Replaced by | Speed | Location | Command |
 |-------|-------|------|-------------|-------|----------|---------|
 | Unit (domain) | `BalanceRules`, `QuoteRules`, `ConfirmRules`, `PaymentStateMachine`, `WordingV1`, `PaymentReference`; FsCheck properties (AC-25) | domain code | nothing (pure) | < 20 ms; properties ≤ 1 s | `tests/CardLab.Domain.Tests/Payments/` | `dotnet test tests/CardLab.Domain.Tests` |
-| Unit (application) | `PaymentService`, `CardholderViewService`, `InFlightPayments` | services | `InMemoryCardStore` (+ payments), `FakeBank`, `FakePaymentReferences`, `FakeClock`, `CapturingLogger<T>` | < 50 ms (bank timeout tests use a `FakeBank` that throws `OperationCanceledException` on the budget token immediately) | `tests/CardLab.Domain.Tests/Application/` | same |
+| Unit (application) | `PaymentService`, `CardholderViewService`, `InFlightPayments` | services | `InMemoryCardStore` (+ payments), `FakeBank`, `FakePaymentReferences`, `FakeClock`, `CapturingLogger<T>` | < 50 ms (bank timeout tests use a `FakeBank` whose `Hang()` waits on the caller's token and throws `SimulatedNoAnswerException`, with the fixture's `bankTimeoutSeconds: 0`) | `tests/CardLab.Domain.Tests/Application/` | same |
 | Unit (web) | cardholder pages, review, receipt, fake-bank panel, admin record page | components | `FakeApiClient` | < 100 ms | `web/src/**/*.test.tsx` | `npm test --prefix web -- --run` |
 | Integration | `SqlPaymentWriter` + `SqlCardStore` payment reads via the contract suite; `SqlFakeBank` via the bank contract suite; cardholder/admin/fake-bank endpoints through `ApiFactory`; concurrency (AC-10, AC-21-style); timeout path with `BankTimeoutSeconds=1`; logging; privacy; reset | SQL Server, EF Core, Kestrel in-process | nothing (the fake bank *is* the adapter under test) | < 2 s each; timeout tests ~1 s | `tests/CardLab.Integration.Tests/Payments/` | `dotnet test tests/CardLab.Integration.Tests` |
 | E2E | J-1, J-2, J-3 in a browser; axe; keyboard; smoke on `demo` | whole system | nothing | seconds; four real 10 s waits (T-E-3 ×2, T-E-5, T-E-6) | `tests/e2e/src/payments/` | `npm run e2e --prefix tests/e2e` |
@@ -604,7 +604,7 @@ fresh database per class; E2E resets through `/api/test/reset` before each journ
 | Builders | `QuoteBuilder` (valid quote with overrides), `PaymentBuilder` (snapshot in any state), `LinkedAccountBuilder`, `BankOutcomes` (static factories) | `tests/CardLab.TestKit/Builders/PaymentBuilders.cs` | unit, integration |
 | FsCheck generators | `Arbitrary<PaymentReference>`, `Arbitrary<PaymentState>`, `Arbitrary<BankOutcome>`, `Arbitrary<ConfirmScript>` (sequences of confirm/refuse/settle on one card) | `tests/CardLab.Domain.Tests/Generators/PaymentArbitraries.cs` | unit (properties) |
 | `InMemoryCardStore` + `InMemoryPaymentWriter` + `PaymentStoreContractTests` | in-memory `IPaymentWriter` and the new `ICardStore` reads; one abstract contract class run against the in-memory store (unit) and `SqlCardStore` (integration), incl. "one pending per card" and "reference unique" | `tests/CardLab.TestKit/Fakes/InMemoryCardStore.cs` (extended), `tests/CardLab.TestKit/Contracts/PaymentStoreContractTests.cs` | unit / integration |
-| `FakeBank` + `CurrentAccountBankContractTests` | scripted `ICurrentAccountBank`: `NextDebit(outcome)`, `NextStatus(outcome)`, `Hang()` (throws on the budget token), `Gate` (a `TaskCompletionSource` to hold two confirms in flight for AC-10); ledger in memory. The contract class (idempotent on reference, refuses above balance, status by reference) runs against `FakeBank` and `SqlFakeBank` | `tests/CardLab.TestKit/Fakes/FakeBank.cs`, `tests/CardLab.TestKit/Contracts/CurrentAccountBankContractTests.cs` | unit / integration |
+| `FakeBank` + `CurrentAccountBankContractTests` | scripted `ICurrentAccountBank`: `NextDebit(outcome)`, `NextStatus(outcome)`, `Hang()` / `HangStatus()` (wait on the caller's token, then throw `SimulatedNoAnswerException`), `Gate` (a `TaskCompletionSource` to hold two confirms in flight for AC-10); ledger in memory. The contract class (idempotent on reference, refuses above balance, status by reference) runs against `FakeBank` and `SqlFakeBank` | `tests/CardLab.TestKit/Fakes/FakeBank.cs`, `tests/CardLab.TestKit/Contracts/CurrentAccountBankContractTests.cs` | unit / integration |
 | `FakePaymentReferences` | sequential `PAY-00000001`… | `tests/CardLab.TestKit/Fakes/Fakes.cs` | unit |
 | `FakeClock`, `CapturingLogger<T>` | existing | `tests/CardLab.TestKit/Fakes/` | unit |
 | Seed constants | linked account name, last four, bank ref, opening balance, authority text | `tests/CardLab.TestKit/Seed.cs`, `tests/e2e/src/seed.ts` | all |
@@ -732,7 +732,8 @@ clock.
 | Steering is global (one row) while several demo users act at once | medium in demos | one user's steering affects another's payment | acceptable for a lab (decision 12); the record marks it simulated |
 | The fake-bank boundary (no joins with card tables) erodes | low | the "external system" story becomes false | reviewer rule in the plan; separate namespace and table prefix (DEC-2) |
 | `InFlightPayments` assumes one host | low | AC-10 weakens on scale-out | documented in DEC-5; status check still guarantees exactly-once |
-| E2E suite +10 s per timeout spec and +~1 min overall | certain | CI wall clock | one spec covers the real wait; the rest use steering with instant outcomes |
+| E2E suite +10 s per timeout spec and +~1 min overall | certain | CI wall clock | four real 10 s waits (T-E-3 twice, T-E-5, T-E-6); the rest use steering with instant outcomes |
+| The `demo` fake bank only drains: completed payments lower the £25,000.00 balance, R-15 forbids balance edits and the reset is off on `demo` (AC-37), so a large demo payment leaves every later one failing W-3; the deploy smoke also breaks if a visitor freezes Ops van or sets a Fuel limit (BUG-011) | certain once `demo` runs | G-1 / AC-26 on `demo`, deploy smoke red | none while Azure is parked (`deploy.yml` manual only); revisit before Azure returns, options in BUG-011 (restore-balance action, fail-fast smoke + runbook); deferred issue |
 | Register gap on the initiator role (CQ-12) | n/a now | a real adapter may carry obligations not listed | register owner follow-up before a real adapter is designed (requirements §10) |
 
 ## 18. Open questions
@@ -742,6 +743,7 @@ clock.
 ## Change log
 | Date | Change | Reason |
 |------|--------|--------|
+| 2026-11-08 | Erratum BUG-010 (human, via /sdlc:bugs, option A): §5 `ICurrentAccountBank` contract and DEC-7: a steered no-answer ends with `SimulatedNoAnswerException : OperationCanceledException`, and its `BankUnanswered` / `StatusCheckUnanswered` event is `Simulated = true`; §9 and §15 harness rows follow. BUG-011 (option C): §17 risk row for the draining `demo` fake bank, deferred. Doc corrections (feature review F3, F5): admin balance is header text, not the `h1`; four real E2E waits; PanScanner patterns; T-I-17 for p95. Gate 2 stays approved. | feature review F1, F2, F3, F5 |
 | 2026-11-07 | Doc correction (PR-08 review F8): the E2E layer waits the real 10 s bank budget four times (T-E-3 twice, T-E-5, T-E-6), not once; DEC-6 table, §15 layer table and non-goals updated. No behaviour change. | PR-08 review |
 | 2026-11-07 | Erratum BUG-009 (human, via /sdlc:bugs): the activity list shows a purchase at its processor timestamp (as 001's transaction history, AC-38) while ordering stays by decision time; §5 `ListActivityAsync`. Gate 2 stays approved. | PR-08 found 001's formatting E2E red |
 | 2026-11-07 | Errata from build reviews (Gate 2 stays approved; decisions by the human via /sdlc:bugs): BUG-002 §13 bank budget not linked to the request token, a disconnect never cancels the debit; BUG-003 DEC-5 / Flow 2 a check awaits an in-flight confirm within its own 10 s budget; BUG-004 Flow 6 / §6 *time out, not received* records a simulated NotReceived request; BUG-005 DEC-15 / §6 Origin stored as the enum name. | PR-04 / PR-05 reviews (F3, F4; F4, F8) |
