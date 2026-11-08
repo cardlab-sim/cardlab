@@ -17,7 +17,7 @@ row whose Status is new, triaged, approved, in-progress or deferred. -->
 | BUG-009 | coder (PR-08, 001 E2E formatting.spec T-E-6) | S2 | 001 AC-38, R-7 | Admin activity shows a purchase at decision time instead of the processor timestamp (001 regression) | design | fix-now (B: exactly as 001) | verified | build (PR-07f, wave 4) | | 2026-11-07 |
 | BUG-010 | reviewer (feature, F1) | S1 | R-15, R-14, AC-20, AC-33 | Steered "no answer" outcomes recorded as a real bank non-answer (simulated = false) | design | fix-now (option A: design erratum + code) | verified | validate (PR-09 #48) | | 2026-11-08 |
 | BUG-011 | reviewer (feature, F2) | S2 | R-15, G-1, AC-26 | Demo fake bank can only drain; deploy smoke depends on mutable demo state | requirements | defer (option C: §17 note) | deferred | — (revisit before Azure returns) | https://github.com/cardlab-sim/cardlab/issues/47 | 2026-11-08 |
-| BUG-012 | validator | S3 | AC-9, R-7, R-12 | Repeated confirm or receipt reload after a later purchase shows the current balance, not the original receipt | plan | fix-now (option A: rule + code) | approved | plan (doc amend: PR-04 brief erratum + fix brief PR-10) → build PR-10 | | 2026-11-08 |
+| BUG-012 | validator | S3 | AC-9, R-7, R-12 | Repeated confirm or receipt reload after a later purchase shows the current balance, not the original receipt | plan | fix-now (option A: rule + code) | in-progress | plan (doc amend: PR-04 brief erratum + fix brief PR-10) → build PR-10 | | 2026-11-08 |
 <!-- Severity: S1 blocker · S2 major · S3 minor · S4 cosmetic
      Root-cause layer: requirements | design | plan | code | test-harness | environment | needs-debugger
      Decision: fix-now (option A/B) | defer | wont-fix, with the human's words in the section below
