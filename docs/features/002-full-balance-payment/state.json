@@ -2,7 +2,7 @@
   "feature": "002-full-balance-payment",
   "title": "CL-3 slice 1: pay the full card balance from the linked current account",
   "lane": "M",
-  "phase": "build",
+  "phase": "validate",
   "base_branch": "main",
   "feature_branch": "feat/002-full-balance-payment",
   "gates": {
@@ -178,8 +178,9 @@
       "depends_on": [
         "PR-09"
       ],
-      "status": "coding",
-      "branch": "pr/002-full-balance-payment/10-fix-bug-012"
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/10-fix-bug-012",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/49"
     }
   ],
   "bugs_open": [
@@ -187,11 +188,7 @@
     "BUG-011",
     "BUG-012"
   ],
-  "resume": {
-    "phase": "build",
-    "step": "code PR-10 (wave 6), pr-light review, re-validate AC-9 and receipt ACs",
-    "reason": "BUG-012 option A; plan amend landed (PR-04 brief erratum, PR-10 brief)."
-  },
+  "resume": null,
   "history": [
     {
       "at": "2026-11-07T00:00Z",
@@ -244,6 +241,10 @@
     {
       "at": "2026-11-08T00:00Z",
       "event": "plan amend BUG-012 (docs-only, orchestrator): PR-04 brief erratum, fix brief PR-10 (wave 6); BUG-012 in-progress"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "PR-10 pr-light APPROVE WITH FIXES (F1 null pending balance); fixes verified (M1 now fails T-U-38; unit 291), merged (#49); BUG-012 fixed; phase validate (re-validate AC-9 and receipt ACs)"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"
