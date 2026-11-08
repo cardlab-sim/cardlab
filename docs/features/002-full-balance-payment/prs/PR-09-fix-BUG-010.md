@@ -78,6 +78,8 @@ F1, F4, F6, F7, F8 and F9 before you start.
 | tests/CardLab.Domain.Tests/Application/PaymentServiceTests.cs | fixtures with `bankTimeoutSeconds: 0` for hangs; F1 unit test |
 | tests/CardLab.Domain.Tests/Application/PaymentStatusCheckTests.cs | same; F9 assertion |
 | tests/CardLab.Domain.Tests/Application/InFlightPaymentsTests.cs | F6a tests |
+| tests/CardLab.Domain.Tests/Harness/PaymentHarnessTests.cs | F6b: hanging calls get a short-lived token (e.g. 50 ms CTS) and assert `SimulatedNoAnswerException` (T-U-37, `FakeBank_scripts_do_not_touch_a_reference_the_bank_has_seen`) |
+| tests/CardLab.Domain.Tests/Application/CardholderViewServiceTests.cs | F6b: the `Hang()` case builds the fixture with `bankTimeoutSeconds: 0` |
 | tests/CardLab.Integration.Tests/Payments/StatusCheckTests.cs | F1 integration test |
 | tests/e2e/src/payments/a11y.spec.ts | F7 |
 | web/src/notImplemented.ts, tests/e2e/src/notImplemented.ts | F8 delete |
