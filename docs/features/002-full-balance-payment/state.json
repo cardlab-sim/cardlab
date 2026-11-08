@@ -2,7 +2,7 @@
   "feature": "002-full-balance-payment",
   "title": "CL-3 slice 1: pay the full card balance from the linked current account",
   "lane": "M",
-  "phase": "build",
+  "phase": "validate",
   "base_branch": "main",
   "feature_branch": "feat/002-full-balance-payment",
   "gates": {
@@ -167,19 +167,16 @@
         "PR-03f",
         "PR-07f"
       ],
-      "status": "coding",
-      "branch": "pr/002-full-balance-payment/09-fix-feature-review"
+      "status": "merged",
+      "branch": "pr/002-full-balance-payment/09-fix-feature-review",
+      "url": "https://github.com/cardlab-sim/cardlab/pull/48"
     }
   ],
   "bugs_open": [
     "BUG-010",
     "BUG-011"
   ],
-  "resume": {
-    "phase": "build",
-    "step": "code PR-09 (wave 5), review, then full validation",
-    "reason": "BUG-010 fix-now (design erratum landed; code in PR-09 with F4, F6-F9); BUG-011 deferred (#47); F3/F5 doc fixes done. Design changed (erratum), so validation runs in full after PR-09 merges."
-  },
+  "resume": null,
   "history": [
     {
       "at": "2026-11-07T00:00Z",
@@ -216,6 +213,10 @@
     {
       "at": "2026-11-08T00:00Z",
       "event": "feature review triaged via /sdlc:bugs: BUG-010 (F1, S1, design) fix-now option A, erratum landed (§5, DEC-7, §9, §15, digest, ADR-007); BUG-011 (F2, S2, requirements) deferred option C, §17 row, issue #47; F3/F5 doc fixes (ADR-006 BUG-002/003 wording, KB phase, plan approved); fix brief PR-09 (wave 5) covers BUG-010 code + F4, F6-F9; Gate 2 stays approved"
+    },
+    {
+      "at": "2026-11-08T00:00Z",
+      "event": "PR-09 review APPROVE WITH FIXES (1 major, 4 minor); fixes verified (mapper mutation fails Unsteered_no_answer_is_not_simulated; unit 287, web 123), merged (#48); BUG-010 fixed; F5 doc fix; phase validate (full, design erratum)"
     }
   ],
   "design_artifact": "https://claude.ai/artifact/7QAwHrTv7nTVZtZ5i1DdGt"
